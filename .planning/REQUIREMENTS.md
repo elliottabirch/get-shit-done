@@ -139,8 +139,68 @@ The following operations are *obsolete* under the new architecture (SYNTHESIS.md
 
 ## Traceability
 
-Filled by `gsd-roadmapper` after roadmap creation; each REQ-ID maps to exactly one phase.
+Every v1.0 REQ-ID maps to exactly one phase. Coverage: 42/42 (100%).
+Source phase scope: SYNTHESIS.md §7 (canonical, locked).
+
+| REQ-ID | Phase | Repo | Status |
+|--------|-------|------|--------|
+| ADAPTER-01 | Phase 1 — Fork bootstrap + StorageAdapter interface skeleton + MarkdownAdapter scaffold | this | Pending |
+| ADAPTER-02 | Phase 1 — Fork bootstrap + StorageAdapter interface skeleton + MarkdownAdapter scaffold | this | Pending |
+| ADAPTER-03 | Phase 1 — Fork bootstrap + StorageAdapter interface skeleton + MarkdownAdapter scaffold | this | Pending |
+| ADAPTER-04 | Phase 1 — Fork bootstrap + StorageAdapter interface skeleton + MarkdownAdapter scaffold | this | Pending |
+| ADAPTER-05 | Phase 1 — Fork bootstrap + StorageAdapter interface skeleton + MarkdownAdapter scaffold | this | Pending |
+| ADAPTER-06 | Phase 1 — Fork bootstrap + StorageAdapter interface skeleton + MarkdownAdapter scaffold | this | Pending |
+| ADAPTER-07 | Phase 1 — Fork bootstrap + StorageAdapter interface skeleton + MarkdownAdapter scaffold | this | Pending |
+| READS-01 | Phase 2 — Wire core read methods to adapter | this | Pending |
+| READS-02 | Phase 2 — Wire core read methods to adapter | this | Pending |
+| READS-03 | Phase 2 — Wire core read methods to adapter | this | Pending |
+| WRITES-01 | Phase 3 — Wire core write methods + recordStateEvent | this | Pending |
+| WRITES-02 | Phase 3 — Wire core write methods + recordStateEvent | this | Pending |
+| WRITES-03 | Phase 3 — Wire core write methods + recordStateEvent | this | Pending |
+| WRITES-04 | Phase 3 — Wire core write methods + recordStateEvent | this | Pending |
+| LEAKS-01 | Phase 4 — Plug workflow leaks (top-10 + `<context>`-block class) | this | Pending |
+| LEAKS-02 | Phase 4 — Plug workflow leaks (top-10 + `<context>`-block class) | this | Pending |
+| LEAKS-03 | Phase 4 — Plug workflow leaks (top-10 + `<context>`-block class) | this | Pending |
+| LEAKS-04 | Phase 4 — Plug workflow leaks (top-10 + `<context>`-block class) | this | Pending |
+| LEAKS-05 | Phase 4 — Plug workflow leaks (top-10 + `<context>`-block class) | this | Pending |
+| PRIMITIVES-01 | Phase 5 — Foundational primitive lift | this | Pending |
+| PRIMITIVES-02 | Phase 5 — Foundational primitive lift | this | Pending |
+| PRIMITIVES-03 | Phase 5 — Foundational primitive lift | this | Pending |
+| PRIMITIVES-04 | Phase 5 — Foundational primitive lift | this | Pending |
+| PRIMITIVES-05 | Phase 5 — Foundational primitive lift | this | Pending |
+| PRIMITIVES-06 | Phase 5 — Foundational primitive lift | this | Pending |
+| PRIMITIVES-07 | Phase 5 — Foundational primitive lift | this | Pending |
+| PRIMITIVES-08 | Phase 5 — Foundational primitive lift | this | Pending |
+| PRIMITIVES-09 | Phase 5 — Foundational primitive lift | this | Pending |
+| BEADS-01 | Phase 6 — BeadsAdapter implementation | gsd-beads | Pending |
+| BEADS-02 | Phase 6 — BeadsAdapter implementation | gsd-beads | Pending |
+| BEADS-03 | Phase 6 — BeadsAdapter implementation | gsd-beads | Pending |
+| BEADS-04 | Phase 6 — BeadsAdapter implementation | gsd-beads | Pending |
+| BEADS-05 | Phase 6 — BeadsAdapter implementation | gsd-beads | Pending |
+| CONFORM-01 | Phase 7 — Conformance test suite | both | Pending |
+| CONFORM-02 | Phase 7 — Conformance test suite | both | Pending |
+| CONFORM-03 | Phase 7 — Conformance test suite | both | Pending |
+| CONFORM-04 | Phase 7 — Conformance test suite | both | Pending |
+| DIST-01 | Phase 8 — Migration + distribution | both | Pending |
+| DIST-02 | Phase 8 — Migration + distribution | both | Pending |
+| DIST-03 | Phase 8 — Migration + distribution | both | Pending |
+| DIST-04 | Phase 8 — Migration + distribution | both | Pending |
+| DIST-05 | Phase 8 — Migration + distribution | both | Pending |
+
+**Coverage by phase:**
+
+| Phase | REQ count | REQ-IDs |
+|-------|-----------|---------|
+| 1 | 7 | ADAPTER-01..07 |
+| 2 | 3 | READS-01..03 |
+| 3 | 4 | WRITES-01..04 |
+| 4 | 5 | LEAKS-01..05 |
+| 5 | 9 | PRIMITIVES-01..09 |
+| 6 | 5 | BEADS-01..05 |
+| 7 | 4 | CONFORM-01..04 |
+| 8 | 5 | DIST-01..05 |
+| **Total** | **42** | — |
 
 ---
 
-*Last updated: 2026-04-30 — milestone v1.0 requirements defined from SYNTHESIS.md §4/§7/§6.*
+*Last updated: 2026-04-30 — milestone v1.0 requirements defined from SYNTHESIS.md §4/§7/§6; traceability filled by gsd-roadmapper after roadmap creation.*

@@ -6,7 +6,7 @@ status: planning
 last_updated: "2026-04-30T22:51:01.850Z"
 last_activity: 2026-04-30
 progress:
-  total_phases: 0
+  total_phases: 8
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -17,10 +17,10 @@ progress:
 
 ## Current Position
 
-Phase: Not started (defining requirements)
+Phase: 1 — Fork bootstrap + StorageAdapter interface skeleton + MarkdownAdapter scaffold (Not started)
 Plan: —
-Status: Defining requirements
-Last activity: 2026-04-30 — Milestone v1.0 started
+Status: Roadmap locked; awaiting `/gsd-discuss-phase 1`
+Last activity: 2026-04-30 — ROADMAP.md written; 42/42 REQ coverage; 8 phases per SYNTHESIS.md §7
 
 ## Reference
 
@@ -62,6 +62,7 @@ Upstream's recent commits show active seam-abstraction work:
 
 **Phase 1 must investigate these before locking the StorageAdapter contract.**
 Possible upstream foundation we build on, OR divergent vision we reconcile with.
+This is encoded as ADAPTER-05 and is part of Phase 1's success criteria.
 
 ## Locked decisions (2026-04-30)
 
@@ -79,18 +80,20 @@ See `.planning/DECISIONS.md` for full record + rationale.
 
 ## v1.0 milestone scope
 
-8 phases per SYNTHESIS.md §7:
+8 phases per SYNTHESIS.md §7 (locked in `.planning/ROADMAP.md`):
 
-| # | Phase | Where |
-|---|-------|-------|
-| 1 | Fork bootstrap + StorageAdapter interface skeleton + MarkdownAdapter scaffold | this repo |
-| 2 | Wire core read methods to adapter | this repo |
-| 3 | Wire core write methods + `recordStateEvent` | this repo |
-| 4 | Plug workflow leaks (top-10 + `<context>`-block class) | this repo |
-| 5 | Foundational primitive lift | this repo |
-| 6 | BeadsAdapter implementation | gsd-beads |
-| 7 | Conformance test suite | both |
-| 8 | Migration + distribution | both |
+| # | Phase | Where | REQ-IDs |
+|---|-------|-------|---------|
+| 1 | Fork bootstrap + StorageAdapter interface skeleton + MarkdownAdapter scaffold | this repo | ADAPTER-01..07 |
+| 2 | Wire core read methods to adapter | this repo | READS-01..03 |
+| 3 | Wire core write methods + `recordStateEvent` | this repo | WRITES-01..04 |
+| 4 | Plug workflow leaks (top-10 + `<context>`-block class) | this repo | LEAKS-01..05 |
+| 5 | Foundational primitive lift | this repo | PRIMITIVES-01..09 |
+| 6 | BeadsAdapter implementation | gsd-beads | BEADS-01..05 |
+| 7 | Conformance test suite | both | CONFORM-01..04 |
+| 8 | Migration + distribution | both | DIST-01..05 |
+
+**REQ coverage:** 42/42 (100%). See `.planning/REQUIREMENTS.md` Traceability section.
 
 ## Open questions deferred (from SYNTHESIS.md §6)
 
@@ -103,7 +106,7 @@ These are NOT blocking for Phase 1; resolved as relevant phases approach:
 | OQ-03 | 2 raw-git outliers (spec-phase, eval-review) | Phase 4 |
 | OQ-04 | `<context>`-block leak mitigation strategy | Phase 4 |
 | OQ-05 | Sidecar paths kv-vs-named | Phase 5 |
-| OQ-06 | Knowledge-graph subsystem scope | Phase 5/6 |
+| OQ-06 | Knowledge-graph subsystem scope | Phase 6 |
 | OQ-07 | "Scratch" record taxonomy | Phase 5 |
 | OQ-08 | Markdown-and-lockfile helpers visibility | Phase 1 |
 | OQ-09 | Init-bundle granularity | Phase 2 |
@@ -124,13 +127,15 @@ These are NOT blocking for Phase 1; resolved as relevant phases approach:
 
 ## Session Continuity
 
-Last session: 2026-04-30 — fork bootstrap session
-Stopped at: `.planning/` initialized on `feat/storage-adapter` branch with
-synthesis + decisions + project context.
+Last session: 2026-04-30 — roadmapping session
+Stopped at: `.planning/ROADMAP.md` written (8 phases, 42/42 REQ coverage);
+`.planning/REQUIREMENTS.md` Traceability filled; `.planning/STATE.md`
+`progress.total_phases` set to 8.
 
-Next action: in this repo, run `/gsd-new-milestone` to formalize v1.0,
-then `/gsd-discuss-phase 1` for the fork bootstrap phase.
+Next action: `/gsd-discuss-phase 1` to lock Phase 1 design (capabilities
+flag shape, module layout, OQ-08 resolution, upstream PR reconciliation
+per ADAPTER-05).
 
 Sibling repo state: `gsd-beads` v0.2 milestone is superseded; v1.0
 Phase 6 (BeadsAdapter implementation) waits for Phase 5 of this repo
-to ship before activating.
+to ship before activating (per SYNTHESIS §9 high-severity dry-run risk).
