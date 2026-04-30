@@ -43,11 +43,25 @@ only durable solution. This fork adds that seam.
 
 ## Current Milestone: v1.0 — StorageAdapter interface + MarkdownAdapter
 
-**Status:** scoping (just bootstrapped on `feat/storage-adapter` branch)
+**Status:** planning (roadmap pending; bootstrapped on `feat/storage-adapter` branch)
 
 **Goal:** Ship a fork of upstream GSD that adds a `StorageAdapter`
-interface, defaulting to a `MarkdownAdapter` that wraps current behavior.
+interface (10 Bin A primitives + 6 foundational primitives + ~58 Bin B
+named methods per SYNTHESIS.md §4), defaulting to a `MarkdownAdapter`
+that wraps current behavior, plus a sibling `BeadsAdapter` in `gsd-beads`
+and a conformance test suite proving both adapters interchangeable.
 Verify zero behavior change against upstream's test suite.
+
+**Target features:**
+- StorageAdapter TypeScript interface (Bin A primitives + 6 foundational primitives)
+- MarkdownAdapter wrapping current `node:fs` behavior (default; zero behavior change)
+- ~58 Bin B named domain methods (phase/plan, roadmap/milestone, state, verify, discuss, todos/notes/seeds, workstream/config, debug, reports, etc.)
+- `recordStateEvent({type, payload})` discriminated-union event record (replaces 10+ ad-hoc state mutators)
+- Foundational primitives: `updateSection`, `getSection`, `snapshot/restore`, `putNamedDoc`, `writeBinaryAsset`
+- Workflow leak plugging (top-10 leakers + `<context>`-block frontmatter `@`-reference class)
+- BeadsAdapter implementation in sibling `gsd-beads` repo
+- Conformance test suite running against both adapters
+- Migration path from markdown to alternate backends
 
 **Phase scope** (from `.planning/research/fork-investigation/SYNTHESIS.md` §7):
 
