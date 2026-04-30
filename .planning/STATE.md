@@ -2,8 +2,8 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: StorageAdapter interface + MarkdownAdapter
-status: scoping
-last_updated: "2026-04-30T00:00:00.000Z"
+status: planning
+last_updated: "2026-04-30T22:51:01.850Z"
 last_activity: 2026-04-30
 progress:
   total_phases: 0
@@ -17,21 +17,23 @@ progress:
 
 ## Current Position
 
-Repo: `<user>/get-shit-done` (fork of `gsd-build/get-shit-done`)
-Branch: `feat/storage-adapter`
-Milestone: v1.0 (StorageAdapter interface + MarkdownAdapter)
-Status: scoping — ready for `/gsd-new-milestone` and `/gsd-discuss-phase 1`
-Last activity: 2026-04-30
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-04-30 — Milestone v1.0 started
 
 ## Reference
 
 - **Project core value:** Add a clean storage-adapter interface to GSD so
   any backend (markdown default; bd, sqlite, etc. as alternates) can be
   plugged in via config without modifying business logic.
+
 - **Strict superset invariant:** Without an adapter configured, this fork
   behaves identically to upstream `gsd-build/get-shit-done`.
+
 - **Phases this milestone:** 8 (per SYNTHESIS.md §7); first 5 land in
   this repo, Phase 6 in sibling `gsd-beads`, Phases 7–8 span both.
+
 - **Carry-forward:** entire architectural investigation done in
   `gsd-beads` repo; SYNTHESIS.md (6500 words) is the canonical scope
   input. 6 locked decisions documented in DECISIONS.md.
@@ -51,6 +53,7 @@ investigation output.
 ## Recent upstream signal (relevant to this work)
 
 Upstream's recent commits show active seam-abstraction work:
+
 - `8cbdbdd2 feat(sdk): add durable planning runtime (#2898)`
 - `abb2cb63 refactor: extract planning-workspace seam from core.cjs (#2901)`
 - `444db171 refactor(query): manifest-backed routing seam + family adapters (#2908)`
@@ -68,6 +71,7 @@ Possible upstream foundation we build on, OR divergent vision we reconcile with.
 4. **Adapter capability negotiation:** `adapter.capabilities = { ... }` flag
 5. **Branch strategy:** `main` mirrors `upstream/main`; work happens on
    `feat/storage-adapter`; per-phase feature branches as needed
+
 6. **SYNTHESIS.md is canonical** — milestone scope derives from §7;
    adapter interface from §4; risks from §9; open questions from §6
 
