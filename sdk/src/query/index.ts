@@ -365,8 +365,13 @@ export function createRegistry(opts: {
     }
   }
 
-  registry.register('progress', progressJson);
-  registry.register('progress.json', progressJson);
+  // Phase 2 Plan 02-02 Task 2: progressJson migrated to adapter-as-first-arg.
+  registry.register('progress', (args, projectDir, ws) =>
+    progressJson(adapter, args, projectDir, ws),
+  );
+  registry.register('progress.json', (args, projectDir, ws) =>
+    progressJson(adapter, args, projectDir, ws),
+  );
 
   // Frontmatter mutation handlers
   registry.register('frontmatter.set', frontmatterSet);
@@ -623,8 +628,13 @@ export function createRegistry(opts: {
   registry.register('learnings delete', learningsDelete);
   registry.register('skill-manifest', skillManifest);
   registry.register('skill manifest', skillManifest);
-  registry.register('audit-open', auditOpen);
-  registry.register('audit open', auditOpen);
+  // Phase 2 Plan 02-02 Task 2: auditOpen migrated to adapter-as-first-arg.
+  registry.register('audit-open', (args, projectDir, ws) =>
+    auditOpen(adapter, args, projectDir, ws),
+  );
+  registry.register('audit open', (args, projectDir, ws) =>
+    auditOpen(adapter, args, projectDir, ws),
+  );
   registry.register('detect-custom-files', detectCustomFiles);
   registry.register('extract-messages', extractMessages);
   registry.register('extract.messages', extractMessages);

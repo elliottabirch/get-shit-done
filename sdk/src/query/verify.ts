@@ -14,16 +14,26 @@
  * ```
  */
 
+// Phase 2 D-14: write-side migration deferred to Phase 3 (WRITES-01..04). Per-line
+// read-only discipline applies — only .planning/-scoped fs reads in
+// verifyPhaseCompleteness and verifySchemaDrift route through the adapter
+// (Plan 02-02 Task 2). User-supplied path reads in verifyPlanStructure,
+// verifyArtifacts, verifyReferences, verifySummary, verifyPathExists remain on
+// raw fs because their paths are NOT .planning/-scoped (they accept arbitrary
+// project-relative paths). The leak-grep gate is path-scoped, so these reads
+// pass without explicit allowlisting.
 import { readFile, readdir } from 'node:fs/promises';
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, isAbsolute } from 'node:path';
 import { GSDError, ErrorClassification } from '../errors.js';
 import { extractFrontmatter, parseMustHavesBlock } from './frontmatter.js';
 import {
+  adapterFor,
   comparePhaseNum,
   normalizePhaseName,
   phaseTokenMatches,
   planningPaths,
+  planningRelativePath,
 } from './helpers.js';
 import type { QueryHandler } from './utils.js';
 
@@ -139,28 +149,36 @@ export const verifyPhaseCompleteness: QueryHandler = async (args, projectDir, wo
     throw new GSDError('phase required', ErrorClassification.Validation);
   }
 
-  const phasesDir = planningPaths(projectDir, workstream).phases;
+  // Phase 2 Plan 02-02 Task 2: read paths route through adapter.
+  const adapter = await adapterFor(projectDir);
+  const phasesAdapterRel = planningRelativePath(workstream, 'phases');
   const normalized = normalizePhaseName(phase);
 
-  // Find phase directory (mirror findPhase pattern from phase.ts)
-  let phaseDir: string | null = null;
+  // Find phase directory (mirror findPhase pattern from phase.ts).
+  // Pitfall 3: listCollection returns [] on ENOENT, no need for redundant exists check
+  const phaseRefs = await adapter.listCollection(phasesAdapterRel);
+  // Pitfall 2: parallelize stat probes for dir filter
+  const dirChecks = await Promise.all(
+    phaseRefs.map(async r => ({
+      ref: r,
+      isDir: ((await adapter.stat(r.path))?.kind === 'dir'),
+    })),
+  );
+  const dirs = dirChecks
+    .filter(c => c.isDir)
+    .map(c => c.ref.name)
+    .sort();
+  const match = dirs.find(d => phaseTokenMatches(d, normalized));
+  let phaseAdapterRel: string | null = null;
   let phaseNumber: string = normalized;
-  try {
-    const entries = await readdir(phasesDir, { withFileTypes: true });
-    const dirs = entries
-      .filter(e => e.isDirectory())
-      .map(e => e.name)
-      .sort();
-    const match = dirs.find(d => phaseTokenMatches(d, normalized));
-    if (match) {
-      phaseDir = join(phasesDir, match);
-      // Extract phase number from directory name
-      const numMatch = match.match(/^(\d+[A-Z]?(?:\.\d+)*)/i);
-      if (numMatch) phaseNumber = numMatch[1];
-    }
-  } catch { /* phases dir doesn't exist */ }
+  if (match) {
+    phaseAdapterRel = `${phasesAdapterRel}/${match}`;
+    // Extract phase number from directory name
+    const numMatch = match.match(/^(\d+[A-Z]?(?:\.\d+)*)/i);
+    if (numMatch) phaseNumber = numMatch[1];
+  }
 
-  if (!phaseDir) {
+  if (!phaseAdapterRel) {
     return { data: { error: 'Phase not found', phase } };
   }
 
@@ -168,12 +186,11 @@ export const verifyPhaseCompleteness: QueryHandler = async (args, projectDir, wo
   const warnings: string[] = [];
 
   // List plans and summaries
-  let files: string[];
-  try {
-    files = await readdir(phaseDir);
-  } catch {
+  const fileRefs = await adapter.listCollection(phaseAdapterRel);
+  if (fileRefs.length === 0) {
     return { data: { error: 'Cannot read phase directory' } };
   }
+  const files: string[] = fileRefs.map(r => r.name);
 
   const plans = files.filter(f => /-PLAN\.md$/i.test(f));
   const summaries = files.filter(f => /-SUMMARY\.md$/i.test(f));
@@ -565,8 +582,13 @@ export const verifySchemaDrift: QueryHandler = async (args, projectDir, workstre
   const { checkSchemaDrift } = await import('./schema-detect.js');
   const { execGit } = await import('./commit.js');
 
-  const phasesDir = planningPaths(projectDir, workstream).phases;
-  if (!existsSync(phasesDir)) {
+  // Phase 2 Plan 02-02 Task 2: read paths route through adapter.
+  const adapter = await adapterFor(projectDir);
+  const phasesAdapterRel = planningRelativePath(workstream, 'phases');
+
+  // Pitfall 3: listCollection returns [] on ENOENT
+  const phaseRefs = await adapter.listCollection(phasesAdapterRel);
+  if (phaseRefs.length === 0) {
     return {
       data: {
         drift_detected: false,
@@ -577,15 +599,22 @@ export const verifySchemaDrift: QueryHandler = async (args, projectDir, workstre
   }
 
   const normalized = normalizePhaseName(phaseArg);
-  const dirNames = readdirSync(phasesDir, { withFileTypes: true })
-    .filter(e => e.isDirectory())
-    .map(e => e.name)
+  // Pitfall 2: parallelize stat probes for dir filter
+  const dirChecks = await Promise.all(
+    phaseRefs.map(async r => ({
+      ref: r,
+      isDir: ((await adapter.stat(r.path))?.kind === 'dir'),
+    })),
+  );
+  const dirNames = dirChecks
+    .filter(c => c.isDir)
+    .map(c => c.ref.name)
     .sort((a, b) => comparePhaseNum(a, b));
 
   let phaseDirName = dirNames.find(d => phaseTokenMatches(d, normalized)) ?? null;
   if (!phaseDirName && /^[\d.]+/.test(phaseArg)) {
-    const exact = join(phasesDir, phaseArg);
-    if (existsSync(exact)) phaseDirName = phaseArg;
+    const exactRel = `${phasesAdapterRel}/${phaseArg}`;
+    if (await adapter.exists(exactRel)) phaseDirName = phaseArg;
   }
 
   if (!phaseDirName) {
@@ -598,7 +627,7 @@ export const verifySchemaDrift: QueryHandler = async (args, projectDir, workstre
     };
   }
 
-  const phaseDir = join(phasesDir, phaseDirName);
+  const phaseAdapterRel = `${phasesAdapterRel}/${phaseDirName}`;
 
   function filesModifiedFromFrontmatter(fm: Record<string, unknown>): string[] {
     const v = fm.files_modified;
@@ -610,18 +639,23 @@ export const verifySchemaDrift: QueryHandler = async (args, projectDir, workstre
     return [];
   }
 
+  // Pitfall 2: parallelize per-phase listings + reads
+  const phaseFileRefs = await adapter.listCollection(phaseAdapterRel);
+  const planRefs = phaseFileRefs.filter(r => r.name.endsWith('-PLAN.md') || r.name === 'PLAN.md');
+  const summaryRefs = phaseFileRefs.filter(r => r.name.endsWith('-SUMMARY.md'));
+
+  const planContents = await Promise.all(planRefs.map(r => adapter.getRecord(r.path)));
   const allFiles: string[] = [];
-  const planFiles = readdirSync(phaseDir).filter(f => f.endsWith('-PLAN.md') || f === 'PLAN.md');
-  for (const pf of planFiles) {
-    const content = readFileSync(join(phaseDir, pf), 'utf-8');
+  for (const content of planContents) {
+    if (content === null) continue;
     const fm = extractFrontmatter(content) as Record<string, unknown>;
     allFiles.push(...filesModifiedFromFrontmatter(fm));
   }
 
   let executionLog = '';
-  const summaryFiles = readdirSync(phaseDir).filter(f => f.endsWith('-SUMMARY.md'));
-  for (const sf of summaryFiles) {
-    executionLog += readFileSync(join(phaseDir, sf), 'utf-8') + '\n';
+  const summaryContents = await Promise.all(summaryRefs.map(r => adapter.getRecord(r.path)));
+  for (const content of summaryContents) {
+    if (content !== null) executionLog += content + '\n';
   }
 
   const gitLog = execGit(projectDir, ['log', '--oneline', '--all', '-50']);
