@@ -4,10 +4,12 @@
  */
 
 import { createRegistry } from '../query/index.js';
+import { MarkdownAdapter } from '../../../adapters/markdown/index.js';
 import type { QueryHandler } from '../query/utils.js';
 
 export function getCanonicalRegistryCommands(): string[] {
-  const registry = createRegistry();
+  // Manifest-coverage utility — needs an adapter to satisfy types but does not exercise it
+  const registry = createRegistry({ adapter: new MarkdownAdapter(process.cwd()) });
   const byHandler = new Map<QueryHandler, string[]>();
   for (const cmd of registry.commands()) {
     const h = registry.getHandler(cmd);
