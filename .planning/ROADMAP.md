@@ -67,13 +67,13 @@ Plans:
   2. The ~13 `getXxxInit()` Bin B methods (per OQ-09 resolution) keep their coarse external shape but their internals compose adapter primitives only; swapping the adapter under them changes the data source without changing the bundle shape.
   3. Every skill frontmatter `<context>` block's `@.planning/...` reference is either (a) rewritten to an SDK-mediated read, (b) intercepted by the install-time hook, or (c) explicitly listed in a documented exceptions register — no orphan references survive an audit grep.
   4. Upstream's read-side test fixtures continue to pass against the fork with the MarkdownAdapter mounted (regression budget: zero failing tests).
-**Plans:** 5 plans
+**Plans:** 4/5 plans executed
 Plans:
 - [x] 02-01-PLAN.md — Foundation + migration recipe (stat in Bin A; leak-grep SDK extension; helpers; route-next-action recipe handler; state-project-load adapter routing; createRegistry closure pattern; bundler baselines)
 - [ ] 02-02-PLAN.md — Phase / state / progress / roadmap reads (8 SDK handlers — phase, roadmap, progress reads, audit-open, phase-ready, verify reads, check-verification-status, detect-phase-type)
 - [x] 02-03-PLAN.md — Document reads (summary, uat, intel reads, docs-init .planning probe; skill-manifest verified C2)
 - [ ] 02-04-PLAN.md — Init bundlers (16 bundlers; OQ-09 resolved; byte-identical bundle assertion)
-- [ ] 02-05-PLAN.md — `<context>`-block audit register (READS-03; OQ-04 partial resolution)
+- [x] 02-05-PLAN.md — `<context>`-block audit register (READS-03; OQ-04 partial resolution)
 
 ### Phase 3: Wire core write methods + recordStateEvent
 **Repo:** this repo (`feat/storage-adapter`)
@@ -165,7 +165,7 @@ Phase 6 begins in sibling repo `~/code/gsd-beads` only after Phase 5 ships in th
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Fork bootstrap + StorageAdapter interface skeleton + MarkdownAdapter scaffold | 5/5 | Complete   | 2026-05-01 |
-| 2. Wire core read methods to adapter | 0/5 | Not started | - |
+| 2. Wire core read methods to adapter | 4/5 | In Progress|  |
 | 3. Wire core write methods + recordStateEvent | 0/TBD | Not started | - |
 | 4. Plug workflow leaks (top-10 + `<context>`-block class) | 0/TBD | Not started | - |
 | 5. Foundational primitive lift | 0/TBD | Not started | - |
