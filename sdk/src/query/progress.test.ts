@@ -10,14 +10,18 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
 import { progressJson, determinePhaseStatus } from './progress.js';
+import { MarkdownAdapter } from '../../../adapters/markdown/index.js';
+import type { StorageAdapter } from '../../../adapters/types.js';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────
 
 let tmpDir: string;
+let adapter: StorageAdapter;
 
 beforeEach(async () => {
   tmpDir = await mkdtemp(join(tmpdir(), 'progress-test-'));
   await mkdir(join(tmpDir, '.planning', 'phases'), { recursive: true });
+  adapter = new MarkdownAdapter(tmpDir);
 });
 
 afterEach(async () => {
@@ -30,28 +34,28 @@ describe('determinePhaseStatus', () => {
   it('returns Pending when no plans', async () => {
     const phaseDir = join(tmpDir, '.planning', 'phases', '01-test');
     await mkdir(phaseDir, { recursive: true });
-    const status = await determinePhaseStatus(0, 0, phaseDir);
+    const status = await determinePhaseStatus(adapter, 0, 0, 'phases/01-test');
     expect(status).toBe('Pending');
   });
 
   it('returns Planned when plans but no summaries', async () => {
     const phaseDir = join(tmpDir, '.planning', 'phases', '01-test');
     await mkdir(phaseDir, { recursive: true });
-    const status = await determinePhaseStatus(3, 0, phaseDir);
+    const status = await determinePhaseStatus(adapter, 3, 0, 'phases/01-test');
     expect(status).toBe('Planned');
   });
 
   it('returns In Progress when some summaries', async () => {
     const phaseDir = join(tmpDir, '.planning', 'phases', '01-test');
     await mkdir(phaseDir, { recursive: true });
-    const status = await determinePhaseStatus(3, 1, phaseDir);
+    const status = await determinePhaseStatus(adapter, 3, 1, 'phases/01-test');
     expect(status).toBe('In Progress');
   });
 
   it('returns Executed when all summaries but no VERIFICATION.md', async () => {
     const phaseDir = join(tmpDir, '.planning', 'phases', '01-test');
     await mkdir(phaseDir, { recursive: true });
-    const status = await determinePhaseStatus(3, 3, phaseDir);
+    const status = await determinePhaseStatus(adapter, 3, 3, 'phases/01-test');
     expect(status).toBe('Executed');
   });
 
@@ -59,7 +63,7 @@ describe('determinePhaseStatus', () => {
     const phaseDir = join(tmpDir, '.planning', 'phases', '01-test');
     await mkdir(phaseDir, { recursive: true });
     await writeFile(join(phaseDir, 'VERIFICATION.md'), '---\nstatus: passed\n---\n');
-    const status = await determinePhaseStatus(3, 3, phaseDir);
+    const status = await determinePhaseStatus(adapter, 3, 3, 'phases/01-test');
     expect(status).toBe('Complete');
   });
 
@@ -67,7 +71,7 @@ describe('determinePhaseStatus', () => {
     const phaseDir = join(tmpDir, '.planning', 'phases', '01-test');
     await mkdir(phaseDir, { recursive: true });
     await writeFile(join(phaseDir, 'VERIFICATION.md'), '---\nstatus: human_needed\n---\n');
-    const status = await determinePhaseStatus(3, 3, phaseDir);
+    const status = await determinePhaseStatus(adapter, 3, 3, 'phases/01-test');
     expect(status).toBe('Needs Review');
   });
 
@@ -75,7 +79,7 @@ describe('determinePhaseStatus', () => {
     const phaseDir = join(tmpDir, '.planning', 'phases', '01-test');
     await mkdir(phaseDir, { recursive: true });
     await writeFile(join(phaseDir, 'VERIFICATION.md'), '---\nstatus: gaps_found\n---\n');
-    const status = await determinePhaseStatus(3, 3, phaseDir);
+    const status = await determinePhaseStatus(adapter, 3, 3, 'phases/01-test');
     expect(status).toBe('Executed');
   });
 
@@ -83,7 +87,7 @@ describe('determinePhaseStatus', () => {
     const phaseDir = join(tmpDir, '.planning', 'phases', '01-test');
     await mkdir(phaseDir, { recursive: true });
     await writeFile(join(phaseDir, 'VERIFICATION.md'), '---\nstatus: unknown\n---\n');
-    const status = await determinePhaseStatus(3, 3, phaseDir);
+    const status = await determinePhaseStatus(adapter, 3, 3, 'phases/01-test');
     expect(status).toBe('Executed');
   });
 });
@@ -105,7 +109,7 @@ describe('progressJson', () => {
     await writeFile(join(phase1, '01-01-SUMMARY.md'), '');
     await writeFile(join(phase2, '02-01-PLAN.md'), '');
 
-    const result = await progressJson([], tmpDir);
+    const result = await progressJson(adapter, [], tmpDir);
     const data = result.data as Record<string, unknown>;
 
     expect(data.milestone_version).toBe('v1.0');
@@ -132,7 +136,7 @@ describe('progressJson', () => {
 
   it('returns 0 percent when no plans', async () => {
     await writeFile(join(tmpDir, '.planning', 'ROADMAP.md'), '## v1.0: Milestone\n');
-    const result = await progressJson([], tmpDir);
+    const result = await progressJson(adapter, [], tmpDir);
     const data = result.data as Record<string, unknown>;
     expect(data.percent).toBe(0);
     expect(data.total_plans).toBe(0);
@@ -146,7 +150,7 @@ describe('progressJson', () => {
     await mkdir(phase10, { recursive: true });
     await mkdir(phase2, { recursive: true });
 
-    const result = await progressJson([], tmpDir);
+    const result = await progressJson(adapter, [], tmpDir);
     const data = result.data as Record<string, unknown>;
     const phases = data.phases as Array<Record<string, unknown>>;
 
