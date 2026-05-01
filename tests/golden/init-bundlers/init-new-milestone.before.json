@@ -1,0 +1,23 @@
+{
+  "researcher_model": "sonnet",
+  "synthesizer_model": "sonnet",
+  "roadmapper_model": "sonnet",
+  "commit_docs": true,
+  "research_enabled": true,
+  "current_milestone": "v1.0",
+  "current_milestone_name": "milestone",
+  "latest_completed_milestone": null,
+  "latest_completed_milestone_name": null,
+  "phase_dir_count": 2,
+  "phase_archive_path": null,
+  "project_exists": true,
+  "roadmap_exists": true,
+  "state_exists": true,
+  "project_path": ".planning/PROJECT.md",
+  "roadmap_path": ".planning/ROADMAP.md",
+  "state_path": ".planning/STATE.md",
+  "project_root": "/home/ellio/code/get-shit-done/.claude/worktrees/agent-afe48fc6f178f469c",
+  "agents_installed": true,
+  "missing_agents": [],
+  "project_title": "Project: get-shit-done (fork — adapter-interface seam)"
+}

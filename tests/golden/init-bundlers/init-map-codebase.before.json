@@ -1,0 +1,17 @@
+{
+  "mapper_model": "haiku",
+  "commit_docs": true,
+  "search_gitignored": false,
+  "parallelization": true,
+  "date": "2026-05-01",
+  "timestamp": "2026-05-01T09:25:52.400Z",
+  "codebase_dir": ".planning/codebase",
+  "existing_maps": [],
+  "has_maps": false,
+  "planning_exists": true,
+  "codebase_dir_exists": false,
+  "project_root": "/home/ellio/code/get-shit-done/.claude/worktrees/agent-afe48fc6f178f469c",
+  "agents_installed": true,
+  "missing_agents": [],
+  "project_title": "Project: get-shit-done (fork — adapter-interface seam)"
+}
