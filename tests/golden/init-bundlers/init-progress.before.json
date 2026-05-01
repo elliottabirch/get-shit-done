@@ -1,0 +1,107 @@
+{
+  "executor_model": "sonnet",
+  "planner_model": "opus",
+  "commit_docs": true,
+  "milestone_version": "v1.0",
+  "milestone_name": "milestone",
+  "phases": [
+    {
+      "number": "01",
+      "name": "fork-bootstrap-storageadapter-interface-skeleton-markdownada",
+      "directory": ".planning/phases/01-fork-bootstrap-storageadapter-interface-skeleton-markdownada",
+      "status": "complete",
+      "plan_count": 5,
+      "summary_count": 6,
+      "has_research": true
+    },
+    {
+      "number": "02",
+      "name": "wire-core-read-methods-to-adapter",
+      "directory": ".planning/phases/02-wire-core-read-methods-to-adapter",
+      "status": "in_progress",
+      "plan_count": 5,
+      "summary_count": 0,
+      "has_research": true
+    },
+    {
+      "number": "3",
+      "name": "wire-core-write-methods-recordstateevent",
+      "directory": null,
+      "status": "not_started",
+      "plan_count": 0,
+      "summary_count": 0,
+      "has_research": false
+    },
+    {
+      "number": "4",
+      "name": "plug-workflow-leaks-top-10-context-block-class",
+      "directory": null,
+      "status": "not_started",
+      "plan_count": 0,
+      "summary_count": 0,
+      "has_research": false
+    },
+    {
+      "number": "5",
+      "name": "foundational-primitive-lift",
+      "directory": null,
+      "status": "not_started",
+      "plan_count": 0,
+      "summary_count": 0,
+      "has_research": false
+    },
+    {
+      "number": "6",
+      "name": "beadsadapter-implementation",
+      "directory": null,
+      "status": "not_started",
+      "plan_count": 0,
+      "summary_count": 0,
+      "has_research": false
+    },
+    {
+      "number": "7",
+      "name": "conformance-test-suite",
+      "directory": null,
+      "status": "not_started",
+      "plan_count": 0,
+      "summary_count": 0,
+      "has_research": false
+    },
+    {
+      "number": "8",
+      "name": "migration-distribution",
+      "directory": null,
+      "status": "not_started",
+      "plan_count": 0,
+      "summary_count": 0,
+      "has_research": false
+    }
+  ],
+  "phase_count": 8,
+  "completed_count": 1,
+  "in_progress_count": 1,
+  "current_phase": {
+    "number": "02",
+    "name": "wire-core-read-methods-to-adapter",
+    "directory": ".planning/phases/02-wire-core-read-methods-to-adapter",
+    "status": "in_progress",
+    "plan_count": 5,
+    "summary_count": 0,
+    "has_research": true
+  },
+  "next_phase": null,
+  "paused_at": null,
+  "has_work_in_progress": true,
+  "project_exists": true,
+  "roadmap_exists": true,
+  "state_exists": true,
+  "state_path": ".planning/STATE.md",
+  "roadmap_path": ".planning/ROADMAP.md",
+  "project_path": ".planning/PROJECT.md",
+  "config_path": ".planning/config.json",
+  "project_root": "/home/ellio/code/get-shit-done/.claude/worktrees/agent-afe48fc6f178f469c",
+  "agents_installed": true,
+  "missing_agents": [],
+  "project_title": "Project: get-shit-done (fork — adapter-interface seam)"
+}
