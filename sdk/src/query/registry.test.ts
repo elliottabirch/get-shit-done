@@ -82,7 +82,8 @@ describe('QueryRegistry', () => {
 
     const result = await registry.dispatch('test-cmd', ['arg1'], '/tmp');
 
-    expect(handler).toHaveBeenCalledWith(['arg1'], '/tmp');
+    // dispatch always passes workstream as 3rd arg (since upstream 5676e2e4) — test updated.
+    expect(handler).toHaveBeenCalledWith(['arg1'], '/tmp', undefined);
     expect(result).toEqual({ data: { value: 'arg1' } });
   });
 

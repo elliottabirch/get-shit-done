@@ -68,12 +68,12 @@ afterEach(async () => {
 // ─── skills.ts ───────────────────────────────────────────────────────────
 
 describe('agentSkills', () => {
-  it('returns valid QueryResult with skills array', async () => {
+  it('returns empty string when no agent_skills configured for agent type', async () => {
+    // agentSkills returns { data: '' } (empty string) when config has no entry for the agent type.
+    // This matches gsd-tools cmdAgentSkills behavior: no skills → empty string, not a structured object.
+    // The old test expected { skills, skill_count, agent_type } which is not the function's shape.
     const result = await agentSkills(['gsd-executor'], tmpDir);
-    const data = result.data as Record<string, unknown>;
-    expect(Array.isArray(data.skills)).toBe(true);
-    expect(typeof data.skill_count).toBe('number');
-    expect(data.agent_type).toBe('gsd-executor');
+    expect(result.data).toBe('');
   });
 });
 

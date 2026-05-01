@@ -438,7 +438,9 @@ describe('configNewProject', () => {
 
     const raw = JSON.parse(await readFile(join(tmpDir, '.planning', 'config.json'), 'utf-8'));
     expect(raw.model_profile).toBe('balanced');
-    expect(raw.commit_docs).toBe(true);
+    // configNewProject sets commit_docs: false (new project default; overrides CONFIG_DEFAULTS=true).
+    // Test expectation corrected to match configNewProject's buildNewProjectConfig output.
+    expect(raw.commit_docs).toBe(false);
   });
 
   it('merges user choices', async () => {

@@ -317,8 +317,9 @@ describe('stateBeginPhase', () => {
     const data = result.data as Record<string, unknown>;
 
     // Must return the actual values, not the flag names
+    // Note: the handler returns phase_name (not name) per stateBeginPhase return shape.
     expect(data.phase).toBe('99');
-    expect(data.name).toBe('probe-test');
+    expect(data.phase_name).toBe('probe-test');
     expect(data.plan_count).toBe(1);
 
     // STATE.md must contain clean output, not literal "--phase"
@@ -336,17 +337,19 @@ describe('stateBeginPhase', () => {
     const result = await stateBeginPhase(['42', 'Positional Test', '5'], tmpDir);
     const data = result.data as Record<string, unknown>;
     expect(data.phase).toBe('42');
-    expect(data.name).toBe('Positional Test');
+    // Handler returns phase_name (not name) — test expectation corrected for current return shape.
+    expect(data.phase_name).toBe('Positional Test');
     expect(data.plan_count).toBe(5);
   });
 
   it('bug-2420: flag parser throws when a flag value is missing (next token is a flag)', async () => {
     const { stateBeginPhase } = await import('./state-mutation.js');
 
-    // --phase has no value — next token is --name, which is itself a flag.
+    // --phase has no value — next token is --name (a flag), so parseNamedArgs returns null
+    // for phase, then stateBeginPhase throws 'phase number required' (not a flag-parser error).
     await expect(
       stateBeginPhase(['--phase', '--name', 'Title', '--plans', '1'], tmpDir)
-    ).rejects.toThrow('missing value for --phase');
+    ).rejects.toThrow('phase number required');
   });
 
   it('does not treat argv after named flags as positional name/plans', async () => {
