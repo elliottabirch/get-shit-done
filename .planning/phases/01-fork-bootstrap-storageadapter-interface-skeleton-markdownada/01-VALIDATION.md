@@ -1,8 +1,8 @@
 ---
 phase: 1
 slug: fork-bootstrap-storageadapter-interface-skeleton-markdownada
-status: draft
-nyquist_compliant: false
+status: approved
+nyquist_compliant: true
 wave_0_complete: false
 created: 2026-04-30
 ---
@@ -36,11 +36,18 @@ created: 2026-04-30
 
 ## Per-Task Verification Map
 
-*Filled in during/after planning — one row per planned task. Each task should have an automated verify command or a Wave 0 dependency that delivers the test infrastructure.*
-
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
-| TBD     | TBD  | TBD  | TBD         | —          | N/A             | TBD       | TBD               | ⬜          | ⬜ pending |
+| 01-01-01 | 01 | 1 | ADAPTER-01, -02, -06, -07 | — | N/A | unit (type-check) | `cd sdk && npm run build` | ⬜ → ✅ on Wave 0 (`adapters/types.ts`) | ⬜ pending |
+| 01-01-02 | 01 | 1 | ADAPTER-06 | — | N/A | unit (build) | `npm run build:sdk && test -d adapters/dist` | ⬜ → ✅ on Wave 0 (`adapters/tsconfig.json`, root `tsconfig.json`, `package.json`) | ⬜ pending |
+| 01-02-01 | 02 | 1 | ADAPTER-05 | — | N/A | doc/grep | `grep -c "D-2026-04-30-0[7-9]\|D-2026-04-30-10" .planning/DECISIONS.md` ≥ 4 | ⬜ → ✅ on Wave 0 (`.planning/DECISIONS.md`) | ⬜ pending |
+| 01-02-02 | 02 | 1 | ADAPTER-05 | — | N/A | unit + fixtures | `node tests/leak-grep.test.cjs` exits 0 | ⬜ → ✅ on Wave 0 (`scripts/leak-grep.cjs`, `tests/leak-grep.test.cjs`, fixtures) | ⬜ pending |
+| 01-03-01 | 03 | 2 | ADAPTER-03, -07 | — | N/A | unit (impl + section regex) | `cd sdk && npx vitest run --root .. tests/conformance/` | ⬜ → ✅ on Wave 0 (`adapters/markdown/index.ts`) | ⬜ pending |
+| 01-04-01 | 04 | 3 | ADAPTER-04 | — | N/A | unit (signature change) | `cd sdk && npm run build` (TS error if zero-arg call site remains) | ⬜ → ✅ (`sdk/src/query/index.ts` signature) | ⬜ pending |
+| 01-04-02 | 04 | 3 | ADAPTER-04 | — | N/A | unit (production sites) | `grep -rE "createRegistry\(\)" sdk/src/ \| wc -l` == 0 | ⬜ → ✅ (`cli.ts`, `gsd-tools.ts`, `golden/registry-canonical-commands.ts`) | ⬜ pending |
+| 01-04-03 | 04 | 3 | ADAPTER-04 | — | N/A | unit (test-site sweep) | `cd sdk && npm test -- --run` exits 0 | ⬜ → ✅ (7 test files updated) | ⬜ pending |
+| 01-05-01 | 05 | 3 | ADAPTER-03 | — | N/A | conformance harness | `cd sdk && npx vitest run --config ../vitest.conformance.config.ts` | ⬜ → ✅ on Wave 0 (`tests/conformance/adapter.conformance.ts`) | ⬜ pending |
+| 01-05-02 | 05 | 3 | ADAPTER-03 | — | N/A | sample test (round-trip) | `npm run test:conformance` exits 0 | ⬜ → ✅ on Wave 0 (`tests/conformance/markdown.conformance.test.ts`, `vitest.conformance.config.ts`, `package.json` scripts entry) | ⬜ pending |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
@@ -48,13 +55,16 @@ created: 2026-04-30
 
 ## Wave 0 Requirements
 
-- [ ] `tests/conformance/harness.ts` — adapter-parameterized test factory (D-15)
-- [ ] `tests/conformance/markdown-adapter.test.ts` — sample `getRecord` round-trip test against MarkdownAdapter (D-15)
-- [ ] `adapters/types.ts` — `StorageAdapter` interface + `Capabilities` type + `UnsupportedCapabilityError` class + companion type guards (D-10, D-11)
-- [ ] `adapters/markdown/index.ts` — `MarkdownAdapter` class (Bin A + markdownLockfile + commitPlanningState implementations; foundationals throw)
-- [ ] `tsconfig.json` adjustments (or new `adapters/tsconfig.json`) so `adapters/` compiles cleanly per researcher finding #4
+- [ ] `adapters/types.ts` — `StorageAdapter` interface + `Capabilities` type + `UnsupportedCapabilityError` class + 6 companion type guards (D-10, D-11) — Plan 01 Task 1
+- [ ] `adapters/tsconfig.json` + root `tsconfig.json` references update + `package.json` `files` array — Plan 01 Task 2
+- [ ] `adapters/markdown/index.ts` — `MarkdownAdapter` class (Bin A + markdownLockfile + commitPlanningState implementations; 6 foundational methods throw `UnsupportedCapabilityError`) — Plan 03 Task 1
+- [ ] `tests/conformance/adapter.conformance.ts` — adapter-parameterized test factory (D-15) — Plan 05 Task 1
+- [ ] `tests/conformance/markdown.conformance.test.ts` — sample `getRecord` round-trip + section-mode coverage against MarkdownAdapter (D-15) — Plan 05 Task 2
+- [ ] `vitest.conformance.config.ts` + `package.json` `scripts.test:conformance` entry — Plan 05 Task 2
+- [ ] `scripts/leak-grep.cjs` + 4 fixtures + `tests/leak-grep.test.cjs` — D-14 — Plan 02 Task 2
+- [ ] `.planning/DECISIONS.md` per-PR ADRs (D-XX-07 through -10) — D-12 — Plan 02 Task 1
 
-*Wave 0 delivers the test infrastructure (`tests/conformance/`) plus the type surface that everything else builds on.*
+*Wave 0 delivers all type infrastructure, the MarkdownAdapter scaffold, the conformance harness skeleton + sample test, the leak-grep tooling, and the per-PR ADRs. Every later task depends on these.*
 
 ---
 
@@ -70,14 +80,14 @@ created: 2026-04-30
 
 ## Validation Sign-Off
 
-- [ ] All tasks have `<automated>` verify or Wave 0 dependencies
-- [ ] Sampling continuity: no 3 consecutive tasks without automated verify
-- [ ] Wave 0 covers all MISSING references
-- [ ] No watch-mode flags
-- [ ] Feedback latency < 30s (quick) / 3min (full)
-- [ ] `nyquist_compliant: true` set in frontmatter
+- [x] All tasks have `<automated>` verify or Wave 0 dependencies (10/10 tasks have automated commands)
+- [x] Sampling continuity: no 3 consecutive tasks without automated verify (every task has automated verify)
+- [x] Wave 0 covers all MISSING references (Plan 01 Tasks 1+2 + Plan 03 Task 1 + Plan 05 Tasks 1+2 + Plan 02 Task 2 deliver all infrastructure)
+- [x] No watch-mode flags (all vitest commands use `run` mode)
+- [x] Feedback latency < 30s (quick) / 3min (full)
+- [x] `nyquist_compliant: true` set in frontmatter
 
-**Approval:** pending
+**Approval:** approved 2026-04-30
 
 ---
 

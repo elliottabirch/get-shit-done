@@ -685,22 +685,24 @@ describe('MarkdownAdapter conformance', () => {
 
 ---
 
-## Open Questions
+## Open Questions (RESOLVED)
 
-1. **`GSDTools` class DI strategy**
+All three open questions were resolved during planning. Each carries the resolving plan + the locked decision below.
+
+1. **`GSDTools` class DI strategy** — **RESOLVED: Plan 04 makes `GSDTools.adapter` REQUIRED (no default).**
    - What we know: `GSDTools` is a public SDK class consumed by external callers. D-07 says `createRegistry` requires `{adapter}`, but `GSDTools` wraps it. The class could accept `opts.adapter?: StorageAdapter` and default to `new MarkdownAdapter(projectDir)` internally — this does not violate D-07 (the default lives in the class, not in `createRegistry`).
    - What's unclear: Is `GSDTools` used externally in Phase 1's scope in a way that would break if we require the adapter?
-   - Recommendation: Add `adapter?: StorageAdapter` to `GSDToolsOptions`. If absent, construct `new MarkdownAdapter(opts.projectDir)`. This satisfies D-07's intent (no implicit FS coupling in `createRegistry`) while preserving backward compatibility for `GSDTools` callers.
+   - **Resolution (Plan 04, Task 2):** `GSDToolsOptions.adapter` is required, no default. Tests update to pass `{adapter: new MarkdownAdapter(projectDir)}`. This honors D-07's intent (no implicit filesystem coupling at the registry boundary). Backward-compatibility shim rejected — every consumer threads adapter explicitly. Verifiable: `GSDTools({adapter})` compiles; `GSDTools({})` produces a TypeScript error.
 
-2. **adapters/ TypeScript build**
+2. **adapters/ TypeScript build** — **RESOLVED: Plan 01 creates `adapters/tsconfig.json` (separate project, composite: true).**
    - What we know: `sdk/tsconfig.json` has `rootDir: "src"` and `outDir: "dist"`. The new `adapters/` dir is at repo root, outside `sdk/`. The root `tsconfig.json` has `references: [{path: "sdk"}]` only.
    - What's unclear: Does `adapters/` need its own `tsconfig.json` + build step, or should it be compiled by the SDK's tsconfig?
-   - Recommendation: Add `adapters/` as a separate tsconfig project, or extend the SDK tsconfig to include it. The simpler path for Phase 1 is to add `adapters/` to the SDK's tsconfig `rootDir` as an additional include path, then update `package.json` `files` array to include `adapters/`.
+   - **Resolution (Plan 01, Task 2):** Separate `adapters/tsconfig.json` with `composite: true`; root `tsconfig.json` adds `{path: "adapters"}` to its `references` array; `package.json` `files` array adds `adapters/dist`. Project-references model keeps build incrementality clean and prevents `sdk/dist` from accidentally including adapter sources.
 
-3. **`updateSection` Phase 1 minimal implementation depth**
+3. **`updateSection` Phase 1 minimal implementation depth** — **RESOLVED: Plan 03 implements all three modes at heading-level-2 only.**
    - What we know: `section: true` is a required capability (D-05). MarkdownAdapter must implement it. No CJS direct analog exists.
    - What's unclear: How sophisticated does the Phase 1 regex implementation need to be? Can it handle nested sections (e.g., `##` inside a `###` context)?
-   - Recommendation: Phase 1 implements heading-level-2 (`##`) anchor matching only, with `append` and `overwrite` modes. `prepend` and heading-level-3 are Phase 5 scope.
+   - **Resolution (Plan 03, Task 1):** Phase 1 implements `overwrite` / `append` / `prepend` modes for heading-level-2 (`##`) anchors. Heading-level-3+ nested anchors and section-aware-of-frontmatter handling are deferred to Phase 5 (foundational primitive lift). Conformance harness (Plan 05) tests all three modes against a fixture markdown file.
 
 ---
 
