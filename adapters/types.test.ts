@@ -91,6 +91,23 @@ const _mode1: SectionMode = 'overwrite';
 const _mode2: SectionMode = 'append';
 const _mode3: SectionMode = 'prepend';
 
+// Test: stat() return shape (Phase 2 D-11)
+function _testStat(a: StorageAdapter): void {
+  const _p: Promise<{ kind: 'file' | 'dir'; mtime?: string } | null> = a.stat('STATE.md');
+  void _p;
+}
+void _testStat;
+
+// Test: stat result narrowing
+async function _testStatNarrow(a: StorageAdapter): Promise<void> {
+  const r = await a.stat('phases/01-foo');
+  if (r === null) return;
+  const _k: 'file' | 'dir' = r.kind;
+  const _m: string | undefined = r.mtime;
+  void _k; void _m;
+}
+void _testStatNarrow;
+
 // Suppress unused-variable warnings for the type assertions above
 void _caps; void _capKeys; void _err; void _msg; void _cap; void _adapterName;
 void _ref; void _filter; void _mode1; void _mode2; void _mode3;

@@ -27,12 +27,15 @@ export interface StorageAdapter {
   readonly name: string;                      // D-06: diagnostic only
   readonly capabilities: Capabilities;        // instance property (Claude's discretion in D-08)
 
-  // Bin A — record (required, D-05)
+  // Bin A — record (required, D-05 + D-2026-05-XX extension — stat)
   getRecord(path: string): Promise<string | null>;
   putRecord(path: string, body: string): Promise<void>;
   removeRecord(path: string): Promise<void>;
   listCollection(prefix: string, filter?: RecordFilter): Promise<RecordRef[]>;
   exists(path: string): Promise<boolean>;
+  // Returns null on missing path (matches getRecord null-on-miss semantics).
+  // mtime is optional in the return shape — adapters that can't cheaply compute it omit the field.
+  stat(path: string): Promise<{ kind: 'file' | 'dir'; mtime?: string } | null>;
 
   // Bin A — section (required, D-05)
   getSection(path: string, anchor: string): Promise<string | null>;
