@@ -6,6 +6,11 @@ import { describe, it, expect, vi } from 'vitest';
 import { QueryRegistry, extractField, resolveQueryArgv } from './registry.js';
 import { createRegistry, QUERY_MUTATION_COMMANDS } from './index.js';
 import type { QueryResult } from './utils.js';
+import { MarkdownAdapter } from '../../../adapters/markdown/index.js';
+
+function makeRegistry(projectDir: string = process.cwd()) {
+  return createRegistry({ adapter: new MarkdownAdapter(projectDir) });
+}
 
 // ─── extractField ──────────────────────────────────────────────────────────
 
@@ -100,7 +105,7 @@ describe('QueryRegistry', () => {
 
 describe('QUERY_MUTATION_COMMANDS', () => {
   it('has a registered handler for every mutation command name', () => {
-    const registry = createRegistry();
+    const registry = makeRegistry();
     const missing: string[] = [];
     for (const cmd of QUERY_MUTATION_COMMANDS) {
       if (!registry.has(cmd)) missing.push(cmd);
@@ -113,30 +118,30 @@ describe('QUERY_MUTATION_COMMANDS', () => {
 
 describe('createRegistry', () => {
   it('returns a QueryRegistry instance', () => {
-    const registry = createRegistry();
+    const registry = makeRegistry();
 
     expect(registry).toBeInstanceOf(QueryRegistry);
   });
 
   it('has generate-slug registered', () => {
-    const registry = createRegistry();
+    const registry = makeRegistry();
 
     expect(registry.has('generate-slug')).toBe(true);
   });
 
   it('has current-timestamp registered', () => {
-    const registry = createRegistry();
+    const registry = makeRegistry();
 
     expect(registry.has('current-timestamp')).toBe(true);
   });
 
   it('has summary-extract dash alias (PR #2179 / workflows)', () => {
-    const registry = createRegistry();
+    const registry = makeRegistry();
     expect(registry.has('summary-extract')).toBe(true);
   });
 
   it('can dispatch generate-slug', async () => {
-    const registry = createRegistry();
+    const registry = makeRegistry();
     const result = await registry.dispatch('generate-slug', ['My Phase'], '/tmp');
 
     expect(result).toEqual({ data: { slug: 'my-phase' } });
@@ -147,32 +152,32 @@ describe('createRegistry', () => {
 
 describe('resolveQueryArgv', () => {
   it('matches longest dotted prefix (state.update + args)', () => {
-    const registry = createRegistry();
+    const registry = makeRegistry();
     const m = resolveQueryArgv(['state', 'update', 'status', 'X'], registry);
     expect(m).toEqual({ cmd: 'state.update', args: ['status', 'X'] });
   });
 
   it('matches longest prefix (phase.add wins over phase when both registered)', () => {
-    const registry = createRegistry();
+    const registry = makeRegistry();
     const m = resolveQueryArgv(['phase', 'add', 'desc'], registry);
     expect(m).toEqual({ cmd: 'phase.add', args: ['desc'] });
   });
 
   it('prefers longer match over shorter', () => {
-    const registry = createRegistry();
+    const registry = makeRegistry();
     const m = resolveQueryArgv(['state', 'load'], registry);
     expect(m?.cmd).toBe('state.load');
     expect(m?.args).toEqual([]);
   });
 
   it('returns null when no prefix matches', () => {
-    const registry = createRegistry();
+    const registry = makeRegistry();
     const m = resolveQueryArgv(['totally-unknown', 'x'], registry);
     expect(m).toBeNull();
   });
 
   it('matches a single dotted command token', () => {
-    const registry = createRegistry();
+    const registry = makeRegistry();
     expect(resolveQueryArgv(['init.new-project'], registry)).toEqual({
       cmd: 'init.new-project',
       args: [],
@@ -183,7 +188,7 @@ describe('resolveQueryArgv', () => {
   // Before the fix, argv like ['init.execute-phase', '1'] returned null because
   // expansion only ran for single-token input.
   it('matches a dotted command token when positional args follow (#2597)', () => {
-    const registry = createRegistry();
+    const registry = makeRegistry();
     expect(resolveQueryArgv(['init.execute-phase', '1'], registry)).toEqual({
       cmd: 'init.execute-phase',
       args: ['1'],
@@ -191,7 +196,7 @@ describe('resolveQueryArgv', () => {
   });
 
   it('matches dotted state.update with trailing args (#2597)', () => {
-    const registry = createRegistry();
+    const registry = makeRegistry();
     expect(resolveQueryArgv(['state.update', 'status', 'X'], registry)).toEqual({
       cmd: 'state.update',
       args: ['status', 'X'],
@@ -199,7 +204,7 @@ describe('resolveQueryArgv', () => {
   });
 
   it('matches dotted phase.add with trailing args (#2597)', () => {
-    const registry = createRegistry();
+    const registry = makeRegistry();
     expect(resolveQueryArgv(['phase.add', 'desc'], registry)).toEqual({
       cmd: 'phase.add',
       args: ['desc'],
