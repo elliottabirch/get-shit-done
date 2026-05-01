@@ -36,6 +36,7 @@ key-files:
     - sdk/src/query/index.ts
     - sdk/src/cli.ts
     - sdk/src/gsd-tools.ts
+    - sdk/src/index.ts
     - sdk/src/golden/registry-canonical-commands.ts
     - sdk/src/golden/golden.integration.test.ts
     - sdk/src/golden/read-only-parity.integration.test.ts
@@ -93,12 +94,14 @@ Each task was committed atomically:
 1. **Task 1: Change createRegistry signature to require {adapter: StorageAdapter}** - `47924c40` (feat)
 2. **Task 2: Update 4 production call sites + GSDToolsOptions interface** - `b636e356` (feat)
 3. **Task 3: Update 7 SDK test files to pass MarkdownAdapter** - `0de41b63` (feat)
+4. **Auto-fix: Add missing adapter to GSD.createTools() in sdk/src/index.ts** - `a405914b` (fix)
 
 ## Files Created/Modified
 
 - `sdk/src/query/index.ts` — New `createRegistry(opts: {adapter: StorageAdapter; ...})` signature; StorageAdapter import added; JSDoc updated to document Phase 2 migration plan
 - `sdk/src/cli.ts` — MarkdownAdapter import; `createRegistry({ adapter: new MarkdownAdapter(args.projectDir) })`
 - `sdk/src/gsd-tools.ts` — `adapter: StorageAdapter` added to `GSDToolsOptions` (required); constructor uses `opts.adapter`; `runGsdToolsQuery` uses `new MarkdownAdapter(projectDir)` internally; StorageAdapter + MarkdownAdapter imports added
+- `sdk/src/index.ts` — MarkdownAdapter import; `new MarkdownAdapter(this.projectDir)` passed to GSDTools in `createTools()` (auto-fix: missed call site)
 - `sdk/src/golden/registry-canonical-commands.ts` — MarkdownAdapter import; `new MarkdownAdapter(process.cwd())`
 - `sdk/src/golden/golden.integration.test.ts` — MarkdownAdapter import; `makeRegistry(projectDir)` helper; 42 calls replaced
 - `sdk/src/golden/read-only-parity.integration.test.ts` — MarkdownAdapter import; `makeRegistry(REPO_ROOT)` helper; 9 calls replaced
@@ -117,7 +120,21 @@ Each task was committed atomically:
 
 ## Deviations from Plan
 
-None — plan executed exactly as written. The call-site counts differed slightly from the plan's estimate (e.g., 42 golden tests vs plan estimate of 43; 14 registry tests vs 18; 9 read-only tests vs 10) because the plan used approximate counts from research. The actual numbers were correct at execution time.
+### Auto-fixed Issues
+
+**1. [Rule 1 - Bug] Missing adapter in GSD.createTools() GSDTools constructor call**
+- **Found during:** Post-task verification (tsc compile check after Task 2)
+- **Issue:** `sdk/src/index.ts:125` — `GSD.createTools()` constructed `new GSDTools({...})` without the required `adapter` field, causing a `TS2345` type error once `GSDToolsOptions.adapter` was made required in Task 2. This 5th production call site was not listed in the plan's call-site inventory (plan researched 4 sites; index.ts was overlooked).
+- **Fix:** Added `import { MarkdownAdapter }` to `sdk/src/index.ts`; added `adapter: new MarkdownAdapter(this.projectDir)` to the `createTools()` call
+- **Files modified:** `sdk/src/index.ts`
+- **Committed in:** `a405914b` (fix(01-04))
+
+---
+
+**Total deviations:** 1 auto-fixed (1 Rule 1 bug fix — missed production call site)
+**Impact on plan:** The fix is a necessary correctness requirement to eliminate the TS2345 compile error. No scope creep; follows the exact same pattern as the other 4 production call sites in Task 2.
+
+The call-site counts differed slightly from the plan's estimate (42 golden tests vs plan estimate of 43; 14 registry tests vs 18; 9 read-only tests vs 10) because the plan used approximate counts from research.
 
 ## Issues Encountered
 
@@ -155,11 +172,14 @@ Files verified:
 - `sdk/src/query/index.ts` — FOUND (createRegistry opts signature confirmed)
 - `sdk/src/cli.ts` — FOUND (MarkdownAdapter import + new call site confirmed)
 - `sdk/src/gsd-tools.ts` — FOUND (adapter: StorageAdapter in opts confirmed)
+- `sdk/src/index.ts` — FOUND (MarkdownAdapter import + createTools fix confirmed)
 - `sdk/src/golden/registry-canonical-commands.ts` — FOUND (MarkdownAdapter import confirmed)
 - All 7 test files — FOUND (makeRegistry helper confirmed in each)
 - Zero zero-arg createRegistry() in executable code — CONFIRMED
+- No TS2345 errors in tsc output (non-rootDir) — CONFIRMED
 
 Commits verified:
 - `47924c40` — FOUND (Task 1: createRegistry signature change)
 - `b636e356` — FOUND (Task 2: 4 production call sites)
 - `0de41b63` — FOUND (Task 3: 7 test files)
+- `a405914b` — FOUND (Auto-fix: index.ts missed call site)
