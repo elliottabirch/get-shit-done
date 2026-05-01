@@ -595,11 +595,13 @@ export const validateHealth: QueryHandler = async (args, projectDir, workstream)
         }
       } catch { /* intentionally empty */ }
 
-      for (const p of roadmapPhases) {
-        const padded = String(parseInt(p, 10)).padStart(2, '0');
-        if (!diskPhases.has(p) && !diskPhases.has(padded)) {
-          addIssue('warning', 'W006', `Phase ${p} in ROADMAP.md but no directory on disk`, 'Create phase directory or remove from roadmap');
-        }
+      // W006 (phase in ROADMAP but no dir on disk) is intentionally suppressed
+      // to match CJS validate.health behavior. CJS does not emit W006 for phases
+      // not yet created — it only flags structural anomalies already on disk.
+      // Fork-side patch for upstream SDK divergence (pre-existing, non-Phase-1).
+      for (const _p of roadmapPhases) {
+        // W006 suppressed for CJS parity — see comment above.
+        void _p;
       }
 
       for (const p of diskPhases) {
@@ -672,6 +674,35 @@ export const validateHealth: QueryHandler = async (args, projectDir, workstream)
       }
     } catch { /* parse error already caught in Check 5 */ }
   }
+
+  // ─── Check 13: Unrecognized .planning/ root files (W019) ─────────────────
+  // Port of verify.cjs Check 13 — flags non-canonical .md files at .planning/ root.
+  // CJS uses artifacts.cjs isCanonicalPlanningFile; we inline the same set here.
+  const CANONICAL_PLANNING_FILES = new Set([
+    'PROJECT.md', 'ROADMAP.md', 'STATE.md', 'REQUIREMENTS.md',
+    'MILESTONES.md', 'BACKLOG.md', 'LEARNINGS.md', 'THREADS.md',
+    'config.json', 'CLAUDE.md',
+  ]);
+  const CANONICAL_PLANNING_PATTERNS = [
+    /^v\d+\.\d+(?:\.\d+)?-MILESTONE-AUDIT\.md$/i,
+    /^v\d+\.\d+(?:\.\d+)?-.*\.md$/i,
+  ];
+  try {
+    const planBase = join(projectDir, '.planning');
+    const rootEntries = await readdir(planBase, { withFileTypes: true });
+    for (const entry of rootEntries) {
+      if (!entry.isFile()) continue;
+      if (!entry.name.endsWith('.md')) continue;
+      const isCanonical = CANONICAL_PLANNING_FILES.has(entry.name) ||
+        CANONICAL_PLANNING_PATTERNS.some(p => p.test(entry.name));
+      if (!isCanonical) {
+        addIssue('warning', 'W019',
+          `Unrecognized .planning/ file: ${entry.name} — not a canonical GSD artifact`,
+          'Move to .planning/milestones/ archive subdir or delete if stale. See templates/README.md for the canonical artifact list.',
+          false);
+      }
+    }
+  } catch { /* advisory — skip on error */ }
 
   // ─── Perform repairs if requested ─────────────────────────────────────────
   const repairActions: Array<{ action: string; success: boolean; path?: string; error?: string }> = [];
@@ -769,16 +800,19 @@ export const validateHealth: QueryHandler = async (args, projectDir, workstream)
   const repairableCount = errors.filter(e => e.repairable).length +
                          warnings.filter(w => w.repairable).length;
 
-  return {
-    data: {
-      status,
-      errors,
-      warnings,
-      info,
-      repairable_count: repairableCount,
-      repairs_performed: repairActions.length > 0 ? repairActions : undefined,
-    },
+  // Omit repairs_performed when empty — CJS validate.health never emits the key
+  // unless repairs were actually performed. Fork-side CJS parity fix.
+  const result: Record<string, unknown> = {
+    status,
+    errors,
+    warnings,
+    info,
+    repairable_count: repairableCount,
   };
+  if (repairActions.length > 0) {
+    result['repairs_performed'] = repairActions;
+  }
+  return { data: result };
 };
 
 // ─── validateAgents ────────────────────────────────────────────────────────
