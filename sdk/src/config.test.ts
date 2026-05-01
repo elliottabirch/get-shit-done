@@ -189,8 +189,11 @@ describe('loadConfig', () => {
 
   it('pre-project: layers user defaults from ~/.gsd/defaults.json', async () => {
     await writeUserDefaults({ resolve_model_ids: 'omit' });
-    // No project config.json
-    const config = await loadConfig(tmpDir);
+    // Truly pre-project: no .planning/ directory at all (not just missing config.json).
+    // CJS guard (core.cjs:466): user-defaults only apply when .planning/ does NOT exist.
+    const preProjDir = join(tmpDir, 'no-planning-dir');
+    await mkdir(preProjDir, { recursive: true });
+    const config = await loadConfig(preProjDir);
     expect((config as Record<string, unknown>).resolve_model_ids).toBe('omit');
     // Built-in defaults still present for keys user did not override
     expect(config.model_profile).toBe('balanced');
@@ -202,8 +205,10 @@ describe('loadConfig', () => {
       git: { branching_strategy: 'milestone' },
       agent_skills: { planner: 'user-skill' },
     });
-
-    const config = await loadConfig(tmpDir);
+    // Truly pre-project: no .planning/ directory at all.
+    const preProjDir = join(tmpDir, 'no-planning-dir-2');
+    await mkdir(preProjDir, { recursive: true });
+    const config = await loadConfig(preProjDir);
     expect(config.git.branching_strategy).toBe('milestone');
     expect(config.git.phase_branch_template).toBe('gsd/phase-{phase}-{slug}');
     expect(config.agent_skills).toEqual({ planner: 'user-skill' });
