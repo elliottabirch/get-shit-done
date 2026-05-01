@@ -1,5 +1,10 @@
 /**
  * Tests for summary / history digest handlers.
+ *
+ * Phase 2 Plan 02-03 Task 1: summaryExtract and historyDigest now take adapter
+ * as the first arg (Shape A). Tests construct a MarkdownAdapter rooted at the
+ * test tmpdir and pass it explicitly. Production callers receive the adapter
+ * via createRegistry's closure wrapper.
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
@@ -8,6 +13,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
 import { summaryExtract, historyDigest } from './summary.js';
+import { MarkdownAdapter } from '../../../adapters/markdown/index.js';
 
 describe('summaryExtract', () => {
   let tmpDir: string;
@@ -50,7 +56,8 @@ describe('summaryExtract', () => {
       ].join('\n'),
       'utf-8',
     );
-    const r = await summaryExtract([rel], tmpDir);
+    const adapter = new MarkdownAdapter(tmpDir);
+    const r = await summaryExtract(adapter, [rel], tmpDir);
     const data = r.data as Record<string, unknown>;
     expect(data.path).toBe(rel);
     expect(data.one_liner).toBe('From YAML');
@@ -66,7 +73,8 @@ describe('summaryExtract', () => {
       ['---', 'phase: "01"', 'one-liner: X', 'key-files:', '  - z.ts', '---', ''].join('\n'),
       'utf-8',
     );
-    const r = await summaryExtract([rel, '--fields', 'path,one_liner'], tmpDir);
+    const adapter = new MarkdownAdapter(tmpDir);
+    const r = await summaryExtract(adapter, [rel, '--fields', 'path,one_liner'], tmpDir);
     const data = r.data as Record<string, unknown>;
     expect(Object.keys(data).sort()).toEqual(['one_liner', 'path'].sort());
     expect(data.one_liner).toBe('X');
@@ -86,7 +94,8 @@ describe('historyDigest', () => {
   });
 
   it('returns digest object for project without phases', async () => {
-    const r = await historyDigest([], tmpDir);
+    const adapter = new MarkdownAdapter(tmpDir);
+    const r = await historyDigest(adapter, [], tmpDir);
     const data = r.data as Record<string, unknown>;
     expect(data.phases).toEqual({});
     expect(data.decisions).toEqual([]);

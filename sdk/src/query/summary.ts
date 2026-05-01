@@ -4,22 +4,26 @@
  * Ported from get-shit-done/bin/lib/commands.cjs (cmdSummaryExtract, cmdHistoryDigest).
  * Uses `extractFrontmatterLeading` for parity with `frontmatter.cjs` (first `---` block only).
  *
- * @example
- * ```typescript
- * import { summaryExtract, historyDigest } from './summary.js';
+ * Phase 2 Plan 02-03 Task 1 (D-12): document-tree reads route through the
+ * StorageAdapter. historyDigest walks the milestone-archive tree and the
+ * current phase tree via listCollection + stat; per-phase SUMMARY.md content
+ * via getRecord. summaryExtract retains a direct readFile against a
+ * user-supplied path (resolved via resolvePathUnderProject) — documented as an
+ * audited exception (see inline annotation).
  *
- * await summaryExtract(['path/to/SUMMARY.md'], '/project');
- * await historyDigest([], '/project');
- * ```
+ * @example
+ *   import { summaryExtract, historyDigest } from './summary.js';
+ *   await summaryExtract(adapter, ['path/to/SUMMARY.md'], '/project');
+ *   await historyDigest(adapter, [], '/project');
  */
 
-import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
-import { join } from 'node:path';
 
 import { extractFrontmatterLeading } from './frontmatter.js';
-import { comparePhaseNum, planningPaths, resolvePathUnderProject } from './helpers.js';
-import type { QueryHandler } from './utils.js';
+import { comparePhaseNum, planningRelativePath, resolvePathUnderProject } from './helpers.js';
+import type { QueryResult } from './utils.js';
+import type { StorageAdapter } from '../../../adapters/types.js';
 
 // ─── extractOneLinerFromBody ────────────────────────────────────────────────
 
@@ -56,52 +60,73 @@ function parseDecisions(decisionsList: unknown): Array<{ summary: string; ration
   });
 }
 
-function readSubdirectories(dirPath: string, sort: boolean): string[] {
-  try {
-    const entries = readdirSync(dirPath, { withFileTypes: true });
-    const dirs = entries.filter(e => e.isDirectory()).map(e => e.name);
-    return sort ? dirs.sort((a, b) => comparePhaseNum(a, b)) : dirs;
-  } catch {
-    return [];
+/**
+ * List subdirectory names under a `.planning/`-relative directory via the adapter.
+ * Returns sorted by phase-number when `sort=true`. Empty array on missing/empty dir.
+ */
+async function listAdapterSubdirectories(
+  adapter: StorageAdapter,
+  relDir: string,
+  sort: boolean,
+): Promise<string[]> {
+  const refs = await adapter.listCollection(relDir);
+  const dirs: string[] = [];
+  for (const ref of refs) {
+    const st = await adapter.stat(ref.path);
+    if (st !== null && st.kind === 'dir') dirs.push(ref.name);
   }
+  return sort ? dirs.sort((a, b) => comparePhaseNum(a, b)) : dirs;
 }
 
-/** Match `getArchivedPhaseDirs` from core.cjs (newest milestone archive first). */
-function getArchivedPhaseDirs(cwd: string): Array<{ name: string; fullPath: string; milestone: string }> {
-  const milestonesDir = join(cwd, '.planning', 'milestones');
-  const results: Array<{ name: string; fullPath: string; milestone: string }> = [];
+/**
+ * Match `getArchivedPhaseDirs` from core.cjs (newest milestone archive first).
+ * Phase 2 Plan 02-03: walks via `adapter.listCollection` + `adapter.stat` over
+ * `milestones/<v>-phases/<phase>/` (paths are .planning/-relative so the
+ * adapter, rooted at the planning base, resolves them correctly).
+ */
+async function getArchivedPhaseDirs(
+  adapter: StorageAdapter,
+  workstream: string | undefined,
+): Promise<Array<{ name: string; relPath: string; milestone: string }>> {
+  const milestonesRel = planningRelativePath(workstream, 'milestones');
+  const results: Array<{ name: string; relPath: string; milestone: string }> = [];
 
-  if (!existsSync(milestonesDir)) return results;
+  const milestonesExist = await adapter.exists(milestonesRel);
+  if (!milestonesExist) return results;
 
-  try {
-    const milestoneEntries = readdirSync(milestonesDir, { withFileTypes: true });
-    const phaseDirs = milestoneEntries
-      .filter(e => e.isDirectory() && /^v[\d.]+-phases$/.test(e.name))
-      .map(e => e.name)
-      .sort((a, b) => b.localeCompare(a, undefined, { numeric: true }));
-
-    for (const archiveName of phaseDirs) {
-      const versionMatch = archiveName.match(/^(v[\d.]+)-phases$/);
-      const version = versionMatch ? versionMatch[1] : archiveName;
-      const archivePath = join(milestonesDir, archiveName);
-      const dirs = readSubdirectories(archivePath, true);
-
-      for (const dir of dirs) {
-        results.push({
-          name: dir,
-          milestone: version,
-          fullPath: join(archivePath, dir),
-        });
-      }
+  const milestoneEntries = await adapter.listCollection(milestonesRel);
+  const phaseArchives: Array<{ name: string; path: string }> = [];
+  for (const ref of milestoneEntries) {
+    if (!/^v[\d.]+-phases$/.test(ref.name)) continue;
+    const st = await adapter.stat(ref.path);
+    if (st !== null && st.kind === 'dir') {
+      phaseArchives.push({ name: ref.name, path: ref.path });
     }
-  } catch {
-    /* intentionally empty */
+  }
+  phaseArchives.sort((a, b) => b.name.localeCompare(a.name, undefined, { numeric: true }));
+
+  for (const { name: archiveName, path: archivePath } of phaseArchives) {
+    const versionMatch = archiveName.match(/^(v[\d.]+)-phases$/);
+    const version = versionMatch ? versionMatch[1] : archiveName;
+    const dirs = await listAdapterSubdirectories(adapter, archivePath, true);
+    for (const dir of dirs) {
+      results.push({
+        name: dir,
+        milestone: version,
+        relPath: `${archivePath}/${dir}`,
+      });
+    }
   }
 
   return results;
 }
 
-export const summaryExtract: QueryHandler = async (args, projectDir) => {
+export const summaryExtract = async (
+  _adapter: StorageAdapter,
+  args: string[],
+  projectDir: string,
+  _workstream?: string,
+): Promise<QueryResult> => {
   const fieldsIdx = args.indexOf('--fields');
   const pathArgs = fieldsIdx === -1 ? args : args.slice(0, fieldsIdx);
   const summaryPath = pathArgs[0] ?? '';
@@ -117,6 +142,12 @@ export const summaryExtract: QueryHandler = async (args, projectDir) => {
   const fields =
     fieldsIdx !== -1 && args[fieldsIdx + 1] ? args[fieldsIdx + 1].split(',').map(f => f.trim()) : null;
 
+  // Phase 2 audited exception (D-14 + RESEARCH §"Read-Surface Inventory"):
+  // summaryExtract reads a user-supplied path (resolved via resolvePathUnderProject)
+  // which may be OUTSIDE .planning/. Adapter cannot resolve project-absolute paths.
+  // This direct fs read is intentional. Phase 4 LEAKS-04 may add a `// leak-grep-allow line:`
+  // suppression directive once the parser ships; for Phase 2 the path argument is not
+  // .planning/-scoped, so leak-grep's Stage-2 filter naturally suppresses this match.
   let fullPath: string;
   try {
     fullPath = await resolvePathUnderProject(projectDir, summaryPath);
@@ -163,8 +194,13 @@ export const summaryExtract: QueryHandler = async (args, projectDir) => {
   return { data: fullResult };
 };
 
-export const historyDigest: QueryHandler = async (_args, projectDir, workstream) => {
-  const phasesDir = planningPaths(projectDir, workstream).phases;
+export const historyDigest = async (
+  adapter: StorageAdapter,
+  _args: string[],
+  _projectDir: string,
+  workstream?: string,
+): Promise<QueryResult> => {
+  const phasesRel = planningRelativePath(workstream, 'phases');
   const digest: {
     phases: Record<
       string,
@@ -179,25 +215,27 @@ export const historyDigest: QueryHandler = async (_args, projectDir, workstream)
     tech_stack: Set<string>;
   } = { phases: {}, decisions: [], tech_stack: new Set() };
 
-  const allPhaseDirs: Array<{ name: string; fullPath: string }> = [];
+  const allPhaseDirs: Array<{ name: string; relPath: string }> = [];
 
-  const archived = getArchivedPhaseDirs(projectDir);
+  // Walk archived milestones first (newest first per archive sort).
+  const archived = await getArchivedPhaseDirs(adapter, workstream);
   for (const a of archived) {
-    allPhaseDirs.push({ name: a.name, fullPath: a.fullPath });
+    allPhaseDirs.push({ name: a.name, relPath: a.relPath });
   }
 
-  if (existsSync(phasesDir)) {
-    try {
-      const currentDirs = readdirSync(phasesDir, { withFileTypes: true })
-        .filter(e => e.isDirectory())
-        .map(e => e.name)
-        .sort((a, b) => comparePhaseNum(a, b));
-      for (const dir of currentDirs) {
-        allPhaseDirs.push({ name: dir, fullPath: join(phasesDir, dir) });
+  // Walk current phases/ (if present).
+  const phasesExist = await adapter.exists(phasesRel);
+  if (phasesExist) {
+    const refs = await adapter.listCollection(phasesRel);
+    const currentDirs: Array<{ name: string; relPath: string }> = [];
+    for (const ref of refs) {
+      const st = await adapter.stat(ref.path);
+      if (st !== null && st.kind === 'dir') {
+        currentDirs.push({ name: ref.name, relPath: ref.path });
       }
-    } catch {
-      /* intentionally empty */
     }
+    currentDirs.sort((a, b) => comparePhaseNum(a.name, b.name));
+    for (const d of currentDirs) allPhaseDirs.push(d);
   }
 
   if (allPhaseDirs.length === 0) {
@@ -205,14 +243,17 @@ export const historyDigest: QueryHandler = async (_args, projectDir, workstream)
   }
 
   try {
-    for (const { name: dir, fullPath: dirPath } of allPhaseDirs) {
-      const summaries = readdirSync(dirPath)
+    for (const { name: dir, relPath: dirPath } of allPhaseDirs) {
+      const refs = await adapter.listCollection(dirPath);
+      const summaries = refs
+        .map(r => r.name)
         .filter(f => f.endsWith('-SUMMARY.md') || f === 'SUMMARY.md')
         .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
 
       for (const summary of summaries) {
         try {
-          const content = readFileSync(join(dirPath, summary), 'utf-8');
+          const content = await adapter.getRecord(`${dirPath}/${summary}`);
+          if (content === null) continue;
           const fm = extractFrontmatterLeading(content) as Record<string, unknown>;
 
           const phaseRaw = fm.phase;
