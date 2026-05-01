@@ -19,6 +19,15 @@ export default defineConfig({
           testTimeout: 120_000,
         },
       },
+      {
+        test: {
+          name: 'adapters',
+          root: './adapters',
+          // types.test.ts is compile-time only (no vitest describe/it blocks)
+          include: ['markdown/**/*.test.ts'],
+          exclude: ['dist/**'],
+        },
+      },
     ],
   },
 });
