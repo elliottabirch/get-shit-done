@@ -47,7 +47,14 @@ and ships migration + distribution (Phase 8).
   3. The `StorageAdapter` interface file declares all 10 Bin A primitives plus the static `capabilities` flag exactly as agreed in DECISIONS D-2026-04-30-05; an adapter missing any required capability fails type-checking, not runtime.
   4. A written reconciliation note records, for each of upstream PRs #2898 / #2901 / #2908 / #2909, whether the seam they introduce is (a) reusable foundation we build on, (b) parallel work to coordinate, or (c) divergent vision requiring a fork-side adaptation — and the locked contract reflects that judgement.
   5. OQ-08 is resolved: `replaceInCurrentMilestone` and `readModifyWriteRoadmapMd` are explicitly inside MarkdownAdapter as private helpers and absent from the public StorageAdapter type signature.
-**Plans:** TBD
+  *Note: SC#1 and SC#5 are SUPERSEDED by CONTEXT.md D-13 and D-09 respectively. Plans implement the locked decisions: D-13 defers #2909 parity to Phase 8, D-09 makes markdownLockfile helpers PUBLIC + capability-gated.*
+**Plans:** 5 plans
+Plans:
+- [ ] 01-01-PLAN.md — StorageAdapter interface + Capabilities + UnsupportedCapabilityError + 6 type guards (adapters/types.ts) + adapters/tsconfig.json + project reference
+- [ ] 01-02-PLAN.md — Per-PR ADRs in DECISIONS.md (#2898/#2901/#2908/#2909) + scripts/leak-grep.cjs + R5/<context>-block fixtures + test
+- [ ] 01-03-PLAN.md — MarkdownAdapter scaffold via createRequire wrap (Bin A + markdownLockfile + commitPlanningState; foundationals throw UnsupportedCapabilityError)
+- [ ] 01-04-PLAN.md — createRegistry({adapter}) DI signature change + 4 production sites + 7 SDK test files updated
+- [ ] 01-05-PLAN.md — Conformance harness factory (tests/conformance/) + sample MarkdownAdapter test + vitest config + npm script
 
 ### Phase 2: Wire core read methods to adapter
 **Repo:** this repo (`feat/storage-adapter`)
@@ -151,7 +158,7 @@ Phase 6 begins in sibling repo `~/code/gsd-beads` only after Phase 5 ships in th
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Fork bootstrap + StorageAdapter interface skeleton + MarkdownAdapter scaffold | 0/TBD | Not started | - |
+| 1. Fork bootstrap + StorageAdapter interface skeleton + MarkdownAdapter scaffold | 0/5 | Plans created | - |
 | 2. Wire core read methods to adapter | 0/TBD | Not started | - |
 | 3. Wire core write methods + recordStateEvent | 0/TBD | Not started | - |
 | 4. Plug workflow leaks (top-10 + `<context>`-block class) | 0/TBD | Not started | - |
