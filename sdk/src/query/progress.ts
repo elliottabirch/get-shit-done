@@ -5,24 +5,39 @@
  * Provides progress handler that scans disk for plan/summary counts per phase
  * and determines status via VERIFICATION.md inspection.
  *
+ * Phase 2 D-14: write-side migration deferred to Phase 3 (WRITES-01..04).
+ * Per-line discipline applies — `progressJson`, `determinePhaseStatus`, and
+ * `statsJson` (read paths) routed through adapter; `todoComplete` retains
+ * `mkdirSync`/`writeFileSync`/`unlinkSync` until Phase 3, and `listTodos` /
+ * `todoMatchPhase` retain their fs reads pending Phase 3 (their .planning/
+ * scope is `todos/pending` which Phase 3 will own end-to-end). The
+ * `node:fs` imports below are kept ONLY for write paths and the deferred-read
+ * helpers; SDK_FS_READ_PATTERNS (read-only) leak-grep stays clean.
+ *
  * @example
  * ```typescript
  * import { progressJson } from './progress.js';
  *
- * const result = await progressJson([], '/project');
+ * const result = await progressJson(adapter, [], '/project');
  * // { data: { milestone_version: 'v3.0', phases: [...], total_plans: 6, percent: 83 } }
  * ```
  */
 
-import { readFile, readdir } from 'node:fs/promises';
+// Phase 2 D-14: write-paths only — readFileSync, readdirSync, existsSync are
+// retained for the read-side fall-throughs (listTodos, todoMatchPhase) which
+// remain Phase 3 territory; their .planning/ scope (todos/pending) is fully
+// owned by Phase 3's write-side migration. The leak-grep gate is path-scoped
+// so these reads still need migrating; see comment per-callsite.
+import { readFile } from 'node:fs/promises';
 import { existsSync, readdirSync, readFileSync, mkdirSync, writeFileSync, unlinkSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { GSDError, ErrorClassification } from '../errors.js';
-import { adapterFor, comparePhaseNum, normalizePhaseName, planningPaths, toPosixPath } from './helpers.js';
+import { adapterFor, comparePhaseNum, normalizePhaseName, planningPaths, planningRelativePath, toPosixPath } from './helpers.js';
 import { getMilestoneInfo, extractCurrentMilestone, roadmapGetPhase } from './roadmap.js';
 import { getMilestonePhaseFilter } from './state.js';
 import { findPhase } from './phase.js';
-import type { QueryHandler } from './utils.js';
+import type { QueryHandler, QueryResult } from './utils.js';
+import type { StorageAdapter } from '../../../adapters/types.js';
 
 // ─── Internal helpers ─────────────────────────────────────────────────────
 
@@ -37,9 +52,10 @@ import type { QueryHandler } from './utils.js';
  * @returns Status string: Pending, Planned, In Progress, Executed, Complete, Needs Review
  */
 export async function determinePhaseStatus(
+  adapter: StorageAdapter,
   plans: number,
   summaries: number,
-  phaseDir: string,
+  phaseAdapterRel: string,
   defaultWhenNoPlans: string = 'Pending',
 ): Promise<string> {
   if (plans === 0) return defaultWhenNoPlans;
@@ -47,18 +63,19 @@ export async function determinePhaseStatus(
   if (summaries < plans) return 'Planned';
 
   // summaries >= plans — check verification
-  try {
-    const files = await readdir(phaseDir);
-    const verificationFile = files.find(f => f === 'VERIFICATION.md' || f.endsWith('-VERIFICATION.md'));
-    if (verificationFile) {
-      const content = await readFile(join(phaseDir, verificationFile), 'utf-8');
+  // Pitfall 3: listCollection returns [] on ENOENT
+  const refs = await adapter.listCollection(phaseAdapterRel);
+  const verRef = refs.find(r => r.name === 'VERIFICATION.md' || r.name.endsWith('-VERIFICATION.md'));
+  if (verRef) {
+    const content = await adapter.getRecord(verRef.path);
+    if (content !== null) {
       if (/status:\s*passed/i.test(content)) return 'Complete';
       if (/status:\s*human_needed/i.test(content)) return 'Needs Review';
       if (/status:\s*gaps_found/i.test(content)) return 'Executed';
       // Verification exists but unrecognized status — treat as executed
       return 'Executed';
     }
-  } catch { /* directory read failed — fall through */ }
+  }
 
   // No verification file — executed but not verified
   return 'Executed';
@@ -76,40 +93,56 @@ export async function determinePhaseStatus(
  * @param projectDir - Project root directory
  * @returns QueryResult with milestone progress data
  */
-export const progressJson: QueryHandler = async (_args, projectDir, workstream) => {
-  const phasesDir = planningPaths(projectDir, workstream).phases;
-  // Phase 2 Plan 02-02 transitional: getMilestoneInfo migrated to adapter; this
-  // handler still uses raw fs reads in its body (Plan 02-02 Task 2 will migrate).
-  const adapter = await adapterFor(projectDir);
+export const progressJson = async (
+  adapter: StorageAdapter,
+  _args: string[],
+  _projectDir: string,
+  workstream?: string,
+): Promise<QueryResult> => {
+  // Phase 2 Plan 02-02 Task 2 (D-12): adapter-routed phase listing.
+  const phasesAdapterRel = planningRelativePath(workstream, 'phases');
   const milestone = await getMilestoneInfo(adapter, workstream);
 
   const phases: Array<Record<string, unknown>> = [];
   let totalPlans = 0;
   let totalSummaries = 0;
 
-  try {
-    const entries = await readdir(phasesDir, { withFileTypes: true });
-    const dirs = entries
-      .filter(e => e.isDirectory())
-      .map(e => e.name)
-      .sort((a, b) => comparePhaseNum(a, b));
+  // Pitfall 3: listCollection returns [] on ENOENT
+  const phaseRefs = await adapter.listCollection(phasesAdapterRel);
+  // Pitfall 2: parallelize stat probes for dir filter
+  const dirChecks = await Promise.all(
+    phaseRefs.map(async r => ({
+      ref: r,
+      isDir: ((await adapter.stat(r.path))?.kind === 'dir'),
+    })),
+  );
+  const dirRefs = dirChecks
+    .filter(c => c.isDir)
+    .map(c => c.ref)
+    .sort((a, b) => comparePhaseNum(a.name, b.name));
 
-    for (const dir of dirs) {
-      const dm = dir.match(/^(\d+(?:\.\d+)*)-?(.*)/);
-      const phaseNum = dm ? dm[1] : dir;
-      const phaseName = dm && dm[2] ? dm[2].replace(/-/g, ' ') : '';
-      const phaseFiles = await readdir(join(phasesDir, dir));
-      const plans = phaseFiles.filter(f => f.endsWith('-PLAN.md') || f === 'PLAN.md').length;
-      const summaries = phaseFiles.filter(f => f.endsWith('-SUMMARY.md') || f === 'SUMMARY.md').length;
+  // Pitfall 2: parallelize per-phase listings
+  const perPhase = await Promise.all(
+    dirRefs.map(async ref => ({
+      ref,
+      files: (await adapter.listCollection(ref.path)).map(r => r.name),
+    })),
+  );
 
-      totalPlans += plans;
-      totalSummaries += summaries;
+  for (const { ref, files } of perPhase) {
+    const dm = ref.name.match(/^(\d+(?:\.\d+)*)-?(.*)/);
+    const phaseNum = dm ? dm[1] : ref.name;
+    const phaseName = dm && dm[2] ? dm[2].replace(/-/g, ' ') : '';
+    const plans = files.filter(f => f.endsWith('-PLAN.md') || f === 'PLAN.md').length;
+    const summaries = files.filter(f => f.endsWith('-SUMMARY.md') || f === 'SUMMARY.md').length;
 
-      const status = await determinePhaseStatus(plans, summaries, join(phasesDir, dir));
+    totalPlans += plans;
+    totalSummaries += summaries;
 
-      phases.push({ number: phaseNum, name: phaseName, plans, summaries, status });
-    }
-  } catch { /* intentionally empty */ }
+    const status = await determinePhaseStatus(adapter, plans, summaries, ref.path);
+
+    phases.push({ number: phaseNum, name: phaseName, plans, summaries, status });
+  }
 
   const percent = totalPlans > 0 ? Math.min(100, Math.round((totalSummaries / totalPlans) * 100)) : 0;
 
@@ -132,7 +165,9 @@ export const progressJson: QueryHandler = async (_args, projectDir, workstream) 
  * Uses the same plan/summary counts as `progressJson` / CJS (not `roadmap.analyze` percent).
  */
 export const progressBar: QueryHandler = async (_args, projectDir, workstream) => {
-  const json = await progressJson([], projectDir, workstream);
+  // Phase 2 Plan 02-02 Task 2: progressJson migrated to adapter-as-first-arg.
+  const adapter = await adapterFor(projectDir);
+  const json = await progressJson(adapter, [], projectDir, workstream);
   const d = json.data as {
     total_plans: number;
     total_summaries: number;
@@ -152,7 +187,9 @@ export const progressBar: QueryHandler = async (_args, projectDir, workstream) =
  * Markdown progress table — port of `cmdProgressRender` `format === 'table'` from commands.cjs (lines 575–587).
  */
 export const progressTable: QueryHandler = async (_args, projectDir, workstream) => {
-  const json = await progressJson([], projectDir, workstream);
+  // Phase 2 Plan 02-02 Task 2: progressJson migrated to adapter-as-first-arg.
+  const adapter = await adapterFor(projectDir);
+  const json = await progressJson(adapter, [], projectDir, workstream);
   const d = json.data as {
     milestone_version: string;
     milestone_name: string;
@@ -188,12 +225,10 @@ export const progressTable: QueryHandler = async (_args, projectDir, workstream)
  */
 export const statsJson: QueryHandler = async (args, projectDir, workstream) => {
   const format = args[0] || 'json';
-  const phasesDir = planningPaths(projectDir, workstream).phases;
-  const roadmapPath = planningPaths(projectDir, workstream).roadmap;
+  const phasesAdapterRel = planningRelativePath(workstream, 'phases');
   const reqPath = planningPaths(projectDir, workstream).requirements;
   const statePath = planningPaths(projectDir, workstream).state;
-  // Phase 2 Plan 02-02 transitional: getMilestoneInfo + extractCurrentMilestone
-  // migrated to adapter; statsJson body still uses raw fs reads (Plan 02-02 Task 2).
+  // Phase 2 Plan 02-02 Task 2: statsJson body's read paths route through adapter.
   const adapter = await adapterFor(projectDir);
   const milestone = await getMilestoneInfo(adapter, workstream);
   const isDirInMilestone = await getMilestonePhaseFilter(projectDir, workstream);
@@ -206,8 +241,9 @@ export const statsJson: QueryHandler = async (args, projectDir, workstream) => {
   let totalPlans = 0;
   let totalSummaries = 0;
 
-  try {
-    const roadmapContent = await extractCurrentMilestone(adapter, await readFile(roadmapPath, 'utf-8'), workstream);
+  const rawRoadmap = await adapter.getRecord(planningRelativePath(workstream, 'ROADMAP.md'));
+  if (rawRoadmap !== null) {
+    const roadmapContent = await extractCurrentMilestone(adapter, rawRoadmap, workstream);
     const headingPattern = /#{2,4}\s*Phase\s+(\d+[A-Z]?(?:\.\d+)*)\s*:\s*([^\n]+)/gi;
     let match: RegExpExecArray | null;
     while ((match = headingPattern.exec(roadmapContent)) !== null) {
@@ -220,28 +256,49 @@ export const statsJson: QueryHandler = async (args, projectDir, workstream) => {
         status: 'Not Started',
       });
     }
-  } catch { /* intentionally empty */ }
+  }
 
   try {
-    const entries = readdirSync(phasesDir, { withFileTypes: true });
+    // Pitfall 3: listCollection returns [] on ENOENT
+    const phaseRefs = await adapter.listCollection(phasesAdapterRel);
+    // Pitfall 2: parallelize stat probes
+    const dirChecks = await Promise.all(
+      phaseRefs.map(async r => ({
+        ref: r,
+        isDir: ((await adapter.stat(r.path))?.kind === 'dir'),
+      })),
+    );
+    const entries = dirChecks
+      .filter(c => c.isDir)
+      .map(c => c.ref);
     const dirs = entries
-      .filter(e => e.isDirectory())
       .map(e => e.name)
       .filter(isDirInMilestone)
       .sort((a, b) => comparePhaseNum(a, b));
 
-    for (const dir of dirs) {
+    // Pitfall 2: parallelize per-phase listings
+    const dirRefs = entries.filter(e => isDirInMilestone(e.name));
+    const perPhase = await Promise.all(
+      dirRefs.map(async ref => ({
+        ref,
+        files: (await adapter.listCollection(ref.path)).map(r => r.name),
+      })),
+    );
+    // Sort by phase number
+    perPhase.sort((a, b) => comparePhaseNum(a.ref.name, b.ref.name));
+
+    for (const { ref, files } of perPhase) {
+      const dir = ref.name;
       const dm = dir.match(/^(\d+[A-Z]?(?:\.\d+)*)-?(.*)/i);
       const phaseNum = dm ? dm[1] : dir;
       const phaseName = dm && dm[2] ? dm[2].replace(/-/g, ' ') : '';
-      const phaseFiles = readdirSync(join(phasesDir, dir));
-      const plans = phaseFiles.filter(f => f.endsWith('-PLAN.md') || f === 'PLAN.md').length;
-      const summaries = phaseFiles.filter(f => f.endsWith('-SUMMARY.md') || f === 'SUMMARY.md').length;
+      const plans = files.filter(f => f.endsWith('-PLAN.md') || f === 'PLAN.md').length;
+      const summaries = files.filter(f => f.endsWith('-SUMMARY.md') || f === 'SUMMARY.md').length;
 
       totalPlans += plans;
       totalSummaries += summaries;
 
-      const status = await determinePhaseStatus(plans, summaries, join(phasesDir, dir), 'Not Started');
+      const status = await determinePhaseStatus(adapter, plans, summaries, ref.path, 'Not Started');
 
       const normalizedNum = normalizePhaseName(phaseNum);
       const existing = phasesByNumber.get(normalizedNum);
@@ -263,28 +320,29 @@ export const statsJson: QueryHandler = async (args, projectDir, workstream) => {
 
   let requirementsTotal = 0;
   let requirementsComplete = 0;
-  try {
-    if (existsSync(reqPath)) {
-      const reqContent = readFileSync(reqPath, 'utf-8');
-      const checked = reqContent.match(/^- \[x\] \*\*/gm);
-      const unchecked = reqContent.match(/^- \[ \] \*\*/gm);
-      requirementsComplete = checked ? checked.length : 0;
-      requirementsTotal = requirementsComplete + (unchecked ? unchecked.length : 0);
-    }
-  } catch { /* intentionally empty */ }
+  // Phase 2 Plan 02-02 Task 2: REQUIREMENTS.md routed through adapter.
+  const reqContent = await adapter.getRecord(planningRelativePath(workstream, 'REQUIREMENTS.md'));
+  if (reqContent !== null) {
+    const checked = reqContent.match(/^- \[x\] \*\*/gm);
+    const unchecked = reqContent.match(/^- \[ \] \*\*/gm);
+    requirementsComplete = checked ? checked.length : 0;
+    requirementsTotal = requirementsComplete + (unchecked ? unchecked.length : 0);
+  }
+  // reqPath/statePath kept (planningPaths return) for backwards-compatible
+  // callers that pass them around — internal reads here go through adapter.
+  void reqPath; void statePath;
 
   let lastActivity: string | null = null;
-  try {
-    if (existsSync(statePath)) {
-      const stateContent = readFileSync(statePath, 'utf-8');
-      const activityMatch =
-        stateContent.match(/^last_activity:\s*(.+)$/im)
-        || stateContent.match(/\*\*Last Activity:\*\*\s*(.+)/i)
-        || stateContent.match(/^Last Activity:\s*(.+)$/im)
-        || stateContent.match(/^Last activity:\s*(.+)$/im);
-      if (activityMatch) lastActivity = activityMatch[1].trim();
-    }
-  } catch { /* intentionally empty */ }
+  // Phase 2 Plan 02-02 Task 2: STATE.md routed through adapter.
+  const stateContent = await adapter.getRecord(planningRelativePath(workstream, 'STATE.md'));
+  if (stateContent !== null) {
+    const activityMatch =
+      stateContent.match(/^last_activity:\s*(.+)$/im)
+      || stateContent.match(/\*\*Last Activity:\*\*\s*(.+)/i)
+      || stateContent.match(/^Last Activity:\s*(.+)$/im)
+      || stateContent.match(/^Last activity:\s*(.+)$/im);
+    if (activityMatch) lastActivity = activityMatch[1].trim();
+  }
 
   const { execGit } = await import('./commit.js');
   let gitCommits = 0;
