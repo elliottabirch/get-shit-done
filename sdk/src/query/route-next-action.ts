@@ -3,58 +3,89 @@
  *
  * Deterministic routing from STATE.md, ROADMAP, and phase directories.
  * See `.planning/research/decision-routing-audit.md` §3.1 and `get-shit-done/workflows/next.md`.
+ *
+ * Phase 2 Plan 02-01 Task 5 (D-12, D-10): the canonical migrated reference
+ * handler. Adapter-as-first-arg signature; every fs read routes through the
+ * adapter; workstream paths use `planningRelativePath`. Plans 02-02..04
+ * follow this exact recipe for the remaining read handlers.
  */
 
-import { readFile, readdir } from 'node:fs/promises';
-import { readFileSync, existsSync, readdirSync } from 'node:fs';
-import { join } from 'node:path';
-import { planningPaths, normalizePhaseName, comparePhaseNum } from './helpers.js';
+import {
+  normalizePhaseName,
+  comparePhaseNum,
+  planningRelativePath,
+} from './helpers.js';
 import { stateJson } from './state.js';
 import { roadmapAnalyze } from './roadmap.js';
 import { findPhase } from './phase.js';
-import type { QueryHandler } from './utils.js';
+import type { QueryResult } from './utils.js';
+import type { StorageAdapter } from '../../../adapters/types.js';
 
-function readConsecutiveCallCount(planningDir: string): number {
-  try {
-    const raw = readFileSync(join(planningDir, '.next-call-count'), 'utf-8');
-    return parseInt(raw.trim(), 10) || 0;
-  } catch {
-    return 0;
+/**
+ * Strip the leading `.planning/` segment from a planning-relative directory
+ * path returned by `findPhase`. The adapter is rooted at .planning/, so its
+ * relative inputs must NOT include the leading prefix.
+ *
+ * Handles workstream-prefixed dirs unchanged (the workstream segment lives
+ * under .planning/workstreams/<ws>/, so once .planning/ is stripped the
+ * remaining `workstreams/<ws>/...` is already adapter-resolvable).
+ */
+function toAdapterDir(planningRelDir: string): string {
+  if (planningRelDir.startsWith('.planning/')) {
+    return planningRelDir.slice('.planning/'.length);
   }
+  return planningRelDir;
+}
+
+async function readConsecutiveCallCount(
+  adapter: StorageAdapter,
+  workstream: string | undefined,
+): Promise<number> {
+  const raw = await adapter.getRecord(planningRelativePath(workstream, '.next-call-count'));
+  if (raw === null) return 0;
+  return parseInt(raw.trim(), 10) || 0;
 }
 
 /** Unresolved FAIL rows in phase VERIFICATION.md (lightweight gate). */
-async function hasUnresolvedVerificationFails(phaseDirAbs: string): Promise<boolean> {
-  try {
-    const files = await readdir(phaseDirAbs);
-    const vf = files.find(f => f === 'VERIFICATION.md' || f.endsWith('-VERIFICATION.md'));
-    if (!vf) return false;
-    const content = await readFile(join(phaseDirAbs, vf), 'utf-8');
-    const lines = content.split('\n');
-    for (const line of lines) {
-      if (/\|\s*FAIL\s*\|/i.test(line) && !/override/i.test(line)) return true;
-    }
-    return false;
-  } catch {
-    return false;
+async function hasUnresolvedVerificationFails(
+  adapter: StorageAdapter,
+  phaseRelDir: string,
+): Promise<boolean> {
+  const refs = await adapter.listCollection(phaseRelDir);
+  if (refs.length === 0) return false;
+  const vf = refs.find(r => r.name === 'VERIFICATION.md' || r.name.endsWith('-VERIFICATION.md'));
+  if (!vf) return false;
+  const content = await adapter.getRecord(vf.path);
+  if (content === null) return false;
+  const lines = content.split('\n');
+  for (const line of lines) {
+    if (/\|\s*FAIL\s*\|/i.test(line) && !/override/i.test(line)) return true;
   }
+  return false;
 }
 
-async function verificationPassed(phaseDirAbs: string): Promise<boolean> {
-  try {
-    const files = await readdir(phaseDirAbs);
-    const vf = files.find(f => f === 'VERIFICATION.md' || f.endsWith('-VERIFICATION.md'));
-    if (!vf) return false;
-    const content = await readFile(join(phaseDirAbs, vf), 'utf-8');
-    return /status:\s*passed/i.test(content);
-  } catch {
-    return false;
-  }
+async function verificationPassed(
+  adapter: StorageAdapter,
+  phaseRelDir: string,
+): Promise<boolean> {
+  const refs = await adapter.listCollection(phaseRelDir);
+  if (refs.length === 0) return false;
+  const vf = refs.find(r => r.name === 'VERIFICATION.md' || r.name.endsWith('-VERIFICATION.md'));
+  if (!vf) return false;
+  const content = await adapter.getRecord(vf.path);
+  if (content === null) return false;
+  return /status:\s*passed/i.test(content);
 }
 
-export const routeNextAction: QueryHandler = async (_args, projectDir, workstream) => {
-  const planning = planningPaths(projectDir, workstream).planning;
-  const continueHere = existsSync(join(planning, '.continue-here.md'));
+export const routeNextAction = async (
+  adapter: StorageAdapter,
+  _args: string[],
+  projectDir: string,
+  workstream?: string,
+): Promise<QueryResult> => {
+  const continueHere = await adapter.exists(
+    planningRelativePath(workstream, '.continue-here.md'),
+  );
 
   const sj = await stateJson([], projectDir, workstream);
   const sjd = sj.data as Record<string, unknown>;
@@ -83,17 +114,19 @@ export const routeNextAction: QueryHandler = async (_args, projectDir, workstrea
   let currentPhase = sjd.current_phase ? String(sjd.current_phase) : null;
   const phaseName = sjd.current_phase_name ? String(sjd.current_phase_name) : null;
 
-  const consecutiveCalls = readConsecutiveCallCount(planning);
+  const consecutiveCalls = await readConsecutiveCallCount(adapter, workstream);
 
   const ra = await roadmapAnalyze([], projectDir, workstream);
   const raData = ra.data as { phases?: Array<Record<string, unknown>> };
   const phases = raData.phases ?? [];
 
-  const phasesDir = planningPaths(projectDir, workstream).phases;
+  const phasesRel = planningRelativePath(workstream, 'phases');
+  const phaseEntries = await adapter.listCollection(phasesRel);
   let dirCount = 0;
-  try {
-    dirCount = readdirSync(phasesDir, { withFileTypes: true }).filter(e => e.isDirectory()).length;
-  } catch { /* no phases dir */ }
+  for (const ref of phaseEntries) {
+    const st = await adapter.stat(ref.path);
+    if (st !== null && st.kind === 'dir') dirCount += 1;
+  }
 
   let unresolvedVerification = false;
   if (currentPhase) {
@@ -101,7 +134,8 @@ export const routeNextAction: QueryHandler = async (_args, projectDir, workstrea
     const fd = fp.data as Record<string, unknown>;
     if (fd.found && fd.directory) {
       unresolvedVerification = await hasUnresolvedVerificationFails(
-        join(projectDir, fd.directory as string),
+        adapter,
+        toAdapterDir(fd.directory as string),
       );
     }
   }
@@ -241,7 +275,7 @@ export const routeNextAction: QueryHandler = async (_args, projectDir, workstrea
   const incomplete = (pd.incomplete_plans as string[]) ?? [];
   const hasContext = Boolean(pd.has_context);
   const hasResearch = Boolean(pd.has_research);
-  const phaseDirAbs = pd.directory ? join(projectDir, pd.directory as string) : '';
+  const phaseRelDir = pd.directory ? toAdapterDir(pd.directory as string) : '';
 
   // Route 2
   if (!hasContext && !hasResearch) {
@@ -292,7 +326,7 @@ export const routeNextAction: QueryHandler = async (_args, projectDir, workstrea
   }
 
   // Summaries match plans — verification / advance
-  const verPassed = phaseDirAbs ? await verificationPassed(phaseDirAbs) : false;
+  const verPassed = phaseRelDir ? await verificationPassed(adapter, phaseRelDir) : false;
   const hasVerFile = Boolean(pd.has_verification);
 
   if (!hasVerFile || !verPassed) {

@@ -434,8 +434,14 @@ export function createRegistry(opts: {
   registry.register('check auto-mode', checkAutoMode);
   registry.register('check.phase-ready', checkPhaseReady);
   registry.register('check phase-ready', checkPhaseReady);
-  registry.register('route.next-action', routeNextAction);
-  registry.register('route next-action', routeNextAction);
+  // Phase 2 Plan 02-01 Task 5: routeNextAction migrated to adapter-as-first-arg
+  // signature. Closure wrapper threads the adapter from createRegistry's opts.
+  registry.register('route.next-action', (args, projectDir, ws) =>
+    routeNextAction(adapter, args, projectDir, ws),
+  );
+  registry.register('route next-action', (args, projectDir, ws) =>
+    routeNextAction(adapter, args, projectDir, ws),
+  );
   registry.register('detect.phase-type', detectPhaseType);
   registry.register('detect phase-type', detectPhaseType);
   registry.register('check.completion', checkCompletion);
