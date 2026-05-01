@@ -1,5 +1,8 @@
 /**
  * Tests for intel query handlers and JSON search helpers.
+ *
+ * Phase 2 Plan 02-03 Task 2: intel handlers now take adapter as first arg
+ * (Shape A). Tests construct a MarkdownAdapter rooted at the test tmpdir.
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
@@ -13,6 +16,7 @@ import {
   intelStatus,
   intelSnapshot,
 } from './intel.js';
+import { MarkdownAdapter } from '../../../adapters/markdown/index.js';
 
 describe('searchJsonEntries', () => {
   it('finds matches in shallow objects', () => {
@@ -45,7 +49,8 @@ describe('intelStatus', () => {
   });
 
   it('returns disabled when intel.enabled is not true', async () => {
-    const r = await intelStatus([], tmpDir);
+    const adapter = new MarkdownAdapter(tmpDir);
+    const r = await intelStatus(adapter, [], tmpDir);
     const data = r.data as Record<string, unknown>;
     expect(data.disabled).toBe(true);
   });
@@ -55,7 +60,8 @@ describe('intelStatus', () => {
       join(tmpDir, '.planning', 'config.json'),
       JSON.stringify({ model_profile: 'balanced', intel: { enabled: true } }),
     );
-    const r = await intelStatus([], tmpDir);
+    const adapter = new MarkdownAdapter(tmpDir);
+    const r = await intelStatus(adapter, [], tmpDir);
     const data = r.data as Record<string, unknown>;
     expect(data.disabled).not.toBe(true);
     expect(data.files).toBeDefined();
@@ -81,7 +87,8 @@ describe('intelSnapshot', () => {
   it('writes .last-refresh.json when intel is enabled', async () => {
     await mkdir(join(tmpDir, '.planning', 'intel'), { recursive: true });
     await writeFile(join(tmpDir, '.planning', 'intel', 'stack.json'), JSON.stringify({ _meta: { updated_at: new Date().toISOString() } }));
-    const r = await intelSnapshot([], tmpDir);
+    const adapter = new MarkdownAdapter(tmpDir);
+    const r = await intelSnapshot(adapter, [], tmpDir);
     const data = r.data as Record<string, unknown>;
     expect(data.saved).toBe(true);
     const snap = await readFile(join(tmpDir, '.planning', 'intel', '.last-refresh.json'), 'utf-8');

@@ -2,8 +2,20 @@
  * Docs-init — context bundle for the docs-update workflow.
  *
  * Full port of `cmdDocsInit` and helpers from `get-shit-done/bin/lib/docs.cjs`.
+ *
+ * Phase 2 Plan 02-03 Task 2 (D-12 + D-15): the SINGLE planning-tree probe
+ * (`adapter.exists('')` for `planning_exists`) routes through the
+ * StorageAdapter. All OTHER reads in this file target project root /
+ * package metadata (`package.json`, `pnpm-workspace.yaml`, `lerna.json`,
+ * `LICENSE`, project-root `.md` files, `docs/` tree, deploy configs, etc.) —
+ * NOT the planning tree. They stay raw fs per D-15 (path-scoped C2):
+ * leak-grep's Stage-2 PLANNING_SCOPE_RE filter naturally suppresses them.
  */
 
+// Phase 2 D-15: the following reads target project root / package metadata,
+// NOT the planning tree. Stage-2 leak-grep filter suppresses them via
+// PLANNING_SCOPE_RE. No adapter migration; the single planning-tree probe
+// (line ~250 — planning_exists) routes through the adapter.
 import {
   closeSync,
   existsSync,
@@ -19,7 +31,8 @@ import { join, relative } from 'node:path';
 import { loadConfig } from '../config.js';
 import { MODEL_PROFILES, resolveModel } from './config-query.js';
 import { detectRuntime, resolveAgentsDir, toPosixPath } from './helpers.js';
-import type { QueryHandler } from './utils.js';
+import type { QueryResult } from './utils.js';
+import type { StorageAdapter } from '../../../adapters/types.js';
 
 const GSD_MARKER = '<!-- generated-by: gsd-doc-writer -->';
 
@@ -231,8 +244,18 @@ function checkAgentsInstalled(config?: { runtime?: unknown }): { agents_installe
 /**
  * Init payload for docs-update workflow — matches `gsd-tools docs-init` JSON.
  * Port of `cmdDocsInit` from docs.cjs.
+ *
+ * Phase 2 Plan 02-03 Task 2: adapter-as-first-arg signature; single
+ * planning-tree probe (planning_exists) routes through adapter.exists('').
+ * Empty string resolves to the adapter's planningBase, mirroring
+ * planningBaseIsDir.
  */
-export const docsInit: QueryHandler = async (_args, projectDir) => {
+export const docsInit = async (
+  adapter: StorageAdapter,
+  _args: string[],
+  projectDir: string,
+  _workstream?: string,
+): Promise<QueryResult> => {
   const config = await loadConfig(projectDir);
   const configExists = existsSync(join(projectDir, '.planning', 'config.json'));
   const docModelResult = await resolveModel(['gsd-doc-writer'], projectDir);
@@ -241,6 +264,11 @@ export const docsInit: QueryHandler = async (_args, projectDir) => {
 
   const agentStatus = checkAgentsInstalled(config as { runtime?: unknown });
 
+  // Phase 2 D-12: the single planning-tree probe migrates to adapter.exists('').
+  // The empty-string path resolves to the adapter's planningBase, mirroring
+  // planningBaseIsDir from helpers.ts.
+  const planning_exists = await adapter.exists('');
+
   const data: Record<string, unknown> = {
     doc_writer_model,
     commit_docs: config.commit_docs,
@@ -248,7 +276,7 @@ export const docsInit: QueryHandler = async (_args, projectDir) => {
     project_type: detectProjectType(projectDir),
     doc_tooling: detectDocTooling(projectDir),
     monorepo_workspaces: detectMonorepoWorkspaces(projectDir),
-    planning_exists: pathExistsInternal(projectDir, '.planning'),
+    planning_exists,
     project_root: projectDir,
     agents_installed: agentStatus.agents_installed,
     missing_agents: agentStatus.missing_agents,

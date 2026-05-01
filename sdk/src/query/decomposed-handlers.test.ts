@@ -323,7 +323,9 @@ describe('workstream handlers', () => {
 
 describe('docsInit', () => {
   it('returns docs context matching gsd-tools docs-init', async () => {
-    const result = await docsInit([], tmpDir);
+    // Phase 2 Plan 02-03 Task 2: docsInit signature now takes adapter as first arg.
+    const adapter = new MarkdownAdapter(tmpDir);
+    const result = await docsInit(adapter, [], tmpDir);
     const data = result.data as Record<string, unknown>;
     expect(typeof data.planning_exists).toBe('boolean');
     expect(data.project_root).toBe(tmpDir);
