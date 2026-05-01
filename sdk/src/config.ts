@@ -6,6 +6,7 @@
  */
 
 import { readFile } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { relPlanningPath } from './workstream-utils.js';
@@ -180,7 +181,18 @@ export async function loadConfig(projectDir: string, workstream?: string): Promi
   // CJS fall-back branch in get-shit-done/bin/lib/core.cjs:421 (#1683) so
   // SDK-dispatched init queries (e.g. resolveModel in Codex installs, #2652)
   // honor user-level knobs like `resolve_model_ids: "omit"`.
+  //
+  // CJS guard (core.cjs:466): if .planning/ exists, project is initialized
+  // but merely missing config.json — do NOT apply user-defaults. Only apply
+  // them for truly pre-project contexts (no .planning/ at all). Fork-side
+  // patch for upstream bug introduced by 0f8f7537 (#2663).
   if (!projectConfigFound) {
+    const planningDir = join(projectDir, '.planning');
+    if (existsSync(planningDir)) {
+      // Project is initialized but has no config.json — return plain defaults
+      // without user-level overrides, matching CJS behavior.
+      return mergeDefaults({});
+    }
     const userDefaults = await loadUserDefaults();
     return mergeDefaults(userDefaults);
   }
