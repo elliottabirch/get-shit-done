@@ -523,7 +523,10 @@ Status: planning
     const data = result.data as Record<string, unknown>;
 
     expect(data.milestone).toBe('ws-1.0');
-    expect(data.milestone_name).toBe('Workstream Marker');
+    // CJS parity (Cause A fix): getMilestoneInfo derives name from ROADMAP patterns only.
+    // Workstream ROADMAP is '# Roadmap\n' (no version patterns) → name falls back to 'milestone'.
+    // STATE.md milestone_name: 'Workstream Marker' is intentionally ignored for CJS parity.
+    expect(data.milestone_name).toBe('milestone');
     expect(data.status).toBe('planning');
   });
 });

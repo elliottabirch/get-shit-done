@@ -874,8 +874,12 @@ Resume file: None
     const after = await readFile(join(planningDir, 'STATE.md'), 'utf-8');
     const { extractFrontmatter } = await import('./frontmatter.js');
     const fm = extractFrontmatter(after);
+    // After Cause A CJS-parity fix: getMilestoneInfo derives name from ROADMAP patterns only.
+    // STATE.md has v12.0 (stateVersion), ROADMAP's v12.0 heading is ✅ SHIPPED (stripped),
+    // so headingMatch finds v11.0 Research-Depth Scoring. Result: {version:'v12.0', name:'Research-Depth Scoring'}.
+    // The old expectation 'Focus' was based on STATE.md milestone_name fallback (removed for CJS parity).
     expect(fm.milestone).toBe('v12.0');
-    expect(fm.milestone_name).toBe('Focus');
+    expect(fm.milestone_name).toBe('Research-Depth Scoring');
   });
 
   it('record-session preserves status from existing frontmatter when body has no Status field', async () => {

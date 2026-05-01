@@ -222,8 +222,12 @@ describe('getMilestoneInfo', () => {
       '---\nmilestone: v4.2\nmilestone_name: From State\n---\n\n# State\n',
     );
     const info = await getMilestoneInfo(tmpDir);
+    // CJS parity: when ROADMAP is missing, catch block fires. SDK preserves version from
+    // STATE.md (v4.2) but name is always 'milestone' — STATE.md milestone_name is NOT used.
+    // This matches CJS catch behavior (core.cjs returns v1.0/'milestone' on ROADMAP error,
+    // but our catch block reads STATE.md for version to avoid losing it).
     expect(info.version).toBe('v4.2');
-    expect(info.name).toBe('From State');
+    expect(info.name).toBe('milestone');
   });
 
   it('falls back to v1.0 when ROADMAP.md and STATE.md lack milestone', async () => {
