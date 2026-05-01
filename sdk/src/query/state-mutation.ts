@@ -321,7 +321,8 @@ export async function readModifyWriteStateMdFull(
  *
  * @param args - args[0]: field name, args[1]: new value
  * @param projectDir - Project root directory
- * @returns QueryResult with { updated: true/false, field, value }
+ * @returns QueryResult with { updated: true } — matches CJS state.cjs:220 output shape.
+ *   The field/value are intentionally omitted for CJS parity (upstream bug 002bcf2a).
  */
 export const stateUpdate: QueryHandler = async (args, projectDir, workstream) => {
   const field = args[0];
@@ -341,7 +342,9 @@ export const stateUpdate: QueryHandler = async (args, projectDir, workstream) =>
     return content;
   }, workstream);
 
-  return { data: { updated, field, value: updated ? value : undefined } };
+  // CJS state.cjs:220 outputs only { updated: true } — no field/value.
+  // Fork-side patch for upstream divergence introduced in 002bcf2a.
+  return { data: { updated } };
 };
 
 /**
