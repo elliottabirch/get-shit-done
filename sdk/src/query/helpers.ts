@@ -19,7 +19,6 @@
 
 import { join, dirname, relative, resolve, isAbsolute, normalize, sep as pathSep } from 'node:path';
 import { realpath } from 'node:fs/promises';
-import { existsSync, statSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { GSDError, ErrorClassification } from '../errors.js';
 export { SUPPORTED_RUNTIMES, type Runtime } from '../model-catalog.js';
@@ -27,6 +26,7 @@ import { SUPPORTED_RUNTIMES, type Runtime } from '../model-catalog.js';
 import { workspacePlanningPaths, resolveWorkspaceContext, type PlanningPaths } from './workspace.js';
 export { stateExtractField } from './state-document.js';
 import { relPlanningPath, validateWorkstreamName } from '../workstream-utils.js';
+import type { StorageAdapter } from '../../../adapters/types.js';
 
 // ─── Runtime-aware agents directory resolution ─────────────────────────────
 
@@ -465,6 +465,41 @@ export function planningPaths(projectDir: string, workstream?: string): Planning
 // Implementation lives in sdk/src/project-root/index.ts — re-exported here
 // so that existing consumers of helpers.ts continue to work unchanged.
 export { findProjectRoot } from '../project-root/index.js';
+
+// ─── planningRelativePath (workstream-aware adapter path) ──────────────────
+
+/**
+ * Compute a .planning/-relative path that the StorageAdapter can resolve.
+ *
+ * Phase 2 D-10 + Pitfall 10: adapters take .planning/-relative paths. When a
+ * workstream is active, the doc lives under `workstreams/<ws>/<doc>` relative
+ * to the .planning/ base. When no workstream, the doc is at the .planning/ root.
+ *
+ * Always returns POSIX-style forward slashes (adapter contract D-04).
+ */
+export function planningRelativePath(
+  workstream: string | null | undefined,
+  doc: string,
+): string {
+  if (workstream === null || workstream === undefined || workstream === '') {
+    return doc;
+  }
+  return `workstreams/${workstream}/${doc}`;
+}
+
+// ─── planningBaseIsDir (adapter-aware probe) ───────────────────────────────
+
+/**
+ * Adapter-aware sibling of findProjectRoot. Use this from inside handler bodies
+ * (the adapter is already constructed and rooted at the .planning/ base).
+ *
+ * Returns true if the adapter's planning base exists and is a directory.
+ * Returns false otherwise. Never walks parent directories.
+ */
+export async function planningBaseIsDir(adapter: StorageAdapter): Promise<boolean> {
+  const st = await adapter.stat('');
+  return st !== null && st.kind === 'dir';
+}
 
 // ─── resolvePathUnderProject ───────────────────────────────────────────────
 
