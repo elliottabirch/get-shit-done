@@ -10,6 +10,12 @@ import { mkdtemp, writeFile, readFile, rm, mkdir, readdir } from 'node:fs/promis
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { existsSync } from 'node:fs';
+import { MarkdownAdapter } from '../../../adapters/markdown/index.js';
+
+async function makeRegistry(projectDir: string) {
+  const { createRegistry } = await import('./index.js');
+  return createRegistry({ adapter: new MarkdownAdapter(projectDir) });
+}
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────
 
@@ -1371,8 +1377,7 @@ describe('phasesArchive', () => {
 
 describe('lifecycle handlers in registry', () => {
   it('registers all 7 lifecycle handlers with dot notation', async () => {
-    const { createRegistry } = await import('./index.js');
-    const registry = createRegistry();
+    const registry = await makeRegistry(process.cwd());
 
     const commands = [
       'phase.add', 'phase.insert', 'phase.remove', 'phase.complete',
@@ -1386,8 +1391,7 @@ describe('lifecycle handlers in registry', () => {
   });
 
   it('registers space-delimited aliases', async () => {
-    const { createRegistry } = await import('./index.js');
-    const registry = createRegistry();
+    const registry = await makeRegistry(process.cwd());
 
     const commands = [
       'phase add', 'phase insert', 'phase remove', 'phase complete',
