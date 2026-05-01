@@ -54,6 +54,33 @@ export function runAdapterConformanceSuite(
       });
     });
 
+    describe('stat (Phase 2 D-11)', () => {
+      it('returns kind=file for a putRecord-written file', async () => {
+        await adapter.putRecord('STATE.md', '# x\n');
+        const r = await adapter.stat('STATE.md');
+        expect(r).not.toBeNull();
+        expect(r!.kind).toBe('file');
+        // mtime is optional but MarkdownAdapter always provides it
+        if (r!.mtime !== undefined) {
+          expect(typeof r!.mtime).toBe('string');
+          expect(() => new Date(r!.mtime!)).not.toThrow();
+        }
+      });
+
+      it('returns kind=dir for a directory created via putRecord', async () => {
+        // putRecord('phases/01-foo/PLAN.md', ...) creates the parent dir as a side effect
+        await adapter.putRecord('phases/01-foo/PLAN.md', '# Plan\n');
+        const r = await adapter.stat('phases/01-foo');
+        expect(r).not.toBeNull();
+        expect(r!.kind).toBe('dir');
+      });
+
+      it('returns null for non-existent path (matches getRecord null-on-miss)', async () => {
+        const r = await adapter.stat('NONEXISTENT.md');
+        expect(r).toBeNull();
+      });
+    });
+
     // Phase 2 adds: getSection / updateSection round-trip, frontmatter round-trip
     // Phase 3 adds: write-side handler conformance (recordStateEvent shape)
     // Phase 5 adds: snapshot/restore, withTransaction, putNamedDoc, writeBinaryAsset
