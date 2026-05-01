@@ -1,0 +1,22 @@
+{
+  "researcher_model": "sonnet",
+  "synthesizer_model": "sonnet",
+  "roadmapper_model": "sonnet",
+  "commit_docs": true,
+  "project_exists": true,
+  "has_codebase_map": false,
+  "planning_exists": true,
+  "has_existing_code": true,
+  "has_package_file": true,
+  "is_brownfield": true,
+  "needs_codebase_map": true,
+  "has_git": true,
+  "brave_search_available": false,
+  "firecrawl_available": false,
+  "exa_search_available": false,
+  "project_path": ".planning/PROJECT.md",
+  "project_root": "/home/ellio/code/get-shit-done/.claude/worktrees/agent-afe48fc6f178f469c",
+  "agents_installed": true,
+  "missing_agents": [],
+  "project_title": "Project: get-shit-done (fork — adapter-interface seam)"
+}

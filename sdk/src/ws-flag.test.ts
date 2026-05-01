@@ -155,8 +155,10 @@ describe('GSDTools workstream injection', () => {
       'process.stdout.write(JSON.stringify(process.argv.slice(2)));',
     );
 
+    const { MarkdownAdapter } = await import('../../adapters/markdown/index.js');
     const tools = new GSDTools({
       projectDir: tmpDir,
+      adapter: new MarkdownAdapter(tmpDir),
       gsdToolsPath: scriptPath,
       workstream: 'frontend',
     });
@@ -170,6 +172,7 @@ describe('GSDTools workstream injection', () => {
 
   it('does not pass --ws when workstream is undefined', async () => {
     const { GSDTools } = await import('./gsd-tools.js');
+    const { MarkdownAdapter } = await import('../../adapters/markdown/index.js');
 
     const scriptPath = await createScript(
       'echo-args-no-ws.cjs',
@@ -178,7 +181,11 @@ describe('GSDTools workstream injection', () => {
 
     const tools = new GSDTools({
       projectDir: tmpDir,
+      adapter: new MarkdownAdapter(tmpDir),
       gsdToolsPath: scriptPath,
+      // Force CLI dispatch instead of native query (test verifies argv passed
+      // to gsd-tools.cjs subprocess; native query bypasses the subprocess).
+      preferNativeQuery: false,
     });
 
     const result = await tools.exec('state', ['load']) as string[];

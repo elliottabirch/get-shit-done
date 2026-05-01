@@ -1,0 +1,16 @@
+{
+  "state_exists": true,
+  "roadmap_exists": true,
+  "project_exists": true,
+  "planning_exists": true,
+  "state_path": ".planning/STATE.md",
+  "roadmap_path": ".planning/ROADMAP.md",
+  "project_path": ".planning/PROJECT.md",
+  "has_interrupted_agent": false,
+  "interrupted_agent_id": null,
+  "commit_docs": true,
+  "project_root": "/home/ellio/code/get-shit-done/.claude/worktrees/agent-afe48fc6f178f469c",
+  "agents_installed": true,
+  "missing_agents": [],
+  "project_title": "Project: get-shit-done (fork — adapter-interface seam)"
+}

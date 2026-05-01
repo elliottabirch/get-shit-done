@@ -283,6 +283,77 @@ questions), and its risk register derives from §9.
 
 ---
 
+## D-2026-05-01 — Phase 2 Bin A contract extension: required `stat()` primitive
+
+**Date:** 2026-05-01
+**Trigger:** Phase 2 read-side migration audit identified six call sites needing
+`isDirectory()` checks and one needing `mtime`. Phase 1 D-05 / D-10 declared
+`exists()` as the only path-existence primitive in Bin A; that turned out to
+be insufficient for routing decisions that depend on file-vs-dir kind.
+
+**Decision:** Extend Bin A — `record` group with a new required primitive:
+
+```typescript
+stat(path: string): Promise<{ kind: 'file' | 'dir'; mtime?: string } | null>;
+```
+
+- **Required, not capability-gated.** `isDirectory` is fundamental enough that
+  every storage backend must answer it. `mtime` is optional in the return
+  shape, so backends that can't cheaply compute it omit the field rather than
+  forcing a capability flag.
+- Returns `null` for non-existent paths (mirrors `getRecord`'s null-on-miss
+  semantics; consumers can collapse `exists + stat` into a single call).
+- MarkdownAdapter implementation delegates to `node:fs/promises.stat` and uses
+  the import alias `stat as fsStat` to avoid shadowing the method name.
+
+**Re-opens Phase 1 D-05 / D-10 with a new ADR.** The v1.0 contract surface
+gains one more required method. Justification:
+
+1. Six current call sites need `isDirectory()` checks (`helpers.ts:478,512`,
+   `docs-init.ts:94,99`, `init-complex.ts:450`) plus one needing `mtime`
+   (`intel.ts:138`). All six sit on the read-side migration path; routing
+   them through `listCollection`-as-isDirectory was rejected as fragile
+   (relies on call success vs. throw to distinguish dir from file).
+2. Capability-gating `stat` was rejected — `isDirectory` is universal across
+   filesystem-like backends; gate noise at every call site is not warranted.
+   `mtime` is the only sub-feature that varies by backend, and the optional
+   return field handles that without a capability split.
+3. Adding `stat()` keeps the "expand the contract only when the call shape
+   is fundamental" invariant from D-2026-04-30-05 / OQ-08. We are not adding
+   it for convenience — we are adding it because every backend needs it.
+
+**Affected files in Plan 02-01:**
+- `adapters/types.ts` — interface declaration after `exists()`
+- `adapters/types.test.ts` — type-check coverage (`_testStat`, `_testStatNarrow`)
+- `adapters/markdown/index.ts` — `MarkdownAdapter.stat()` implementation +
+  `stat as fsStat` import rename
+- `tests/conformance/adapter.conformance.ts` — file/dir/null describe block
+- `tests/conformance/stat.test.ts` — dedicated mounting point for the suite
+
+**Contract impact:** Third-party adapters importing `StorageAdapter` see one
+new required method on next minor bump. Phase 7 BeadsAdapter must implement
+it — the conformance harness already covers it via the new describe block.
+
+**Rebase risk:** LOW. Adapter contract surface; not in upstream's path.
+
+**Alternatives considered:**
+
+1. `listCollection`-as-`isDirectory`. Rejected: indirect, relies on
+   exception semantics.
+2. Capability-gated `stat` (optional, with `hasStat()` guard). Rejected:
+   `isDirectory` is universal; gate noise at every call site is overkill.
+3. Defer to Phase 5 alongside `getNamedDoc`/`putNamedDoc`. Rejected: Phase 2
+   read migration needs `isDirectory` for routing logic; deferring blocks the
+   migration recipe.
+4. Two separate primitives (`isDirectory(path)` + `mtime(path)`). Rejected:
+   doubles the surface for the same answer; `stat` returns both in one call.
+
+**Implication:** Phase 7's BeadsAdapter MUST implement `stat()`. The
+conformance test exercises file/dir/null cases and runs unchanged against
+both adapters per Phase 1 D-15.
+
+---
+
 # Open questions deferred to v1.0 milestone phases
 
 These were identified in SYNTHESIS.md §6 but are NOT blocking for Phase 1.

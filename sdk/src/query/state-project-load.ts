@@ -1,72 +1,114 @@
 /**
  * `state load` — full project config + STATE.md raw text (CJS `cmdStateLoad`).
  *
- * Uses the same `loadConfig(cwd)` as `get-shit-done/bin/lib/state.cjs` by resolving
- * `core.cjs` next to a shipped/bundled/user `get-shit-done` install (same probe order
- * as `resolveGsdToolsPath`). This keeps JSON output **byte-compatible** with
- * `node gsd-tools.cjs state load` for monorepo and standard installs.
+ * Phase 2 D-12 (Plan 02-01 Task 4): the createRequire'd `loadConfigCjs` fs
+ * bridge is removed. Reads route through the StorageAdapter — config.json,
+ * STATE.md, ROADMAP.md, PROJECT.md — instead of `createRequire`-bridged
+ * `core.cjs.loadConfig(cwd)`.
+ *
+ * Behavior trade-off: the CJS `loadConfig` performs workstream inheritance
+ * (root → ws merge), depth → granularity migration, and sub-repo auto-sync
+ * with on-disk writes. Those side-effects are Phase 3 (write paths). For
+ * the `state.load` read handler, we apply the simpler defaults-merge here;
+ * the migration writes happen lazily through other code paths.
  *
  * Distinct from {@link stateJson} (`state json` / `state.json`) which mirrors
  * `cmdStateJson` (rebuilt frontmatter only).
  */
 
-import { readFile } from 'node:fs/promises';
-import { existsSync } from 'node:fs';
-import { join } from 'node:path';
-import { homedir } from 'node:os';
-import { createRequire } from 'node:module';
-import { fileURLToPath } from 'node:url';
-import { planningPaths } from './helpers.js';
-import type { QueryHandler } from './utils.js';
-import { GSDError, ErrorClassification } from '../errors.js';
+import { planningRelativePath } from './helpers.js';
+import type { QueryResult } from './utils.js';
+import type { StorageAdapter } from '../../../adapters/types.js';
 
-const BUNDLED_CORE_CJS = fileURLToPath(
-  new URL('../../../get-shit-done/bin/lib/core.cjs', import.meta.url),
-);
+// Defaults inlined from get-shit-done/bin/lib/core.cjs:CONFIG_DEFAULTS.
+// Ported here because core.cjs does not export `CONFIG_DEFAULTS` separately
+// from the (fs-bound) `loadConfig` function, and modifying core.cjs to add
+// a pure-helper export would violate Phase 1 D-13 (CJS files stay untouched).
+// Keep this in sync with core.cjs:222-250 on rebase; drift is detected by
+// the SDK test bar (D-13) and Plan 4's byte-identical baseline assertion.
+const DEFAULT_CONFIG: Record<string, unknown> = {
+  model_profile: 'balanced',
+  commit_docs: true,
+  search_gitignored: false,
+  branching_strategy: 'none',
+  phase_branch_template: 'gsd/phase-{phase}-{slug}',
+  milestone_branch_template: 'gsd/{milestone}-{slug}',
+  quick_branch_template: null,
+  research: true,
+  plan_checker: true,
+  verifier: true,
+  nyquist_validation: true,
+  ai_integration_phase: true,
+  parallelization: true,
+  brave_search: false,
+  firecrawl: false,
+  exa_search: false,
+  text_mode: false,
+  sub_repos: [],
+  resolve_model_ids: false,
+  context_window: 200000,
+  phase_naming: 'sequential',
+  project_code: null,
+  subagent_timeout: 300000,
+  security_enforcement: true,
+  security_asvs_level: 1,
+  security_block_on: 'high',
+  post_planning_gaps: true,
+};
 
-function resolveCoreCjsPath(projectDir: string): string | null {
-  const candidates = [
-    BUNDLED_CORE_CJS,
-    join(projectDir, '.claude', 'get-shit-done', 'bin', 'lib', 'core.cjs'),
-    join(homedir(), '.claude', 'get-shit-done', 'bin', 'lib', 'core.cjs'),
-  ];
-  return candidates.find(p => existsSync(p)) ?? null;
-}
-
-function loadConfigCjs(projectDir: string): Record<string, unknown> {
-  const corePath = resolveCoreCjsPath(projectDir);
-  if (!corePath) {
-    throw new GSDError(
-      'state load: get-shit-done/bin/lib/core.cjs not found. Install GSD (e.g. npm i -g get-shit-done-cc) or clone with get-shit-done next to the SDK.',
-      ErrorClassification.Blocked,
-    );
+/**
+ * [LOW-2] core.cjs.loadConfig behavior summary (from Step 1 audit):
+ *   - Reads .planning/config.json; returns parsed object merged with defaults.
+ *   - When GSD_WORKSTREAM is set, also reads root .planning/config.json and
+ *     deep-merges (root → ws); the workstream config wins on key conflict.
+ *   - Lazily migrates `depth` → `granularity` and writes back (fs side-effect).
+ *   - Auto-detects sub_repos and writes back (fs side-effect).
+ *
+ * We port to TS here because (b) is small for the read path; the write
+ * side-effects (b-3, b-4) are Phase 3 (D-14: read-only discipline). The
+ * shallow defaults merge is sufficient for `state.load` consumers; complex
+ * inheritance logic is invoked by other code paths through `config.ts`.
+ */
+async function loadConfigViaAdapter(
+  adapter: StorageAdapter,
+): Promise<Record<string, unknown>> {
+  const raw = await adapter.getRecord('config.json');
+  if (raw === null) return { ...DEFAULT_CONFIG };
+  try {
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    return { ...DEFAULT_CONFIG, ...parsed };
+  } catch {
+    return { ...DEFAULT_CONFIG };
   }
-  const req = createRequire(import.meta.url);
-  const { loadConfig } = req(corePath) as { loadConfig: (cwd: string) => Record<string, unknown> };
-  return loadConfig(projectDir);
 }
 
 /**
  * Query handler for `state load` / bare `state` (normalize → `state.load`).
  *
  * Port of `cmdStateLoad` from `get-shit-done/bin/lib/state.cjs` lines 44–86.
+ *
+ * Phase 2 Plan 02-01 Task 4: adapter-as-first-arg signature (Shape A).
+ * The registry registers a closure wrapper that binds `adapter` and forwards
+ * `(args, projectDir, ws)` to this signature.
  */
-export const stateProjectLoad: QueryHandler = async (_args, projectDir, workstream) => {
-  const config = loadConfigCjs(projectDir);
-  const planDir = planningPaths(projectDir, workstream).planning;
+export const stateProjectLoad = async (
+  adapter: StorageAdapter,
+  _args: string[],
+  _projectDir: string,
+  workstream?: string,
+): Promise<QueryResult> => {
+  const config = await loadConfigViaAdapter(adapter);
 
-  let stateRaw = '';
-  try {
-    stateRaw = await readFile(join(planDir, 'STATE.md'), 'utf-8');
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code !== 'ENOENT') {
-      throw err;
-    }
-  }
+  const stateRel = planningRelativePath(workstream, 'STATE.md');
+  const roadmapRel = planningRelativePath(workstream, 'ROADMAP.md');
+  const configRel = planningRelativePath(workstream, 'config.json');
+  const projectRel = planningRelativePath(workstream, 'PROJECT.md');
 
-  const configExists = existsSync(join(planDir, 'config.json'));
-  const roadmapExists = existsSync(join(planDir, 'ROADMAP.md'));
+  const stateRaw = (await adapter.getRecord(stateRel)) ?? '';
   const stateExists = stateRaw.length > 0;
+  const roadmapExists = await adapter.exists(roadmapRel);
+  const configExists = await adapter.exists(configRel);
+  const projectExists = await adapter.exists(projectRel);
 
   return {
     data: {
@@ -75,6 +117,7 @@ export const stateProjectLoad: QueryHandler = async (_args, projectDir, workstre
       state_exists: stateExists,
       roadmap_exists: roadmapExists,
       config_exists: configExists,
+      project_exists: projectExists,
     },
   };
 };

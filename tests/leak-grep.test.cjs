@@ -53,3 +53,39 @@ test('machine-readable output format (file:line:category:text)', () => {
   const firstLine = stdout.split('\n').filter(Boolean)[0];
   assert.match(firstLine, /^[^:]+:\d+:[a-z-]+:/);
 });
+
+// ---------------------------------------------------------------------------
+// Phase 2 Plan 02-01 Task 2 — SDK_FS_READ_PATTERNS coverage
+// ---------------------------------------------------------------------------
+
+test('leaky-sdk-handler.ts detects readFileSync + planningPaths scope', () => {
+  const { exitCode, stdout } = runLeakGrep('leaky-sdk-handler.ts');
+  assert.equal(exitCode, 1);
+  assert.match(stdout, /readFileSync/);
+  assert.match(stdout, /fs-read-import/);
+});
+
+test('clean-sdk-handler.ts produces zero leaks', () => {
+  const { exitCode, stdout } = runLeakGrep('clean-sdk-handler.ts');
+  assert.equal(exitCode, 0, `expected 0, got ${exitCode}; stdout: ${stdout}`);
+  assert.equal(stdout.trim(), '');
+});
+
+test('c2-handler.ts (~/.claude/ reads) does not trigger SDK_FS pattern', () => {
+  const { exitCode, stdout } = runLeakGrep('c2-handler.ts');
+  assert.equal(exitCode, 0, `expected 0, got ${exitCode}; stdout: ${stdout}`);
+  assert.equal(stdout.trim(), '');
+});
+
+test('sdk-fs-patterns.ts exercises every SDK_FS category', () => {
+  const { exitCode, stdout } = runLeakGrep('sdk-fs-patterns.ts');
+  assert.equal(exitCode, 1);
+  // Every listed category should appear at least once
+  for (const cat of [
+    'readFileSync', 'readdirSync', 'existsSync', 'statSync',
+    'readFile-async', 'readdir-async', 'stat-async',
+    'fs-read-import', 'fs-require',
+  ]) {
+    assert.match(stdout, new RegExp(cat), `category ${cat} missing`);
+  }
+});

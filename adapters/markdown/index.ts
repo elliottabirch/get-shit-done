@@ -20,7 +20,7 @@
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { existsSync } from 'node:fs';
-import { readFile, writeFile, unlink, readdir, mkdir } from 'node:fs/promises';
+import { readFile, writeFile, unlink, readdir, mkdir, stat as fsStat } from 'node:fs/promises';
 import { join, dirname } from 'node:path';
 import { homedir } from 'node:os';
 import type {
@@ -167,6 +167,20 @@ export class MarkdownAdapter implements StorageAdapter {
 
   async exists(path: string): Promise<boolean> {
     return existsSync(this.resolve(path));
+  }
+
+  async stat(path: string): Promise<{ kind: 'file' | 'dir'; mtime?: string } | null> {
+    const abs = this.resolve(path);
+    try {
+      const st = await fsStat(abs);
+      return {
+        kind: st.isDirectory() ? 'dir' : 'file',
+        mtime: st.mtime.toISOString(),
+      };
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === 'ENOENT') return null;
+      throw err;
+    }
   }
 
   // ─── Bin A: section group (D-05, required) ────────────────────────────────

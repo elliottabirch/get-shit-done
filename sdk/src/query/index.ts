@@ -269,8 +269,12 @@ function buildMutationEvent(
  * Create a fully-wired QueryRegistry with all native handlers registered.
  *
  * @param opts.adapter - Required StorageAdapter implementation (per D-2026-04-30-05 + D-07).
- *                       In Phase 1 the adapter is held but not yet consumed by handlers;
- *                       Phase 2-3 migrates handlers to call adapter.* methods.
+ *                       Phase 2 Plan 02-01 onwards: adapter-aware handlers register through a
+ *                       closure wrapper that binds `adapter` as the first arg (Shape A from
+ *                       Phase 2 D-10). Currently wired: `state.load` (Task 4),
+ *                       `route.next-action` / `route next-action` (Task 5). Plans 02-02..04
+ *                       add wrappers for the remaining read handlers as they migrate.
+ *                       Non-adapter-aware handlers continue to register unchanged.
  * @param opts.eventStream - Optional event stream for mutation event emission
  * @param opts.correlationSessionId - Optional session id threaded into mutation-related events
  * @returns A QueryRegistry instance with all handlers registered
@@ -280,11 +284,12 @@ export function createRegistry(opts: {
   eventStream?: GSDEventStream;
   correlationSessionId?: string;
 }): QueryRegistry {
-  const { eventStream, correlationSessionId } = opts;
-  // Phase 1 plumbing only: adapter is held but not yet consumed by handlers.
-  // Phase 2-3 will start passing it to individual handlers.
-  const _adapter = opts.adapter;
-  void _adapter;
+  const { adapter, eventStream, correlationSessionId } = opts;
+  // Phase 2 D-10 (Plan 02-01 onwards): adapter is consumed by per-handler
+  // closure wrappers. Each adapter-aware handler is registered via a closure
+  // that binds `adapter` as the first argument; non-adapter-aware handlers
+  // register unchanged. Plans 2-4 add wrappers for additional handlers as
+  // they migrate.
   const mutationSessionId = correlationSessionId ?? '';
   const registry = new QueryRegistry();
 
@@ -295,7 +300,9 @@ export function createRegistry(opts: {
   registry.register('config-path', configPath);
   registry.register('resolve-model', resolveModel);
   const stateHandlers: Record<string, QueryHandler> = {
-    'state.load': stateProjectLoad,
+    // Phase 2 Plan 02-01 Task 4: stateProjectLoad migrated to adapter-as-first-arg
+    // signature. Closure wrapper threads the adapter from createRegistry's opts.
+    'state.load': (args, projectDir, ws) => stateProjectLoad(adapter, args, projectDir, ws),
     'state.json': stateJson,
     'state.get': stateGet,
     'state.update': stateUpdate,
@@ -431,8 +438,14 @@ export function createRegistry(opts: {
   registry.register('check auto-mode', checkAutoMode);
   registry.register('check.phase-ready', checkPhaseReady);
   registry.register('check phase-ready', checkPhaseReady);
-  registry.register('route.next-action', routeNextAction);
-  registry.register('route next-action', routeNextAction);
+  // Phase 2 Plan 02-01 Task 5: routeNextAction migrated to adapter-as-first-arg
+  // signature. Closure wrapper threads the adapter from createRegistry's opts.
+  registry.register('route.next-action', (args, projectDir, ws) =>
+    routeNextAction(adapter, args, projectDir, ws),
+  );
+  registry.register('route next-action', (args, projectDir, ws) =>
+    routeNextAction(adapter, args, projectDir, ws),
+  );
   registry.register('detect.phase-type', detectPhaseType);
   registry.register('detect phase-type', detectPhaseType);
   registry.register('check.completion', checkCompletion);
