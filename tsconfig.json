@@ -1,6 +1,7 @@
 {
   "files": [],
   "references": [
-    { "path": "sdk" }
+    { "path": "sdk" },
+    { "path": "adapters" }
   ]
 }

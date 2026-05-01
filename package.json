@@ -20,7 +20,8 @@
     "sdk/dist",
     "sdk/package.json",
     "sdk/package-lock.json",
-    "sdk/tsconfig.json"
+    "sdk/tsconfig.json",
+    "adapters"
   ],
   "keywords": [
     "claude",
