@@ -28,6 +28,18 @@ export default defineConfig({
           exclude: ['dist/**'],
         },
       },
+      {
+        // Phase 2 Plan 02-05: register-completeness test for the
+        // <context>-block @.planning/ leak class (READS-03 / OQ-04 partial).
+        // The test runs the audit script and the leak-grep engine, then
+        // cross-references the generated register.
+        test: {
+          name: 'leak-grep',
+          root: './tests/leak-grep',
+          include: ['**/*.test.ts'],
+          exclude: ['fixtures/**'],
+        },
+      },
     ],
   },
 });
