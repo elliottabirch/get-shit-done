@@ -69,9 +69,9 @@ Plans:
   4. Upstream's read-side test fixtures continue to pass against the fork with the MarkdownAdapter mounted (regression budget: zero failing tests).
 **Plans:** 5 plans
 Plans:
-- [ ] 02-01-PLAN.md — Foundation + migration recipe (stat in Bin A; leak-grep SDK extension; helpers; route-next-action recipe handler; state-project-load adapter routing; createRegistry closure pattern; bundler baselines)
+- [x] 02-01-PLAN.md — Foundation + migration recipe (stat in Bin A; leak-grep SDK extension; helpers; route-next-action recipe handler; state-project-load adapter routing; createRegistry closure pattern; bundler baselines)
 - [ ] 02-02-PLAN.md — Phase / state / progress / roadmap reads (8 SDK handlers — phase, roadmap, progress reads, audit-open, phase-ready, verify reads, check-verification-status, detect-phase-type)
-- [ ] 02-03-PLAN.md — Document reads (summary, uat, intel reads, docs-init .planning probe; skill-manifest verified C2)
+- [x] 02-03-PLAN.md — Document reads (summary, uat, intel reads, docs-init .planning probe; skill-manifest verified C2)
 - [ ] 02-04-PLAN.md — Init bundlers (16 bundlers; OQ-09 resolved; byte-identical bundle assertion)
 - [ ] 02-05-PLAN.md — `<context>`-block audit register (READS-03; OQ-04 partial resolution)
 
