@@ -19,6 +19,14 @@ export default defineConfig({
           testTimeout: 120_000,
         },
       },
+      {
+        test: {
+          name: 'adapters',
+          root: './adapters',
+          include: ['**/*.test.ts'],
+          exclude: ['dist/**'],
+        },
+      },
     ],
   },
 });
