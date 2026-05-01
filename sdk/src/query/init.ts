@@ -28,7 +28,7 @@ import { resolveModel, MODEL_PROFILES } from './config-query.js';
 import { maskIfSecret } from './secrets.js';
 import { findPhase } from './phase.js';
 import { roadmapGetPhase, getMilestoneInfo, extractCurrentMilestone, extractPhasesFromSection } from './roadmap.js';
-import { planningPaths, normalizePhaseName, toPosixPath, resolveAgentsDir, detectRuntime } from './helpers.js';
+import { adapterFor, planningPaths, normalizePhaseName, toPosixPath, resolveAgentsDir, detectRuntime } from './helpers.js';
 import { relPlanningPath } from '../workstream-utils.js';
 import type { QueryHandler } from './utils.js';
 
@@ -120,14 +120,16 @@ async function getPhaseInfoWithFallback(
   projectDir: string,
   workstream?: string,
 ): Promise<{ phaseInfo: Record<string, unknown> | null; roadmapPhase: Record<string, unknown> | null }> {
-  const phaseResult = await findPhase([phase], projectDir, workstream);
+  // Phase 2 Plan 02-02 transitional: findPhase + roadmapGetPhase migrated to adapter signature.
+  const adapter = await adapterFor(projectDir);
+  const phaseResult = await findPhase(adapter, [phase], projectDir, workstream);
   let phaseInfo = phaseResult.data as Record<string, unknown> | null;
   // findPhase returns { found: false } when missing; findPhaseInternal returns null — align for init parity.
   if (phaseInfo && phaseInfo.found === false) {
     phaseInfo = null;
   }
 
-  const roadmapResult = await roadmapGetPhase([phase], projectDir, workstream);
+  const roadmapResult = await roadmapGetPhase(adapter, [phase], projectDir, workstream);
   const roadmapPhase = roadmapResult.data as Record<string, unknown> | null;
 
   // Match init.cjs: drop archived disk match when the phase is listed in the current ROADMAP
@@ -164,13 +166,15 @@ async function getPhaseInfoForVerifyWork(
   phase: string,
   projectDir: string,
 ): Promise<{ phaseInfo: Record<string, unknown> | null }> {
-  const phaseResult = await findPhase([phase], projectDir);
+  // Phase 2 Plan 02-02 transitional: findPhase + roadmapGetPhase migrated to adapter signature.
+  const adapter = await adapterFor(projectDir);
+  const phaseResult = await findPhase(adapter, [phase], projectDir);
   let phaseInfo = phaseResult.data as Record<string, unknown> | null;
   if (phaseInfo && phaseInfo.found === false) {
     phaseInfo = null;
   }
 
-  const roadmapResult = await roadmapGetPhase([phase], projectDir);
+  const roadmapResult = await roadmapGetPhase(adapter, [phase], projectDir);
   const roadmapPhase = roadmapResult.data as Record<string, unknown> | null;
 
   if (phaseInfo?.archived && roadmapPhase?.found) {
@@ -292,7 +296,9 @@ export const initExecutePhase: QueryHandler = async (args, projectDir, workstrea
       ])
     : ['', ''];
 
-  const milestone = await getMilestoneInfo(projectDir, workstream);
+  // Phase 2 Plan 02-02 transitional: getMilestoneInfo migrated to adapter signature.
+  const adapter = await adapterFor(projectDir);
+  const milestone = await getMilestoneInfo(adapter, workstream);
 
   const phaseNumber = (phaseInfo?.phase_number as string) || null;
   const phaseSlug = (phaseInfo?.phase_slug as string) || null;
@@ -444,7 +450,9 @@ export const initPlanPhase: QueryHandler = async (args, projectDir, workstream) 
 export const initNewMilestone: QueryHandler = async (_args, projectDir) => {
   const config = await loadConfig(projectDir);
   const planningDir = join(projectDir, '.planning');
-  const milestone = await getMilestoneInfo(projectDir);
+  // Phase 2 Plan 02-02 transitional: getMilestoneInfo migrated to adapter signature.
+  const adapter = await adapterFor(projectDir);
+  const milestone = await getMilestoneInfo(adapter);
   const latestCompleted = getLatestCompletedMilestone(projectDir);
 
   const phasesDir = join(planningDir, 'phases');
@@ -633,10 +641,12 @@ export const initPhaseOp: QueryHandler = async (args, projectDir, workstream) =>
   const planningDir = join(projectDir, relPlanningPath(workstream));
 
   // findPhase with archived override: if only match is archived, prefer ROADMAP
-  const phaseResult = await findPhase([phase], projectDir, workstream);
+  // Phase 2 Plan 02-02 transitional: findPhase + roadmapGetPhase migrated to adapter signature.
+  const adapter = await adapterFor(projectDir);
+  const phaseResult = await findPhase(adapter, [phase], projectDir, workstream);
   let phaseInfo = phaseResult.data as Record<string, unknown> | null;
 
-  const roadmapResult = await roadmapGetPhase([phase], projectDir, workstream);
+  const roadmapResult = await roadmapGetPhase(adapter, [phase], projectDir, workstream);
   const roadmapPhase = roadmapResult.data as Record<string, unknown> | null;
 
   // If the only match comes from an archived milestone, prefer current ROADMAP
@@ -797,7 +807,9 @@ export const initTodos: QueryHandler = async (args, projectDir) => {
 export const initMilestoneOp: QueryHandler = async (_args, projectDir) => {
   const config = await loadConfig(projectDir);
   const planningDir = join(projectDir, '.planning');
-  const milestone = await getMilestoneInfo(projectDir);
+  // Phase 2 Plan 02-02 transitional: getMilestoneInfo + extractCurrentMilestone migrated to adapter signature.
+  const adapter = await adapterFor(projectDir);
+  const milestone = await getMilestoneInfo(adapter);
 
   const phasesDir = join(planningDir, 'phases');
   let phaseCount = 0;
@@ -813,7 +825,7 @@ export const initMilestoneOp: QueryHandler = async (_args, projectDir) => {
   try {
     const { readFile } = await import('node:fs/promises');
     const roadmapRaw = await readFile(join(planningDir, 'ROADMAP.md'), 'utf-8');
-    const currentSection = await extractCurrentMilestone(roadmapRaw, projectDir);
+    const currentSection = await extractCurrentMilestone(adapter, roadmapRaw);
     roadmapPhaseNumbers = extractPhasesFromSection(currentSection).map(p => p.number);
   } catch { /* intentionally empty */ }
 

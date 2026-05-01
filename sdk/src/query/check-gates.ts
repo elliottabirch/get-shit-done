@@ -10,7 +10,7 @@ import { readFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { GSDError, ErrorClassification } from '../errors.js';
-import { normalizePhaseName, planningPaths } from './helpers.js';
+import { adapterFor, normalizePhaseName, planningPaths } from './helpers.js';
 import { findPhase } from './phase.js';
 import type { QueryHandler } from './utils.js';
 
@@ -82,7 +82,9 @@ export const checkGates: QueryHandler = async (args, projectDir, workstream) => 
 
   // Gate 3: Verification debt — check VERIFICATION.md in phase dir if phase provided
   if (phaseNum) {
-    const phaseRes = await findPhase([phaseNum], projectDir, workstream);
+    // Phase 2 Plan 02-02 transitional: findPhase migrated to adapter signature.
+    const adapter = await adapterFor(projectDir);
+    const phaseRes = await findPhase(adapter, [phaseNum], projectDir, workstream);
     const pdata = phaseRes.data as Record<string, unknown>;
     if (pdata.found && pdata.directory) {
       const phaseDirFull = join(projectDir, pdata.directory as string);

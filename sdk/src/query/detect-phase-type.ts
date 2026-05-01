@@ -3,16 +3,17 @@
  *
  * Replaces fragile grep-based UI/schema/API detection in workflows with a
  * structured query. See `.planning/research/decision-routing-audit.md` §3.6.
+ *
+ * Phase 2 Plan 02-02 Task 1 (D-12, D-10): adapter-as-first-arg signature;
+ * fs reads (readFile, existsSync, readdirSync) routed through adapter.
  */
 
-import { readFile } from 'node:fs/promises';
-import { existsSync, readdirSync } from 'node:fs';
-import { join } from 'node:path';
 import { GSDError, ErrorClassification } from '../errors.js';
-import { escapeRegex, normalizePhaseName, planningPaths } from './helpers.js';
+import { escapeRegex, normalizePhaseName, planningRelativePath } from './helpers.js';
 import { findPhase } from './phase.js';
 import { detectSchemaFiles } from './schema-detect.js';
-import type { QueryHandler } from './utils.js';
+import type { QueryResult } from './utils.js';
+import type { StorageAdapter } from '../../../adapters/types.js';
 
 // Copied from phase-ready.ts — do not import to avoid cross-module coupling.
 const UI_INDICATOR_RE = /UI|interface|frontend|component|layout|page|screen|view|form|dashboard|widget/i;
@@ -21,42 +22,57 @@ const API_INDICATOR_RE = /route\.ts|controller\.|api\//i;
 const API_HEADING_RE = /\bAPI\b|endpoint|REST|GraphQL/i;
 const INFRA_RE = /docker|terraform|k8s|helm|infra/i;
 
-async function roadmapHeadingForPhase(projectDir: string, phaseNum: string, workstream?: string): Promise<string | null> {
-  const roadmapPath = planningPaths(projectDir, workstream).roadmap;
-  let content: string;
-  try {
-    content = await readFile(roadmapPath, 'utf-8');
-  } catch {
-    return null;
-  }
+async function roadmapHeadingForPhase(
+  adapter: StorageAdapter,
+  phaseNum: string,
+  workstream?: string,
+): Promise<string | null> {
+  const content = await adapter.getRecord(planningRelativePath(workstream, 'ROADMAP.md'));
+  if (content === null) return null;
   const re = new RegExp(`#{2,4}\\s*Phase\\s+${escapeRegex(phaseNum)}\\s*:[^\\n]*`, 'i');
   const m = content.match(re);
   return m ? m[0] : null;
 }
 
-export const detectPhaseType: QueryHandler = async (args, projectDir, workstream) => {
+/**
+ * Strip leading `.planning/` segment from a directory string returned by findPhase
+ * to produce an adapter-resolvable path. Adapter is rooted at `.planning/`.
+ */
+function toAdapterDir(planningRelDir: string): string {
+  if (planningRelDir.startsWith('.planning/')) {
+    return planningRelDir.slice('.planning/'.length);
+  }
+  return planningRelDir;
+}
+
+export const detectPhaseType = async (
+  adapter: StorageAdapter,
+  args: string[],
+  projectDir: string,
+  workstream?: string,
+): Promise<QueryResult> => {
   const raw = args[0];
   if (!raw) {
     throw new GSDError('phase number required for detect phase-type', ErrorClassification.Validation);
   }
   const phaseArg = normalizePhaseName(raw);
 
-  const phaseRes = await findPhase([raw], projectDir, workstream);
+  const phaseRes = await findPhase(adapter, [raw], projectDir, workstream);
   const pdata = phaseRes.data as Record<string, unknown>;
   const found = Boolean(pdata.found);
 
-  // Build phase dir absolute path when found
-  let phaseDirFull: string | null = null;
+  // Build phase adapter-rel path when found
+  let phaseAdapterRel: string | null = null;
   if (found && pdata.directory) {
-    phaseDirFull = join(projectDir, pdata.directory as string);
+    phaseAdapterRel = toAdapterDir(pdata.directory as string);
   }
 
   const phaseNumForRoadmap = (pdata.phase_number as string) || phaseArg;
 
   // Read ROADMAP heading — try both normalized forms
-  let heading = await roadmapHeadingForPhase(projectDir, phaseNumForRoadmap, workstream);
+  let heading = await roadmapHeadingForPhase(adapter, phaseNumForRoadmap, workstream);
   if (!heading && phaseNumForRoadmap !== phaseArg) {
-    heading = await roadmapHeadingForPhase(projectDir, phaseArg, workstream);
+    heading = await roadmapHeadingForPhase(adapter, phaseArg, workstream);
   }
 
   // Frontend detection
@@ -76,12 +92,10 @@ export const detectPhaseType: QueryHandler = async (args, projectDir, workstream
   let hasUiSpecFile = false;
   let dirFiles: string[] = [];
 
-  if (phaseDirFull && existsSync(phaseDirFull)) {
-    try {
-      dirFiles = readdirSync(phaseDirFull, { recursive: false }) as string[];
-    } catch {
-      dirFiles = [];
-    }
+  if (phaseAdapterRel) {
+    // Pitfall 3: listCollection returns [] on ENOENT
+    const refs = await adapter.listCollection(phaseAdapterRel);
+    dirFiles = refs.map(r => r.name);
     hasUiSpecFile = dirFiles.some(f => f === 'UI-SPEC.md' || f.endsWith('-UI-SPEC.md'));
   }
 
@@ -92,22 +106,19 @@ export const detectPhaseType: QueryHandler = async (args, projectDir, workstream
   let schemaOrm: string | null = null;
   let hasSchema = false;
 
-  if (phaseDirFull && dirFiles.length > 0) {
-    // Also check subdirectory one level deep (e.g. prisma/schema.prisma)
-    const allRelPaths: string[] = [...dirFiles];
-    for (const f of dirFiles) {
-      const sub = join(phaseDirFull, f);
-      if (existsSync(sub)) {
-        try {
-          const subStat = readdirSync(sub);
-          for (const sf of subStat) {
-            allRelPaths.push(`${f}/${sf}`);
-          }
-        } catch {
-          // Not a directory — ignore
-        }
-      }
-    }
+  if (phaseAdapterRel && dirFiles.length > 0) {
+    // Also check subdirectory one level deep (e.g. prisma/schema.prisma).
+    // Use Promise.all to parallelize the per-entry stat + sub-list (Pitfall 2).
+    const subResults = await Promise.all(
+      dirFiles.map(async f => {
+        const subRel = `${phaseAdapterRel}/${f}`;
+        const st = await adapter.stat(subRel);
+        if (st === null || st.kind !== 'dir') return [] as string[];
+        const subRefs = await adapter.listCollection(subRel);
+        return subRefs.map(r => `${f}/${r.name}`);
+      }),
+    );
+    const allRelPaths: string[] = [...dirFiles, ...subResults.flat()];
 
     const detection = detectSchemaFiles(allRelPaths);
     if (detection.detected) {

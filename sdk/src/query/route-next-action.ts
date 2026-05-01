@@ -116,7 +116,7 @@ export const routeNextAction = async (
 
   const consecutiveCalls = await readConsecutiveCallCount(adapter, workstream);
 
-  const ra = await roadmapAnalyze([], projectDir, workstream);
+  const ra = await roadmapAnalyze(adapter, [], projectDir, workstream);
   const raData = ra.data as { phases?: Array<Record<string, unknown>> };
   const phases = raData.phases ?? [];
 
@@ -130,7 +130,7 @@ export const routeNextAction = async (
 
   let unresolvedVerification = false;
   if (currentPhase) {
-    const fp = await findPhase([currentPhase], projectDir, workstream);
+    const fp = await findPhase(adapter, [currentPhase], projectDir, workstream);
     const fd = fp.data as Record<string, unknown>;
     if (fd.found && fd.directory) {
       unresolvedVerification = await hasUnresolvedVerificationFails(
@@ -160,7 +160,7 @@ export const routeNextAction = async (
         uat_gaps: 0,
       };
     }
-    const fp = await findPhase([cp], projectDir, workstream);
+    const fp = await findPhase(adapter, [cp], projectDir, workstream);
     const d = fp.data as Record<string, unknown>;
     const plans = (d.plans as string[]) ?? [];
     const summaries = (d.summaries as string[]) ?? [];
@@ -246,7 +246,7 @@ export const routeNextAction = async (
     };
   }
 
-  const fp = await findPhase([currentPhase], projectDir, workstream);
+  const fp = await findPhase(adapter, [currentPhase], projectDir, workstream);
   const pd = fp.data as Record<string, unknown>;
   const found = Boolean(pd.found);
   const cp = normalizePhaseName(currentPhase);

@@ -469,6 +469,29 @@ export async function planningBaseIsDir(adapter: StorageAdapter): Promise<boolea
   return st !== null && st.kind === 'dir';
 }
 
+// ─── adapterFor (Phase 2 transitional helper) ─────────────────────────────
+
+/**
+ * Construct a MarkdownAdapter for a project directory.
+ *
+ * Phase 2 Plan 02-02 transitional helper: adapter-aware helpers
+ * (`getMilestoneInfo`, `extractCurrentMilestone`, `findPhase`, `roadmapAnalyze`,
+ * etc.) take an adapter as their first argument. Callers that have NOT yet
+ * been migrated to thread an adapter from their handler closure can call this
+ * helper to obtain one for the project — this preserves the public
+ * `(args, projectDir)` handler shape while letting the inner reads route
+ * through the adapter. Plans 02-03/04 and Phase 3 fully thread adapters and
+ * remove these inline constructions.
+ *
+ * Lazy import keeps this file free of an `adapters/` static import (which
+ * would create a Phase 1-era dependency cycle on the markdown adapter when
+ * helpers.ts is imported very early in the registry build).
+ */
+export async function adapterFor(projectDir: string): Promise<StorageAdapter> {
+  const { MarkdownAdapter } = await import('../../../adapters/markdown/index.js');
+  return new MarkdownAdapter(projectDir);
+}
+
 // ─── resolvePathUnderProject ───────────────────────────────────────────────
 
 /**
