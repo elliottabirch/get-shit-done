@@ -3,12 +3,19 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it, expect } from 'vitest';
 import { routeNextAction } from './route-next-action.js';
+import { MarkdownAdapter } from '../../../adapters/markdown/index.js';
+
+// Phase 2 Plan 02-01 Task 5: routeNextAction migrated to adapter-as-first-arg
+// signature. Tests construct a MarkdownAdapter rooted at the test tmpdir and
+// pass it explicitly (Shape A). Production callers receive the adapter via
+// createRegistry's closure wrapper.
 
 describe('routeNextAction', () => {
   it('suggests new-project when STATE.md is missing', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'gsd-rna-'));
     await mkdir(join(dir, '.planning'), { recursive: true });
-    const { data } = await routeNextAction([], dir);
+    const adapter = new MarkdownAdapter(dir);
+    const { data } = await routeNextAction(adapter, [], dir);
     expect(data).toMatchObject({
       command: '/gsd-new-project',
       reason: expect.stringContaining('STATE.md'),
@@ -30,7 +37,8 @@ milestone: v1.0
       'utf-8',
     );
     await writeFile(join(dir, '.planning', 'ROADMAP.md'), '# Roadmap\n', 'utf-8');
-    const { data } = await routeNextAction([], dir);
+    const adapter = new MarkdownAdapter(dir);
+    const { data } = await routeNextAction(adapter, [], dir);
     expect(data).toMatchObject({
       command: '/gsd-resume-work',
     });
@@ -52,7 +60,8 @@ milestone: v1.0
       'utf-8',
     );
     await writeFile(join(dir, '.planning', 'ROADMAP.md'), '# Roadmap\n', 'utf-8');
-    const { data } = await routeNextAction([], dir);
+    const adapter = new MarkdownAdapter(dir);
+    const { data } = await routeNextAction(adapter, [], dir);
     expect(data).toMatchObject({
       command: '',
       gates: expect.objectContaining({ continue_here: true }),
