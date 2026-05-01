@@ -5,26 +5,30 @@
  * Provides UAT checkpoint rendering for verify-work workflows and
  * audit scanning for UAT/VERIFICATION files across phases.
  *
+ * Phase 2 Plan 02-03 Task 1 (D-12): document-tree reads route through the
+ * StorageAdapter. auditUat walks all phase dirs via listCollection and reads
+ * UAT/VERIFICATION content via getRecord. uatRenderCheckpoint retains a direct
+ * readFileSync against a user-supplied path (resolved via resolvePathUnderProject)
+ * — documented inline as an audited exception.
+ *
  * @example
- * ```typescript
- * import { uatRenderCheckpoint, auditUat } from './uat.js';
- *
- * await uatRenderCheckpoint(['--file', 'path/to/UAT.md'], '/project');
- * // { data: { test_number: 1, test_name: 'Login', checkpoint: '...' } }
- *
- * await auditUat([], '/project');
- * // { data: { results: [...], summary: { total_files: 2, total_items: 5 } } }
- * ```
+ *   import { uatRenderCheckpoint, auditUat } from './uat.js';
+ *   await uatRenderCheckpoint(adapter, ['--file', 'path/to/UAT.md'], '/project');
+ *   // { data: { test_number: 1, test_name: 'Login', checkpoint: '...' } }
+ *   await auditUat(adapter, [], '/project');
+ *   // { data: { results: [...], summary: { total_files: 2, total_items: 5 } } }
  */
 
-import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 
 import { GSDError, ErrorClassification } from '../errors.js';
 import { extractFrontmatter } from './frontmatter.js';
-import { planningPaths, resolvePathUnderProject, sanitizeForDisplay, toPosixPath } from './helpers.js';
+import { planningRelativePath, resolvePathUnderProject, sanitizeForDisplay, toPosixPath } from './helpers.js';
+import { relPlanningPath } from '../workstream-utils.js';
 import { getMilestonePhaseFilter } from './state.js';
-import type { QueryHandler } from './utils.js';
+import type { QueryResult } from './utils.js';
+import type { StorageAdapter } from '../../../adapters/types.js';
 
 /** Same string as `buildCheckpoint` in `get-shit-done/bin/lib/uat.cjs`. */
 function buildUatCheckpoint(currentTest: { number: number; name: string; expected: string }): string {
@@ -53,8 +57,20 @@ function buildUatCheckpoint(currentTest: { number: number; name: string; expecte
  * checkpoint via `buildCheckpoint`, name/expected via `sanitizeForDisplay`).
  *
  * Args: --file <path>
+ *
+ * Phase 2 audited exception (D-14 + RESEARCH §"Read-Surface Inventory"):
+ * uatRenderCheckpoint reads a user-supplied path (resolved via resolvePathUnderProject)
+ * which may be OUTSIDE the planning tree. Adapter cannot resolve project-absolute paths.
+ * This direct fs read is intentional. Phase 4 LEAKS-04 may add a `// leak-grep-allow line:`
+ * suppression directive once the parser ships; for Phase 2 the path argument is not
+ * planning-scoped, so leak-grep's Stage-2 filter naturally suppresses this match.
  */
-export const uatRenderCheckpoint: QueryHandler = async (args, projectDir) => {
+export const uatRenderCheckpoint = async (
+  _adapter: StorageAdapter,
+  args: string[],
+  projectDir: string,
+  _workstream?: string,
+): Promise<QueryResult> => {
   const fileIdx = args.indexOf('--file');
   const filePath = fileIdx !== -1 ? args[fileIdx + 1] : null;
   if (!filePath) {
@@ -280,38 +296,61 @@ function parseVerificationItems(content: string, status: string, fm?: Record<str
 
 /**
  * Cross-phase UAT / VERIFICATION audit — port of `cmdAuditUat` (`uat.cjs`).
+ *
+ * Phase 2 Plan 02-03 Task 1 (D-12): all directory walks and document reads
+ * route through the StorageAdapter via listCollection + getRecord.
  */
-export const auditUat: QueryHandler = async (_args, projectDir, workstream) => {
-  const paths = planningPaths(projectDir, workstream);
-  if (!existsSync(paths.phases)) {
+export const auditUat = async (
+  adapter: StorageAdapter,
+  _args: string[],
+  projectDir: string,
+  workstream?: string,
+): Promise<QueryResult> => {
+  const phasesRel = planningRelativePath(workstream, 'phases');
+  const phasesExist = await adapter.exists(phasesRel);
+  if (!phasesExist) {
     throw new GSDError('No phases directory found in planning directory', ErrorClassification.Blocked);
   }
 
   const isDirInMilestone = await getMilestonePhaseFilter(projectDir, workstream);
   const results: Record<string, unknown>[] = [];
 
-  const dirs = readdirSync(paths.phases, { withFileTypes: true })
-    .filter(e => e.isDirectory())
-    .map(e => e.name)
-    .filter(isDirInMilestone)
-    .sort();
+  // Project-relative root for file_path display (matches CJS output shape).
+  // For workstream runs, this is `.planning/workstreams/<ws>`; otherwise `.planning`.
+  const planningRoot = relPlanningPath(workstream);
 
-  for (const dir of dirs) {
+  // Walk phase directories via adapter.
+  const phaseRefs = await adapter.listCollection(phasesRel);
+  const dirNames: Array<{ name: string; path: string }> = [];
+  for (const ref of phaseRefs) {
+    const st = await adapter.stat(ref.path);
+    if (st === null || st.kind !== 'dir') continue;
+    if (!isDirInMilestone(ref.name)) continue;
+    dirNames.push({ name: ref.name, path: ref.path });
+  }
+  dirNames.sort((a, b) => a.name.localeCompare(b.name));
+
+  for (const { name: dir, path: phaseRelDir } of dirNames) {
     const phaseMatch = dir.match(/^(\d+[A-Z]?(?:\.\d+)*)/i);
     const phaseNum = phaseMatch ? phaseMatch[1] : dir;
-    const phaseDir = join(paths.phases, dir);
-    const files = readdirSync(phaseDir);
 
-    for (const file of files.filter(f => f.includes('-UAT') && f.endsWith('.md'))) {
-      const content = readFileSync(join(phaseDir, file), 'utf-8');
+    const fileRefs = await adapter.listCollection(phaseRelDir);
+    const fileNames = fileRefs.map(r => r.name);
+
+    for (const file of fileNames.filter(f => f.includes('-UAT') && f.endsWith('.md'))) {
+      const content = await adapter.getRecord(`${phaseRelDir}/${file}`);
+      if (content === null) continue;
       const items = parseUatItems(content);
       if (items.length > 0) {
         const fm = extractFrontmatter(content);
+        // file_path is project-relative POSIX; the adapter path is planning-base-relative,
+        // so we compose with the project-relative planning root.
+        const fileProjectRel = toPosixPath(join(planningRoot, phaseRelDir, file));
         results.push({
           phase: phaseNum,
           phase_dir: dir,
           file,
-          file_path: toPosixPath(relative(projectDir, join(phaseDir, file))),
+          file_path: fileProjectRel,
           type: 'uat',
           status: (fm.status || 'unknown') as string,
           items,
@@ -319,18 +358,20 @@ export const auditUat: QueryHandler = async (_args, projectDir, workstream) => {
       }
     }
 
-    for (const file of files.filter(f => f.includes('-VERIFICATION') && f.endsWith('.md'))) {
-      const content = readFileSync(join(phaseDir, file), 'utf-8');
+    for (const file of fileNames.filter(f => f.includes('-VERIFICATION') && f.endsWith('.md'))) {
+      const content = await adapter.getRecord(`${phaseRelDir}/${file}`);
+      if (content === null) continue;
       const fm = extractFrontmatter(content);
       const status = (fm.status || 'unknown') as string;
       if (status === 'human_needed' || status === 'gaps_found') {
         const items = parseVerificationItems(content, status, fm);
         if (items.length > 0) {
+          const fileProjectRel = toPosixPath(join(planningRoot, phaseRelDir, file));
           results.push({
             phase: phaseNum,
             phase_dir: dir,
             file,
-            file_path: toPosixPath(relative(projectDir, join(phaseDir, file))),
+            file_path: fileProjectRel,
             type: 'verification',
             status,
             items,

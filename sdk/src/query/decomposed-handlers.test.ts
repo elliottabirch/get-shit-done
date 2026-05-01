@@ -25,6 +25,7 @@ import {
 } from './workstream.js';
 import { docsInit } from './docs-init.js';
 import { websearch } from './websearch.js';
+import { MarkdownAdapter } from '../../../adapters/markdown/index.js';
 
 let tmpDir: string;
 
@@ -240,7 +241,9 @@ describe('milestoneComplete', () => {
 
 describe('summaryExtract', () => {
   it('returns error when file not found', async () => {
-    const result = await summaryExtract(['.planning/nonexistent.md'], tmpDir);
+    // Phase 2 Plan 02-03 Task 1: signature now takes adapter as first arg.
+    const adapter = new MarkdownAdapter(tmpDir);
+    const result = await summaryExtract(adapter, ['.planning/nonexistent.md'], tmpDir);
     const data = result.data as Record<string, unknown>;
     expect(data.error).toBeDefined();
   });
@@ -252,7 +255,8 @@ describe('summaryExtract', () => {
       ['---', 'phase: "09"', 'one-liner: Built it.', 'key-files:', '  - x.ts', '---', '', '# Summary', ''].join('\n'),
       'utf-8',
     );
-    const result = await summaryExtract(['.planning/phases/09-foundation/09-01-SUMMARY.md'], tmpDir);
+    const adapter = new MarkdownAdapter(tmpDir);
+    const result = await summaryExtract(adapter, ['.planning/phases/09-foundation/09-01-SUMMARY.md'], tmpDir);
     const data = result.data as Record<string, unknown>;
     expect(data.one_liner).toBe('Built it.');
     expect(data.key_files).toEqual(['x.ts']);
@@ -261,7 +265,8 @@ describe('summaryExtract', () => {
 
 describe('historyDigest', () => {
   it('returns phases object with completed summaries', async () => {
-    const result = await historyDigest([], tmpDir);
+    const adapter = new MarkdownAdapter(tmpDir);
+    const result = await historyDigest(adapter, [], tmpDir);
     const data = result.data as Record<string, unknown>;
     expect(typeof data.phases).toBe('object');
     expect(Array.isArray(data.decisions)).toBe(true);

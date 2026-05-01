@@ -534,12 +534,27 @@ export function createRegistry(opts: {
   registry.register('todo complete', todoComplete);
   registry.register('milestone.complete', milestoneComplete);
   registry.register('milestone complete', milestoneComplete);
-  registry.register('summary.extract', summaryExtract);
-  registry.register('summary extract', summaryExtract);
-  registry.register('summary-extract', summaryExtract);
-  registry.register('history.digest', historyDigest);
-  registry.register('history digest', historyDigest);
-  registry.register('history-digest', historyDigest);
+  // Phase 2 Plan 02-03 Task 1: summaryExtract + historyDigest migrated to
+  // adapter-as-first-arg signature. Closure wrappers thread the adapter from
+  // createRegistry's opts. All three aliases preserved.
+  registry.register('summary.extract', (args, projectDir, ws) =>
+    summaryExtract(adapter, args, projectDir, ws),
+  );
+  registry.register('summary extract', (args, projectDir, ws) =>
+    summaryExtract(adapter, args, projectDir, ws),
+  );
+  registry.register('summary-extract', (args, projectDir, ws) =>
+    summaryExtract(adapter, args, projectDir, ws),
+  );
+  registry.register('history.digest', (args, projectDir, ws) =>
+    historyDigest(adapter, args, projectDir, ws),
+  );
+  registry.register('history digest', (args, projectDir, ws) =>
+    historyDigest(adapter, args, projectDir, ws),
+  );
+  registry.register('history-digest', (args, projectDir, ws) =>
+    historyDigest(adapter, args, projectDir, ws),
+  );
   registry.register('stats', statsJson);
   registry.register('stats.json', statsJson);
   registry.register('stats json', statsJson);
@@ -583,9 +598,26 @@ export function createRegistry(opts: {
   registry.register('detect-custom-files', detectCustomFiles);
   registry.register('extract-messages', extractMessages);
   registry.register('extract.messages', extractMessages);
-  registry.register('audit-uat', auditUat);
-  registry.register('uat.render-checkpoint', uatRenderCheckpoint);
-  registry.register('uat render-checkpoint', uatRenderCheckpoint);
+  // Phase 2 Plan 02-03 Task 1: auditUat + uatRenderCheckpoint migrated to
+  // adapter-as-first-arg signature. Closure wrappers thread the adapter from
+  // createRegistry's opts. `audit.uat` dotted form added alongside the
+  // hyphenated `audit-uat` to align with the Plan-3 canonical key naming
+  // (alias parity with `summary.extract` / `summary-extract`).
+  registry.register('audit-uat', (args, projectDir, ws) =>
+    auditUat(adapter, args, projectDir, ws),
+  );
+  registry.register('audit.uat', (args, projectDir, ws) =>
+    auditUat(adapter, args, projectDir, ws),
+  );
+  registry.register('audit uat', (args, projectDir, ws) =>
+    auditUat(adapter, args, projectDir, ws),
+  );
+  registry.register('uat.render-checkpoint', (args, projectDir, ws) =>
+    uatRenderCheckpoint(adapter, args, projectDir, ws),
+  );
+  registry.register('uat render-checkpoint', (args, projectDir, ws) =>
+    uatRenderCheckpoint(adapter, args, projectDir, ws),
+  );
   registry.register('intel.diff', intelDiff);
   registry.register('intel diff', intelDiff);
   registry.register('intel.snapshot', intelSnapshot);
