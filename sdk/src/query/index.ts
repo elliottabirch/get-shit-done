@@ -579,7 +579,14 @@ export function createRegistry(opts: {
   registry.register('workstream complete', workstreamComplete);
   registry.register('workstream.progress', workstreamProgress);
   registry.register('workstream progress', workstreamProgress);
-  registry.register('docs-init', docsInit);
+  // Phase 2 Plan 02-03 Task 2: docsInit migrated to adapter-as-first-arg
+  // signature. Closure wrapper threads the adapter from createRegistry's opts.
+  registry.register('docs-init', (args, projectDir, ws) =>
+    docsInit(adapter, args, projectDir, ws),
+  );
+  registry.register('docs.init', (args, projectDir, ws) =>
+    docsInit(adapter, args, projectDir, ws),
+  );
   registry.register('websearch', websearch);
   registry.register('learnings.copy', learningsCopy);
   registry.register('learnings copy', learningsCopy);
@@ -618,22 +625,58 @@ export function createRegistry(opts: {
   registry.register('uat render-checkpoint', (args, projectDir, ws) =>
     uatRenderCheckpoint(adapter, args, projectDir, ws),
   );
-  registry.register('intel.diff', intelDiff);
-  registry.register('intel diff', intelDiff);
-  registry.register('intel.snapshot', intelSnapshot);
-  registry.register('intel snapshot', intelSnapshot);
-  registry.register('intel.validate', intelValidate);
-  registry.register('intel validate', intelValidate);
-  registry.register('intel.status', intelStatus);
-  registry.register('intel status', intelStatus);
-  registry.register('intel.query', intelQuery);
-  registry.register('intel query', intelQuery);
-  registry.register('intel.extract-exports', intelExtractExports);
-  registry.register('intel extract-exports', intelExtractExports);
-  registry.register('intel.patch-meta', intelPatchMeta);
-  registry.register('intel patch-meta', intelPatchMeta);
-  registry.register('intel.update', intelUpdate);
-  registry.register('intel update', intelUpdate);
+  // Phase 2 Plan 02-03 Task 2: intel handlers migrated to adapter-as-first-arg
+  // signature. Closure wrappers thread the adapter from createRegistry's opts.
+  // Read paths route through adapter; write paths inside the handlers stay
+  // direct fs per D-14 (Phase 3 territory).
+  registry.register('intel.diff', (args, projectDir, ws) =>
+    intelDiff(adapter, args, projectDir, ws),
+  );
+  registry.register('intel diff', (args, projectDir, ws) =>
+    intelDiff(adapter, args, projectDir, ws),
+  );
+  registry.register('intel.snapshot', (args, projectDir, ws) =>
+    intelSnapshot(adapter, args, projectDir, ws),
+  );
+  registry.register('intel snapshot', (args, projectDir, ws) =>
+    intelSnapshot(adapter, args, projectDir, ws),
+  );
+  registry.register('intel.validate', (args, projectDir, ws) =>
+    intelValidate(adapter, args, projectDir, ws),
+  );
+  registry.register('intel validate', (args, projectDir, ws) =>
+    intelValidate(adapter, args, projectDir, ws),
+  );
+  registry.register('intel.status', (args, projectDir, ws) =>
+    intelStatus(adapter, args, projectDir, ws),
+  );
+  registry.register('intel status', (args, projectDir, ws) =>
+    intelStatus(adapter, args, projectDir, ws),
+  );
+  registry.register('intel.query', (args, projectDir, ws) =>
+    intelQuery(adapter, args, projectDir, ws),
+  );
+  registry.register('intel query', (args, projectDir, ws) =>
+    intelQuery(adapter, args, projectDir, ws),
+  );
+  registry.register('intel.extract-exports', (args, projectDir, ws) =>
+    intelExtractExports(adapter, args, projectDir, ws),
+  );
+  registry.register('intel extract-exports', (args, projectDir, ws) =>
+    intelExtractExports(adapter, args, projectDir, ws),
+  );
+  registry.register('intel.patch-meta', (args, projectDir, ws) =>
+    intelPatchMeta(adapter, args, projectDir, ws),
+  );
+  registry.register('intel patch-meta', (args, projectDir, ws) =>
+    intelPatchMeta(adapter, args, projectDir, ws),
+  );
+  registry.register('intel.update', (args, projectDir, ws) =>
+    intelUpdate(adapter, args, projectDir, ws),
+  );
+  registry.register('intel update', (args, projectDir, ws) =>
+    intelUpdate(adapter, args, projectDir, ws),
+  );
   registry.register('generate-claude-profile', generateClaudeProfile);
   registry.register('generate-dev-preferences', generateDevPreferences);
   registry.register('write-profile', writeProfile);
