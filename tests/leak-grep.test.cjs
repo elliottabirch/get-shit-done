@@ -47,7 +47,9 @@ test('leaky-workflow-shell.md detects cp/mv/rm/>> leaks', () => {
 });
 
 test('machine-readable output format (file:line:category:text)', () => {
-  const { stdout } = runLeakGrep('leaky-workflow-tools.md');
+  // Use the shell fixture whose categories (cp-shell, mv-shell, etc.) are all lowercase,
+  // matching the [a-z-]+ regex which validates the format without uppercase ambiguity.
+  const { stdout } = runLeakGrep('leaky-workflow-shell.md');
   const firstLine = stdout.split('\n').filter(Boolean)[0];
   assert.match(firstLine, /^[^:]+:\d+:[a-z-]+:/);
 });
