@@ -24,7 +24,7 @@ and ships migration + distribution (Phase 8).
 - Integer phases (1–8): canonical scope from SYNTHESIS.md §7.
 - Decimal phases (e.g. 4.1) reserved for urgent insertions during execution.
 
-- [ ] **Phase 1: Fork bootstrap + StorageAdapter interface skeleton + MarkdownAdapter scaffold** — Define the adapter contract, scaffold MarkdownAdapter, reconcile with recent upstream seam PRs, lock OQ-08. *(this repo)*
+- [x] **Phase 1: Fork bootstrap + StorageAdapter interface skeleton + MarkdownAdapter scaffold** — Define the adapter contract, scaffold MarkdownAdapter, reconcile with recent upstream seam PRs, lock OQ-08. *(this repo)* (completed 2026-05-01)
 - [ ] **Phase 2: Wire core read methods to adapter** — Route every SDK read query and skill `<context>` `@.planning/...` reference through the adapter. *(this repo)*
 - [ ] **Phase 3: Wire core write methods + recordStateEvent** — Migrate `state-mutation.js` + `phase-lifecycle.js` to adapter writes; introduce the discriminated-union event record; resolve OQ-01. *(this repo)*
 - [ ] **Phase 4: Plug workflow leaks (top-10 + `<context>`-block class)** — Refactor the 10 heaviest leaking workflows + the new frontmatter `@`-reference leak class; ship the leak-grep CI gate; resolve OQ-03 + OQ-04. *(this repo)*
@@ -48,13 +48,13 @@ and ships migration + distribution (Phase 8).
   4. A written reconciliation note records, for each of upstream PRs #2898 / #2901 / #2908 / #2909, whether the seam they introduce is (a) reusable foundation we build on, (b) parallel work to coordinate, or (c) divergent vision requiring a fork-side adaptation — and the locked contract reflects that judgement.
   5. OQ-08 is resolved: `replaceInCurrentMilestone` and `readModifyWriteRoadmapMd` are explicitly inside MarkdownAdapter as private helpers and absent from the public StorageAdapter type signature.
   *Note: SC#1 and SC#5 are SUPERSEDED by CONTEXT.md D-13 and D-09 respectively. Plans implement the locked decisions: D-13 defers #2909 parity to Phase 8, D-09 makes markdownLockfile helpers PUBLIC + capability-gated.*
-**Plans:** 3/5 plans executed
+**Plans:** 5/5 plans complete
 Plans:
 - [x] 01-01-PLAN.md — StorageAdapter interface + Capabilities + UnsupportedCapabilityError + 6 type guards (adapters/types.ts) + adapters/tsconfig.json + project reference
 - [x] 01-02-PLAN.md — Per-PR ADRs in DECISIONS.md (#2898/#2901/#2908/#2909) + scripts/leak-grep.cjs + R5/<context>-block fixtures + test
 - [x] 01-03-PLAN.md — MarkdownAdapter scaffold via createRequire wrap (Bin A + markdownLockfile + commitPlanningState; foundationals throw UnsupportedCapabilityError)
-- [ ] 01-04-PLAN.md — createRegistry({adapter}) DI signature change + 4 production sites + 7 SDK test files updated
-- [ ] 01-05-PLAN.md — Conformance harness factory (tests/conformance/) + sample MarkdownAdapter test + vitest config + npm script
+- [x] 01-04-PLAN.md — createRegistry({adapter}) DI signature change + 4 production sites + 7 SDK test files updated
+- [x] 01-05-PLAN.md — Conformance harness factory (tests/conformance/) + sample MarkdownAdapter test + vitest config + npm script
 
 ### Phase 2: Wire core read methods to adapter
 **Repo:** this repo (`feat/storage-adapter`)
@@ -158,7 +158,7 @@ Phase 6 begins in sibling repo `~/code/gsd-beads` only after Phase 5 ships in th
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Fork bootstrap + StorageAdapter interface skeleton + MarkdownAdapter scaffold | 3/5 | In Progress|  |
+| 1. Fork bootstrap + StorageAdapter interface skeleton + MarkdownAdapter scaffold | 5/5 | Complete   | 2026-05-01 |
 | 2. Wire core read methods to adapter | 0/TBD | Not started | - |
 | 3. Wire core write methods + recordStateEvent | 0/TBD | Not started | - |
 | 4. Plug workflow leaks (top-10 + `<context>`-block class) | 0/TBD | Not started | - |
