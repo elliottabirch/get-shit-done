@@ -17,6 +17,7 @@ import { mkdtemp, writeFile, mkdir, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { initProgress, initManager } from './init-complex.js';
+import { MarkdownAdapter } from '../../../adapters/markdown/index.js';
 
 /** Find a phase by numeric value regardless of zero-padding ('3' vs '03'). */
 function findPhase(
@@ -27,6 +28,7 @@ function findPhase(
 }
 
 let tmpDir: string;
+let adapter: MarkdownAdapter;
 
 const CONFIG = JSON.stringify({
   model_profile: 'balanced',
@@ -74,6 +76,7 @@ async function writeRoadmap(
 
 beforeEach(async () => {
   tmpDir = await mkdtemp(join(tmpdir(), 'gsd-2674-'));
+  adapter = new MarkdownAdapter(tmpDir);
   await mkdir(join(tmpDir, '.planning', 'phases'), { recursive: true });
   await writeFile(join(tmpDir, '.planning', 'config.json'), CONFIG);
   await writeFile(join(tmpDir, '.planning', 'STATE.md'), STATE);
@@ -89,8 +92,8 @@ describe('initProgress + initManager precedence (#2674)', () => {
     await mkdir(join(tmpDir, '.planning', 'phases', '03-stubbed'), { recursive: true });
     // stub dir, no PLAN/SUMMARY/RESEARCH/CONTEXT files
 
-    const progress = (await initProgress([], tmpDir)).data as Record<string, unknown>;
-    const manager = (await initManager([], tmpDir)).data as Record<string, unknown>;
+    const progress = (await initProgress(adapter, [], tmpDir)).data as Record<string, unknown>;
+    const manager = (await initManager(adapter, [], tmpDir)).data as Record<string, unknown>;
 
     const pPhase = findPhase(progress.phases as Record<string, unknown>[], 3);
     const mPhase = findPhase(manager.phases as Record<string, unknown>[], 3);
@@ -105,8 +108,8 @@ describe('initProgress + initManager precedence (#2674)', () => {
     await writeFile(join(tmpDir, '.planning', 'phases', '03-done', '03-01-PLAN.md'), '# plan');
     await writeFile(join(tmpDir, '.planning', 'phases', '03-done', '03-01-SUMMARY.md'), '# done');
 
-    const progress = (await initProgress([], tmpDir)).data as Record<string, unknown>;
-    const manager = (await initManager([], tmpDir)).data as Record<string, unknown>;
+    const progress = (await initProgress(adapter, [], tmpDir)).data as Record<string, unknown>;
+    const manager = (await initManager(adapter, [], tmpDir)).data as Record<string, unknown>;
 
     const pPhase = findPhase(progress.phases as Record<string, unknown>[], 3);
     const mPhase = findPhase(manager.phases as Record<string, unknown>[], 3);
@@ -121,8 +124,8 @@ describe('initProgress + initManager precedence (#2674)', () => {
     await writeFile(join(tmpDir, '.planning', 'phases', '03-disk', '03-01-PLAN.md'), '# plan');
     await writeFile(join(tmpDir, '.planning', 'phases', '03-disk', '03-01-SUMMARY.md'), '# done');
 
-    const progress = (await initProgress([], tmpDir)).data as Record<string, unknown>;
-    const manager = (await initManager([], tmpDir)).data as Record<string, unknown>;
+    const progress = (await initProgress(adapter, [], tmpDir)).data as Record<string, unknown>;
+    const manager = (await initManager(adapter, [], tmpDir)).data as Record<string, unknown>;
 
     const pPhase = findPhase(progress.phases as Record<string, unknown>[], 3);
     const mPhase = findPhase(manager.phases as Record<string, unknown>[], 3);
@@ -135,8 +138,8 @@ describe('initProgress + initManager precedence (#2674)', () => {
     await writeRoadmap(tmpDir, [{ num: '3', name: 'Empty', checked: false }]);
     await mkdir(join(tmpDir, '.planning', 'phases', '03-empty'), { recursive: true });
 
-    const progress = (await initProgress([], tmpDir)).data as Record<string, unknown>;
-    const manager = (await initManager([], tmpDir)).data as Record<string, unknown>;
+    const progress = (await initProgress(adapter, [], tmpDir)).data as Record<string, unknown>;
+    const manager = (await initManager(adapter, [], tmpDir)).data as Record<string, unknown>;
 
     const pPhase = findPhase(progress.phases as Record<string, unknown>[], 3);
     const mPhase = findPhase(manager.phases as Record<string, unknown>[], 3);
@@ -150,8 +153,8 @@ describe('initProgress + initManager precedence (#2674)', () => {
     await writeRoadmap(tmpDir, [{ num: '3', name: 'Paper', checked: true }]);
     // no directory for phase 3
 
-    const progress = (await initProgress([], tmpDir)).data as Record<string, unknown>;
-    const manager = (await initManager([], tmpDir)).data as Record<string, unknown>;
+    const progress = (await initProgress(adapter, [], tmpDir)).data as Record<string, unknown>;
+    const manager = (await initManager(adapter, [], tmpDir)).data as Record<string, unknown>;
 
     const pPhase = findPhase(progress.phases as Record<string, unknown>[], 3);
     const mPhase = findPhase(manager.phases as Record<string, unknown>[], 3);
@@ -168,8 +171,8 @@ describe('initProgress + initManager precedence (#2674)', () => {
     await mkdir(join(tmpDir, '.planning', 'phases', '03-stub'), { recursive: true });
     await mkdir(join(tmpDir, '.planning', 'phases', '04-todo'), { recursive: true });
 
-    const progress = (await initProgress([], tmpDir)).data as Record<string, unknown>;
-    const manager = (await initManager([], tmpDir)).data as Record<string, unknown>;
+    const progress = (await initProgress(adapter, [], tmpDir)).data as Record<string, unknown>;
+    const manager = (await initManager(adapter, [], tmpDir)).data as Record<string, unknown>;
 
     expect(progress.completed_count).toBe(1);
     expect(manager.completed_count).toBe(1);

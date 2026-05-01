@@ -26,11 +26,14 @@ import {
   initRemoveWorkspace,
   initIngestDocs,
 } from './init.js';
+import { MarkdownAdapter } from '../../../adapters/markdown/index.js';
 
 let tmpDir: string;
+let adapter: MarkdownAdapter;
 
 beforeEach(async () => {
   tmpDir = await mkdtemp(join(tmpdir(), 'gsd-init-'));
+  adapter = new MarkdownAdapter(tmpDir);
   // Create minimal .planning structure
   await mkdir(join(tmpDir, '.planning', 'phases', '09-foundation'), { recursive: true });
   await mkdir(join(tmpDir, '.planning', 'phases', '10-read-only-queries'), { recursive: true });
@@ -96,9 +99,9 @@ afterEach(async () => {
 });
 
 describe('withProjectRoot', () => {
-  it('injects project_root, agents_installed, missing_agents into result', () => {
+  it('injects project_root, agents_installed, missing_agents into result', async () => {
     const result: Record<string, unknown> = { foo: 'bar' };
-    const enriched = withProjectRoot(tmpDir, result);
+    const enriched = await withProjectRoot(adapter, tmpDir, result);
     expect(enriched.project_root).toBe(tmpDir);
     expect(typeof enriched.agents_installed).toBe('boolean');
     expect(Array.isArray(enriched.missing_agents)).toBe(true);
@@ -106,15 +109,15 @@ describe('withProjectRoot', () => {
     expect(enriched.foo).toBe('bar');
   });
 
-  it('injects response_language when config has it', () => {
+  it('injects response_language when config has it', async () => {
     const result: Record<string, unknown> = {};
-    const enriched = withProjectRoot(tmpDir, result, { response_language: 'ja' });
+    const enriched = await withProjectRoot(adapter, tmpDir, result, { response_language: 'ja' });
     expect(enriched.response_language).toBe('ja');
   });
 
-  it('does not inject response_language when not in config', () => {
+  it('does not inject response_language when not in config', async () => {
     const result: Record<string, unknown> = {};
-    const enriched = withProjectRoot(tmpDir, result, {});
+    const enriched = await withProjectRoot(adapter, tmpDir, result, {});
     expect(enriched.response_language).toBeUndefined();
   });
 
@@ -131,7 +134,7 @@ describe('withProjectRoot', () => {
     const prev = process.env.GSD_AGENTS_DIR;
     process.env.GSD_AGENTS_DIR = agentsDir;
     try {
-      const enriched = withProjectRoot(tmpDir, {});
+      const enriched = await withProjectRoot(adapter, tmpDir, {});
       expect(enriched.agents_installed).toBe(true);
       expect(enriched.missing_agents).toEqual([]);
     } finally {
@@ -146,7 +149,7 @@ describe('withProjectRoot', () => {
     const prev = process.env.GSD_AGENTS_DIR;
     process.env.GSD_AGENTS_DIR = agentsDir;
     try {
-      const enriched = withProjectRoot(tmpDir, {}) as Record<string, unknown>;
+      const enriched = await withProjectRoot(adapter, tmpDir, {}) as Record<string, unknown>;
       expect(enriched.agents_installed).toBe(false);
       expect((enriched.missing_agents as string[]).length).toBeGreaterThan(0);
     } finally {
@@ -171,7 +174,7 @@ describe('withProjectRoot', () => {
     delete process.env.GSD_AGENTS_DIR;
     process.env.CLAUDE_CONFIG_DIR = configDir;
     try {
-      const enriched = withProjectRoot(tmpDir, {}) as Record<string, unknown>;
+      const enriched = await withProjectRoot(adapter, tmpDir, {}) as Record<string, unknown>;
       expect(enriched.agents_installed).toBe(true);
       expect(enriched.missing_agents).toEqual([]);
     } finally {
@@ -200,7 +203,7 @@ describe('withProjectRoot', () => {
     process.env.GSD_RUNTIME = 'codex';
     process.env.CODEX_HOME = codexHome;
     try {
-      const enriched = withProjectRoot(tmpDir, {}) as Record<string, unknown>;
+      const enriched = await withProjectRoot(adapter, tmpDir, {}) as Record<string, unknown>;
       expect(enriched.agents_installed).toBe(true);
       expect(enriched.missing_agents).toEqual([]);
     } finally {
@@ -228,7 +231,7 @@ describe('withProjectRoot', () => {
     delete process.env.GSD_RUNTIME;
     process.env.GEMINI_CONFIG_DIR = geminiHome;
     try {
-      const enriched = withProjectRoot(tmpDir, {}, { runtime: 'gemini' }) as Record<string, unknown>;
+      const enriched = await withProjectRoot(adapter, tmpDir, {}, { runtime: 'gemini' }) as Record<string, unknown>;
       expect(enriched.agents_installed).toBe(true);
     } finally {
       if (prevAgents === undefined) delete process.env.GSD_AGENTS_DIR;
@@ -256,7 +259,7 @@ describe('withProjectRoot', () => {
     process.env.CODEX_HOME = codexHome;
     try {
       // config says gemini, env says codex — codex should win and find agents.
-      const enriched = withProjectRoot(tmpDir, {}, { runtime: 'gemini' }) as Record<string, unknown>;
+      const enriched = await withProjectRoot(adapter, tmpDir, {}, { runtime: 'gemini' }) as Record<string, unknown>;
       expect(enriched.agents_installed).toBe(true);
     } finally {
       if (prevAgents === undefined) delete process.env.GSD_AGENTS_DIR;
@@ -268,14 +271,14 @@ describe('withProjectRoot', () => {
     }
   });
 
-  it('unknown GSD_RUNTIME falls through to config/Claude default', () => {
+  it('unknown GSD_RUNTIME falls through to config/Claude default', async () => {
     const prevAgents = process.env.GSD_AGENTS_DIR;
     const prevRuntime = process.env.GSD_RUNTIME;
     delete process.env.GSD_AGENTS_DIR;
     process.env.GSD_RUNTIME = 'not-a-runtime';
     try {
       // Should not throw; falls back to Claude — missing_agents on a blank tmpDir.
-      const enriched = withProjectRoot(tmpDir, {}) as Record<string, unknown>;
+      const enriched = await withProjectRoot(adapter, tmpDir, {}) as Record<string, unknown>;
       expect(typeof enriched.agents_installed).toBe('boolean');
     } finally {
       if (prevAgents === undefined) delete process.env.GSD_AGENTS_DIR;
@@ -300,7 +303,7 @@ describe('withProjectRoot', () => {
     process.env.GSD_AGENTS_DIR = winningDir;
     process.env.CLAUDE_CONFIG_DIR = join(tmpDir, 'losing-config');
     try {
-      const enriched = withProjectRoot(tmpDir, {}) as Record<string, unknown>;
+      const enriched = await withProjectRoot(adapter, tmpDir, {}) as Record<string, unknown>;
       expect(enriched.agents_installed).toBe(true);
     } finally {
       if (prevAgents === undefined) delete process.env.GSD_AGENTS_DIR;
@@ -313,7 +316,7 @@ describe('withProjectRoot', () => {
 
 describe('initExecutePhase', () => {
   it('returns flat JSON with expected keys for existing phase', async () => {
-    const result = await initExecutePhase(['9'], tmpDir);
+    const result = await initExecutePhase(adapter, ['9'], tmpDir);
     const data = result.data as Record<string, unknown>;
     expect(data.phase_found).toBe(true);
     expect(data.phase_number).toBe('09');
@@ -340,7 +343,7 @@ describe('initExecutePhase', () => {
   });
 
   it('returns error when phase arg missing', async () => {
-    const result = await initExecutePhase([], tmpDir);
+    const result = await initExecutePhase(adapter, [], tmpDir);
     const data = result.data as Record<string, unknown>;
     expect(data.error).toBeDefined();
   });
@@ -411,7 +414,7 @@ describe('initExecutePhase', () => {
 
 describe('initPlanPhase', () => {
   it('returns flat JSON with expected keys', async () => {
-    const result = await initPlanPhase(['9'], tmpDir);
+    const result = await initPlanPhase(adapter, ['9'], tmpDir);
     const data = result.data as Record<string, unknown>;
     expect(data.phase_found).toBe(true);
     expect(data.researcher_model).toBeDefined();
@@ -438,7 +441,7 @@ describe('initPlanPhase', () => {
   });
 
   it('returns error when phase arg missing', async () => {
-    const result = await initPlanPhase([], tmpDir);
+    const result = await initPlanPhase(adapter, [], tmpDir);
     const data = result.data as Record<string, unknown>;
     expect(data.error).toBeDefined();
   });
@@ -519,7 +522,7 @@ describe('initPlanPhase', () => {
         '',
       ].join('\n'));
 
-      const result = await initPlanPhase(['9'], tmpDir);
+      const result = await initPlanPhase(adapter, ['9'], tmpDir);
       const data = result.data as Record<string, unknown>;
       expect(data.phase_req_ids).toBe('RV-01, RV-02');
     });
@@ -528,7 +531,7 @@ describe('initPlanPhase', () => {
 
 describe('initNewMilestone', () => {
   it('returns flat JSON with milestone info', async () => {
-    const result = await initNewMilestone([], tmpDir);
+    const result = await initNewMilestone(adapter, [], tmpDir);
     const data = result.data as Record<string, unknown>;
     expect(data.current_milestone).toBeDefined();
     expect(data.current_milestone_name).toBeDefined();
@@ -539,7 +542,7 @@ describe('initNewMilestone', () => {
 
 describe('initQuick', () => {
   it('returns flat JSON with task info', async () => {
-    const result = await initQuick(['my-task'], tmpDir);
+    const result = await initQuick(adapter, ['my-task'], tmpDir);
     const data = result.data as Record<string, unknown>;
     expect(data.quick_id).toBeDefined();
     expect(data.slug).toBe('my-task');
@@ -553,7 +556,7 @@ describe('initQuick', () => {
 
 describe('initResume', () => {
   it('returns flat JSON with state info', async () => {
-    const result = await initResume([], tmpDir);
+    const result = await initResume(adapter, [], tmpDir);
     const data = result.data as Record<string, unknown>;
     expect(data.state_exists).toBe(true);
     expect(data.roadmap_exists).toBe(true);
@@ -564,7 +567,7 @@ describe('initResume', () => {
 
 describe('initVerifyWork', () => {
   it('returns flat JSON with expected keys', async () => {
-    const result = await initVerifyWork(['9'], tmpDir);
+    const result = await initVerifyWork(adapter, ['9'], tmpDir);
     const data = result.data as Record<string, unknown>;
     expect(data.phase_found).toBe(true);
     expect(data.phase_number).toBe('09');
@@ -612,7 +615,7 @@ describe('initVerifyWork', () => {
   });
 
   it('returns error when phase arg missing', async () => {
-    const result = await initVerifyWork([], tmpDir);
+    const result = await initVerifyWork(adapter, [], tmpDir);
     const data = result.data as Record<string, unknown>;
     expect(data.error).toBeDefined();
   });
@@ -620,7 +623,7 @@ describe('initVerifyWork', () => {
 
 describe('initPhaseOp', () => {
   it('returns flat JSON with phase artifacts', async () => {
-    const result = await initPhaseOp(['9'], tmpDir);
+    const result = await initPhaseOp(adapter, ['9'], tmpDir);
     const data = result.data as Record<string, unknown>;
     expect(data.phase_found).toBe(true);
     expect(data.phase_number).toBe('09');
@@ -647,7 +650,7 @@ describe('initPhaseOp', () => {
 
 describe('initTodos', () => {
   it('returns flat JSON with todo inventory', async () => {
-    const result = await initTodos([], tmpDir);
+    const result = await initTodos(adapter, [], tmpDir);
     const data = result.data as Record<string, unknown>;
     expect(data.todo_count).toBe(0);
     expect(Array.isArray(data.todos)).toBe(true);
@@ -656,7 +659,7 @@ describe('initTodos', () => {
   });
 
   it('filters by area when provided', async () => {
-    const result = await initTodos(['code'], tmpDir);
+    const result = await initTodos(adapter, ['code'], tmpDir);
     const data = result.data as Record<string, unknown>;
     expect(data.area_filter).toBe('code');
   });
@@ -664,7 +667,7 @@ describe('initTodos', () => {
 
 describe('initMilestoneOp', () => {
   it('returns flat JSON with milestone info', async () => {
-    const result = await initMilestoneOp([], tmpDir);
+    const result = await initMilestoneOp(adapter, [], tmpDir);
     const data = result.data as Record<string, unknown>;
     expect(data.milestone_version).toBeDefined();
     expect(data.milestone_name).toBeDefined();
@@ -705,7 +708,8 @@ describe('initMilestoneOp', () => {
       await writeFile(join(fresh, '.planning', 'phases', '03-alpha', '03-01-SUMMARY.md'), '# S');
       await writeFile(join(fresh, '.planning', 'phases', '04-beta', '04-01-SUMMARY.md'), '# S');
 
-      const result = await initMilestoneOp([], fresh);
+      const freshAdapter = new MarkdownAdapter(fresh);
+      const result = await initMilestoneOp(freshAdapter, [], fresh);
       const data = result.data as Record<string, unknown>;
       // Roadmap declares 3 phases for the current milestone.
       expect(data.phase_count).toBe(3);
@@ -721,7 +725,7 @@ describe('initMilestoneOp', () => {
 
 describe('initMapCodebase', () => {
   it('returns flat JSON with mapper info', async () => {
-    const result = await initMapCodebase([], tmpDir);
+    const result = await initMapCodebase(adapter, [], tmpDir);
     const data = result.data as Record<string, unknown>;
     expect(data.mapper_model).toBeDefined();
     expect(Array.isArray(data.existing_maps)).toBe(true);
@@ -732,7 +736,7 @@ describe('initMapCodebase', () => {
 
 describe('initNewWorkspace', () => {
   it('returns flat JSON with workspace info', async () => {
-    const result = await initNewWorkspace([], tmpDir);
+    const result = await initNewWorkspace(adapter, [], tmpDir);
     const data = result.data as Record<string, unknown>;
     expect(data.default_workspace_base).toBeDefined();
     expect(typeof data.worktree_available).toBe('boolean');
@@ -740,7 +744,7 @@ describe('initNewWorkspace', () => {
   });
 
   it('detects git availability', async () => {
-    const result = await initNewWorkspace([], tmpDir);
+    const result = await initNewWorkspace(adapter, [], tmpDir);
     const data = result.data as Record<string, unknown>;
     // worktree_available depends on whether git is installed
     expect(typeof data.worktree_available).toBe('boolean');
@@ -749,7 +753,7 @@ describe('initNewWorkspace', () => {
 
 describe('initListWorkspaces', () => {
   it('returns flat JSON with workspaces array', async () => {
-    const result = await initListWorkspaces([], tmpDir);
+    const result = await initListWorkspaces(adapter, [], tmpDir);
     const data = result.data as Record<string, unknown>;
     expect(Array.isArray(data.workspaces)).toBe(true);
     expect(data.workspace_count).toBeGreaterThanOrEqual(0);
@@ -758,13 +762,13 @@ describe('initListWorkspaces', () => {
 
 describe('initRemoveWorkspace', () => {
   it('returns error when name arg missing', async () => {
-    const result = await initRemoveWorkspace([], tmpDir);
+    const result = await initRemoveWorkspace(adapter, [], tmpDir);
     const data = result.data as Record<string, unknown>;
     expect(data.error).toBeDefined();
   });
 
   it('rejects path separator in workspace name (T-14-01)', async () => {
-    const result = await initRemoveWorkspace(['../../bad'], tmpDir);
+    const result = await initRemoveWorkspace(adapter, ['../../bad'], tmpDir);
     const data = result.data as Record<string, unknown>;
     expect(data.error).toBeDefined();
   });
@@ -772,7 +776,7 @@ describe('initRemoveWorkspace', () => {
 
 describe('initIngestDocs', () => {
   it('returns flat JSON with ingest-docs branching fields', async () => {
-    const result = await initIngestDocs([], tmpDir);
+    const result = await initIngestDocs(adapter, [], tmpDir);
     const data = result.data as Record<string, unknown>;
     expect(data.project_exists).toBe(false);
     expect(data.planning_exists).toBe(true);
@@ -784,7 +788,7 @@ describe('initIngestDocs', () => {
 
   it('reports project_exists true when PROJECT.md is present', async () => {
     await writeFile(join(tmpDir, '.planning', 'PROJECT.md'), '# project');
-    const result = await initIngestDocs([], tmpDir);
+    const result = await initIngestDocs(adapter, [], tmpDir);
     const data = result.data as Record<string, unknown>;
     expect(data.project_exists).toBe(true);
     expect(data.planning_exists).toBe(true);
