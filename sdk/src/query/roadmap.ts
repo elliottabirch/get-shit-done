@@ -82,23 +82,28 @@ async function parseMilestoneFromState(projectDir: string, workstream?: string):
  * Port of getMilestoneInfo from core.cjs lines 1367-1402, extended for:
  * - 🟡 in-flight marker (same list shape as 🚧)
  * - milestone bullets `**vX.Y Title**` before `## Phases` (last = current when listed in semver order)
- * - STATE.md frontmatter when ROADMAP has no parseable milestone
  * - **last** bare `vX.Y` fallback (first match was often v1.0 from the shipped list)
+ *
+ * CJS parity note (fork-side patch, upstream bug):
+ * The original SDK used STATE.md `milestone_name` as Priority 1 (returning it directly
+ * when present). CJS (`core.cjs:1580-1626`) uses STATE.md only for the *version*, then
+ * always derives the name from ROADMAP heading/list patterns; returns `'milestone'` when
+ * no pattern matches. This function now matches CJS exactly:
+ *   1. Read STATE.md for version only.
+ *   2. Derive name exclusively from ROADMAP patterns.
+ *   3. Fall back to name='milestone' when ROADMAP has no parseable format.
+ * The `milestone_name` frontmatter field in STATE.md is intentionally ignored for the
+ * name result. File upstream issue so this divergence is resolved at the source.
  *
  * @param projectDir - Project root directory
  * @returns Object with version and name
  */
 export async function getMilestoneInfo(projectDir: string, workstream?: string): Promise<{ version: string; name: string }> {
   try {
-    // Priority 1: STATE.md frontmatter (authoritative for version; name only when real)
+    // STATE.md is authoritative for version only (CJS parity). Name is always derived
+    // from ROADMAP patterns — STATE.md `milestone_name` is intentionally ignored.
     const fromState = await parseMilestoneFromState(projectDir, workstream);
     const stateVersion = fromState?.version ?? null;
-    const stateName = fromState && fromState.name !== 'milestone' ? fromState.name : null;
-    if (stateVersion && stateName) {
-      return { version: stateVersion, name: stateName };
-    }
-    // STATE.md has a version but no real name — fall through to ROADMAP for the name,
-    // then override the version with the authoritative STATE.md value.
 
     const roadmap = await readFile(planningPaths(projectDir, workstream).roadmap, 'utf-8');
 
@@ -137,9 +142,9 @@ export async function getMilestoneInfo(projectDir: string, workstream?: string):
 
     return { version: stateVersion ?? 'v1.0', name: 'milestone' };
   } catch {
+    // On error, use STATE.md version but always return name='milestone' for CJS parity.
     const fromState = await parseMilestoneFromState(projectDir, workstream);
-    if (fromState) return fromState;
-    return { version: 'v1.0', name: 'milestone' };
+    return { version: fromState?.version ?? 'v1.0', name: 'milestone' };
   }
 }
 
