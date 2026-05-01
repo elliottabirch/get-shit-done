@@ -521,30 +521,79 @@ export function createRegistry(opts: {
     }
   }
 
-  const initHandlers: Record<string, QueryHandler> = {
-    'init.execute-phase': initExecutePhase,
-    'init.plan-phase': initPlanPhase,
-    'init.new-project': initNewProject,
-    'init.new-milestone': initNewMilestone,
-    'init.quick': initQuick,
-    'init.ingest-docs': initIngestDocs,
-    'init.resume': initResume,
-    'init.verify-work': initVerifyWork,
-    'init.phase-op': initPhaseOp,
-    'init.todos': initTodos,
-    'init.milestone-op': initMilestoneOp,
-    'init.map-codebase': initMapCodebase,
-    'init.progress': initProgress,
-    'init.manager': initManager,
-    'init.new-workspace': initNewWorkspace,
-    'init.list-workspaces': initListWorkspaces,
-    'init.remove-workspace': initRemoveWorkspace,
-  };
+  // Phase 2 Plan 02-04 Task 1: 14 init.ts bundlers migrated to
+  // adapter-as-first-arg signature (Shape A). Closure wrappers thread the
+  // adapter from createRegistry's opts. External bundle shape is
+  // byte-identical to pre-migration baselines — see
+  // tests/conformance/init-bundlers.test.ts (OQ-09 + ROADMAP SC#2).
+  //
+  // Each canonical key is registered explicitly (literal
+  // `registry.register('init.X', ...)`) so the MED-2 count-based wrapper
+  // assertion can grep them deterministically; the alias loop below registers
+  // the space-form aliases ('init execute-phase', etc.) for each canonical
+  // entry by reusing the same closure wrapper.
+  registry.register('init.execute-phase', (args, projectDir, ws) =>
+    initExecutePhase(adapter, args, projectDir, ws),
+  );
+  registry.register('init.plan-phase', (args, projectDir, ws) =>
+    initPlanPhase(adapter, args, projectDir, ws),
+  );
+  registry.register('init.new-milestone', (args, projectDir, ws) =>
+    initNewMilestone(adapter, args, projectDir, ws),
+  );
+  registry.register('init.quick', (args, projectDir, ws) =>
+    initQuick(adapter, args, projectDir, ws),
+  );
+  registry.register('init.ingest-docs', (args, projectDir, ws) =>
+    initIngestDocs(adapter, args, projectDir, ws),
+  );
+  registry.register('init.resume', (args, projectDir, ws) =>
+    initResume(adapter, args, projectDir, ws),
+  );
+  registry.register('init.verify-work', (args, projectDir, ws) =>
+    initVerifyWork(adapter, args, projectDir, ws),
+  );
+  registry.register('init.phase-op', (args, projectDir, ws) =>
+    initPhaseOp(adapter, args, projectDir, ws),
+  );
+  registry.register('init.todos', (args, projectDir, ws) =>
+    initTodos(adapter, args, projectDir, ws),
+  );
+  registry.register('init.milestone-op', (args, projectDir, ws) =>
+    initMilestoneOp(adapter, args, projectDir, ws),
+  );
+  registry.register('init.map-codebase', (args, projectDir, ws) =>
+    initMapCodebase(adapter, args, projectDir, ws),
+  );
+  registry.register('init.new-workspace', (args, projectDir, ws) =>
+    initNewWorkspace(adapter, args, projectDir, ws),
+  );
+  registry.register('init.list-workspaces', (args, projectDir, ws) =>
+    initListWorkspaces(adapter, args, projectDir, ws),
+  );
+  registry.register('init.remove-workspace', (args, projectDir, ws) =>
+    initRemoveWorkspace(adapter, args, projectDir, ws),
+  );
 
+  // Phase 2 Plan 02-04 Task 2: the 3 complex bundlers (init.new-project,
+  // init.progress, init.manager) live in init-complex.ts. They are
+  // adapter-aware (Task 2 migration). Registering with literal canonical keys
+  // here for MED-2 count parity with the 14 wrappers above.
+  registry.register('init.new-project', (args, projectDir, ws) =>
+    initNewProject(adapter, args, projectDir, ws),
+  );
+  registry.register('init.progress', (args, projectDir, ws) =>
+    initProgress(adapter, args, projectDir, ws),
+  );
+  registry.register('init.manager', (args, projectDir, ws) =>
+    initManager(adapter, args, projectDir, ws),
+  );
+
+  // Wire space-form aliases (e.g. 'init execute-phase') to the same closure
+  // wrappers via the alias manifest.
   for (const entry of INIT_COMMAND_ALIASES) {
-    const handler = initHandlers[entry.canonical];
+    const handler = registry.getHandler(entry.canonical);
     if (!handler) continue;
-    registry.register(entry.canonical, handler);
     for (const alias of entry.aliases) {
       registry.register(alias, handler);
     }

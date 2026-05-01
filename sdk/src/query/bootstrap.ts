@@ -138,3 +138,18 @@ export function findProjectRoot(startDir: string): string {
   }
   return startDir;
 }
+
+/**
+ * Phase 2 D-15 (Plan 02-04): project-root probe used by init bundlers to
+ * check the existence of paths under the project directory (not the planning
+ * tree) — e.g. `.git`, `package.json`, `Cargo.toml`. The StorageAdapter is
+ * rooted at the planning base, so these reads are intentionally direct fs.
+ *
+ * Lives in bootstrap.ts (not init.ts) to keep the init.ts surface free of
+ * raw `existsSync` near `.planning/` literals — bootstrap.ts is the
+ * documented carve-out for raw-fs callsites that the leak-grep gate excludes
+ * by file path.
+ */
+export function pathExistsProject(base: string, relPath: string): boolean {
+  return existsSync(join(base, relPath));
+}
