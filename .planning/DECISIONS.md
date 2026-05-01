@@ -373,3 +373,90 @@ Each gets resolved when the relevant phase approaches.
 | OQ-10 | Multi-author file (AI-SPEC) concurrency — atomic `updateSection` enough or need locks | Phase 5 |
 
 Each open question gets its own decision entry above when answered.
+
+---
+
+## D-2026-05-01-OQ04 — OQ-04 partial resolution: `<context>`-block leak class audit
+
+**Date:** 2026-05-01 (Plan 02-05 ship date)
+**Resolves:** OQ-04 (partial — audit + classification only); full mitigation strategy is Phase 4 LEAKS-02.
+
+**Decision:** Phase 2 Plan 02-05 produces an exhaustive audit register at
+`.planning/leaks/context-block-register.md` (+ `.json` sidecar) with each
+`<context>`-block `@.planning/` reference auto-classified into the 3-bucket
+disposition (REWRITE-CANDIDATE / INTERCEPT-CANDIDATE / EXCEPTION). Phase 4
+LEAKS-02 picks uniform-vs-mixed mitigation strategy and ships the actual
+rewrite/intercept code plus the CI gate that runs the audit script.
+
+**Bucket definitions:**
+- **REWRITE-CANDIDATE** — skill body can invoke `gsd-sdk query` at runtime;
+  the frontmatter `@`-ref is removable.
+- **INTERCEPT-CANDIDATE** — doc must be present at frontmatter-load time;
+  needs install-time hook to materialize from adapter.
+- **EXCEPTION** — doc fundamentally needs to load at activation and cannot
+  be intercepted; documented per-row.
+
+**Auto-classification heuristics** (in `scripts/audit-context-blocks.cjs::classify`):
+- Templates (`/templates/`) or references (`/references/`) → EXCEPTION (LOW-4 strict; first-rule)
+- Canonical docs (STATE.md, ROADMAP.md, PROJECT.md, REQUIREMENTS.md, DECISIONS.md) → REWRITE-CANDIDATE
+- Phase artifacts (`phases/...`) → INTERCEPT-CANDIDATE
+- Research docs (`research/...`) → EXCEPTION (read-once)
+- Default → INTERCEPT-CANDIDATE
+
+**Scope:** SCAN_DIRS = `commands/` + `agents/` + `get-shit-done/` + `docs/`
+(MED-4 lock: `tests/` explicitly excluded; the leak-grep fixture is OUT of
+register by design — single deterministic outcome, no OR branches).
+
+**Verification:** `tests/leak-grep/context-block-register.test.ts` (vitest,
+7 it() blocks) asserts register completeness — every `<context>`-block
+CONTEXT_BLOCK_RE match in the scan scope has a register entry. The strict
+LOW-4 assertion fails on a single misclassified `templates/` or `references/`
+row; the MED-4 assertion fails if any row's file path starts with `tests/`.
+
+**Empirical count at ship time:** 30 references across 6 files —
+`agents/gsd-planner.md` (3), `commands/gsd/add-tests.md` (2),
+`get-shit-done/templates/phase-prompt.md` (15),
+`get-shit-done/references/planner-antipatterns.md` (6),
+`get-shit-done/references/tdd.md` (2), `docs/zh-CN/references/tdd.md` (2).
+
+**Note on RESEARCH count delta:** Phase 2 RESEARCH §"Audit Scope" reported
+41 refs across 9 files via `grep -rEc "@\.planning/"` — this counted
+`@.planning/` occurrences in any context, not only inside `<context>` blocks.
+The leak class per D-08 is specifically `<context>`-block frontmatter refs;
+the audit script correctly scopes to that class, hence 30 (not 41). The
+remaining 11 refs from the wider grep live outside `<context>` blocks
+(in `<plan>` blocks, frontmatter `read_first` directives, prose discussion
+of `.planning/` paths) — those aren't activation-time leaks and are outside
+Phase 2 / Phase 4 scope.
+
+**Bucket distribution at ship time:**
+- REWRITE-CANDIDATE: 5 (canonical-doc refs in `agents/gsd-planner.md` + `commands/gsd/add-tests.md`)
+- INTERCEPT-CANDIDATE: 0 (no `phases/...` refs survive after the LOW-4 first-rule eats template paths)
+- EXCEPTION: 25 (every `templates/` and `references/` row, dominated by `phase-prompt.md` × 15 + `planner-antipatterns.md` × 6)
+
+**Implication for Phase 4 LEAKS-02:** The register file format (markdown +
+JSON sidecar) is locked. Mitigation tooling reads the JSON sidecar
+(machine-readable: `{ file, line, ref, excerpt, bucket, rationale }` per
+record). Phase 4 may override per-row buckets and ships the actual
+rewrite/intercept implementation plus the CI gate that re-runs
+`node scripts/audit-context-blocks.cjs --check`.
+
+**Re-run protocol:** The audit script is idempotent (sorted readdir entries;
+deterministic JSON serialization). Re-running it after a repo edit produces
+a regenerated register; CI compares the regenerated count against a stored
+floor (Phase 4 LEAKS-04 owns the wiring).
+
+**Alternatives considered:**
+
+1. **Lock mitigation strategy in Phase 2.** Rejected: D-05 binds Phase 2 to
+   audit-only; mitigation has more context in Phase 4 alongside LEAKS-01/03/04.
+2. **Markdown-only register (no JSON sidecar).** Rejected: Phase 4 mitigation
+   tooling needs machine-readable input.
+3. **Per-bucket separate files (`rewrite.md`, `intercept.md`, `exception.md`).**
+   Rejected: row-per-ref single file is easier to grep / diff / cross-reference.
+4. **Include `tests/leak-grep/fixtures/` in scope, classify fixture as EXCEPTION.**
+   Rejected per MED-4: introduces OR semantics in the test (excluded OR EXCEPTION
+   yielded divergent outcomes); locking SCAN_DIRS gives a single deterministic
+   outcome.
+
+---
