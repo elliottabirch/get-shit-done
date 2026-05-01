@@ -269,8 +269,12 @@ function buildMutationEvent(
  * Create a fully-wired QueryRegistry with all native handlers registered.
  *
  * @param opts.adapter - Required StorageAdapter implementation (per D-2026-04-30-05 + D-07).
- *                       In Phase 1 the adapter is held but not yet consumed by handlers;
- *                       Phase 2-3 migrates handlers to call adapter.* methods.
+ *                       Phase 2 Plan 02-01 onwards: adapter-aware handlers register through a
+ *                       closure wrapper that binds `adapter` as the first arg (Shape A from
+ *                       Phase 2 D-10). Currently wired: `state.load` (Task 4),
+ *                       `route.next-action` / `route next-action` (Task 5). Plans 02-02..04
+ *                       add wrappers for the remaining read handlers as they migrate.
+ *                       Non-adapter-aware handlers continue to register unchanged.
  * @param opts.eventStream - Optional event stream for mutation event emission
  * @param opts.correlationSessionId - Optional session id threaded into mutation-related events
  * @returns A QueryRegistry instance with all handlers registered
