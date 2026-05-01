@@ -53,6 +53,26 @@ const SHELL_PATTERNS = [
 const CONTEXT_BLOCK_RE = /<context>([\s\S]*?)<\/context>/g;
 const CONTEXT_PATH_RE = /\.planning\//;
 
+// SDK fs-read patterns (.ts only; .planning/-scoped via Stage-2 filter)
+// Phase 2 D-04: covers the SDK migration's read surface; path-scoped so C2 files
+// reading ~/.claude/, ~/gsd-workspaces/, etc. naturally pass.
+const SDK_FS_READ_PATTERNS = [
+  { name: 'fs-read-import', re: /\bimport\s+\{[^}]*\b(?:readFileSync|readdirSync|existsSync|statSync|readFile|readdir|stat|access)\b[^}]*\}\s+from\s+['"]node:fs(?:\/promises)?['"]/ },
+  { name: 'fs-require',     re: /\brequire\s*\(\s*['"]node:fs(?:\/promises)?['"]\s*\)/ },
+  { name: 'readFileSync',   re: /\breadFileSync\s*\(/ },
+  { name: 'readdirSync',    re: /\breaddirSync\s*\(/ },
+  { name: 'existsSync',     re: /\bexistsSync\s*\(/ },
+  { name: 'statSync',       re: /\bstatSync\s*\(/ },
+  { name: 'readFile-async', re: /\bawait\s+readFile\s*\(/ },
+  { name: 'readdir-async',  re: /\bawait\s+readdir\s*\(/ },
+  { name: 'stat-async',     re: /\bawait\s+(?:fsStat|stat)\s*\(/ },
+];
+
+// Stage-2 path-scope filter (must appear within ±20-line window for SDK_FS hit to count)
+const PLANNING_SCOPE_RE = /(?:['"`]\.planning\/|planningPaths\s*\(|relPlanningPath\s*\(|planningRelativePath\s*\(|paths\.(state|roadmap|project|config|phases|requirements|planning)\b)/;
+
+const SDK_FS_EXTS = /\.ts$/;
+
 // ---------------------------------------------------------------------------
 // Core scanner
 // ---------------------------------------------------------------------------
@@ -87,6 +107,26 @@ function scanFile(filePath) {
       }
     }
   });
+
+  // SDK_FS pass — .ts files only, with Stage-2 ±20-line .planning/ scope filter
+  // Phase 2 D-04 (Plan 02-01 Task 2): SDK-side fs-read detection.
+  if (SDK_FS_EXTS.test(filePath)) {
+    lines.forEach((line, i) => {
+      for (const { name, re } of SDK_FS_READ_PATTERNS) {
+        if (!re.test(line)) continue;
+        const lo = Math.max(0, i - 20);
+        const hi = Math.min(lines.length, i + 21);
+        const window = lines.slice(lo, hi).join('\n');
+        if (!PLANNING_SCOPE_RE.test(window)) continue;
+        matches.push({
+          file: filePath,
+          line: i + 1,
+          category: name,
+          text: line.trim(),
+        });
+      }
+    });
+  }
 
   // Whole-text scan for <context>-block leaks (multi-line)
   let m;
@@ -184,4 +224,19 @@ function main(argv) {
   process.exit(total > 0 ? 1 : 0);
 }
 
-main(process.argv);
+// Only invoke main() when this file is run directly as a CLI; when required
+// (e.g. by Plan 5's audit-context-blocks.cjs or by tests), expose the regex
+// constants + scanFile() without triggering a process.exit.
+if (require.main === module) {
+  main(process.argv);
+}
+
+module.exports = {
+  TOOL_PATTERNS,
+  SHELL_PATTERNS,
+  SDK_FS_READ_PATTERNS,
+  PLANNING_SCOPE_RE,
+  CONTEXT_BLOCK_RE,
+  CONTEXT_PATH_RE,
+  scanFile,
+};
