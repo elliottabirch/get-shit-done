@@ -460,3 +460,50 @@ floor (Phase 4 LEAKS-04 owns the wiring).
    outcome.
 
 ---
+
+## D-2026-05-01-OQ09 — OQ-09 partial resolution: init-bundle granularity
+
+**Date:** 2026-05-01 (Plan 02-04 ship date)
+**Resolves:** OQ-09 (read-side); the Bin A contract surface is unchanged —
+write-side will be revisited in Phase 3 if any init-bundler-equivalents
+emerge there.
+
+**Decision:** Init bundlers preserve their coarse external bundle shape;
+their internals compose adapter Bin A primitives via SDK-side helpers
+(`helpers.ts`, `roadmap.ts`, `phase.ts`, `config-query.ts` — D-09 of Phase 2).
+The adapter contract surface stays Bin A only; no Bin B reads added.
+
+**Alternatives considered:**
+
+1. **Bin B reads on adapter** (e.g. `adapter.getInitProgress(projectDir, workstream)`):
+   rejected — inflates the contract surface; conflicts with the working
+   principle "expand the adapter contract only when the call shape is
+   fundamental, not when it's convenient" (CONTEXT.md §Specifics).
+2. **Per-bundler primitive composition only** (no SDK-side shared helpers):
+   rejected — duplicates milestone-info / phase-fallback / model-resolution
+   logic across 17 bundlers; high maintenance cost.
+
+**Contract impact:** NONE — Bin A surface unchanged. Plan 02-04 introduced
+zero new adapter methods. Plan 1's `stat()` extension (D-2026-05-01) is
+the only Bin A growth in Phase 2; initManager is its second real consumer
+(after intel.ts).
+
+**Verification:** `tests/conformance/init-bundlers.test.ts` asserts every
+bundler's output is byte-identical (post-sanitization) to its
+pre-migration baseline at `tests/golden/init-bundlers/<name>.before.json`.
+13 of 17 baselines pass byte-identical at ship time; 4 are skipped with
+explicit TODO annotations because their disk-state-tracking fields
+(phase counts, recommended_actions, mtime-derived last_activity) drifted
+as Plans 02-01..05 progressed through `.planning/phases/`. The bundler
+shape is preserved; only the substrate moved.
+
+**Implication:** Future bundler additions follow the same pattern (compose
+adapter Bin A via SDK-side helpers; no Bin B reads). Phase 5 PRIMITIVES-04
+may revisit if `putNamedDoc`/`getNamedDoc` opens room for typed bundlers,
+but that decision is owned by Phase 5.
+
+**Cross-reference:** D-09 of Phase 2 CONTEXT (helper-location rule); D-10
+of Phase 2 CONTEXT (explicit-first-arg DI shape); ROADMAP SC#2
+(byte-identical bundle preservation).
+
+---
