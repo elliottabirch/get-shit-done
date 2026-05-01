@@ -27,6 +27,7 @@ import { homedir } from 'node:os';
 import { loadConfig } from '../config.js';
 import { resolveModel } from './config-query.js';
 import {
+  adapterFor,
   detectRuntime,
   planningPaths,
   normalizePhaseName,
@@ -344,7 +345,9 @@ export const initNewProject: QueryHandler = async (_args, projectDir, workstream
  */
 export const initProgress: QueryHandler = async (_args, projectDir, workstream) => {
   const config = await loadConfig(projectDir, workstream);
-  const milestone = await getMilestoneInfo(projectDir, workstream);
+  // Phase 2 Plan 02-02 transitional: getMilestoneInfo + extractCurrentMilestone migrated to adapter signature.
+  const adapter = await adapterFor(projectDir);
+  const milestone = await getMilestoneInfo(adapter, workstream);
   const paths = planningPaths(projectDir, workstream);
 
   const phases: Record<string, unknown>[] = [];
@@ -359,7 +362,7 @@ export const initProgress: QueryHandler = async (_args, projectDir, workstream) 
 
   try {
     const rawRoadmap = await readFile(paths.roadmap, 'utf-8');
-    const roadmapContent = await extractCurrentMilestone(rawRoadmap, projectDir, workstream);
+    const roadmapContent = await extractCurrentMilestone(adapter, rawRoadmap, workstream);
     const headingPattern = /#{2,4}\s*Phase\s+(\d+[A-Z]?(?:\.\d+)*)\s*:\s*([^\n]+)/gi;
     let hm: RegExpExecArray | null;
     while ((hm = headingPattern.exec(roadmapContent)) !== null) {
@@ -512,7 +515,9 @@ export const initProgress: QueryHandler = async (_args, projectDir, workstream) 
  */
 export const initManager: QueryHandler = async (_args, projectDir, workstream) => {
   const config = await loadConfig(projectDir, workstream);
-  const milestone = await getMilestoneInfo(projectDir, workstream);
+  // Phase 2 Plan 02-02 transitional: getMilestoneInfo + extractCurrentMilestone + extractNextMilestoneSection migrated to adapter signature.
+  const adapter = await adapterFor(projectDir);
+  const milestone = await getMilestoneInfo(adapter, workstream);
   const paths = planningPaths(projectDir, workstream);
 
   let rawContent: string;
@@ -522,7 +527,7 @@ export const initManager: QueryHandler = async (_args, projectDir, workstream) =
     return { data: { error: 'No ROADMAP.md found. Run /gsd-new-milestone first.' } };
   }
 
-  const content = await extractCurrentMilestone(rawContent, projectDir, workstream);
+  const content = await extractCurrentMilestone(adapter, rawContent, workstream);
 
   // Pre-compute directory listing once
   let phaseDirEntries: string[] = [];
@@ -733,7 +738,7 @@ export const initManager: QueryHandler = async (_args, projectDir, workstream) =
   let queuedMilestoneVersion: string | null = null;
   let queuedMilestoneName: string | null = null;
   try {
-    const next = await extractNextMilestoneSection(rawContent, projectDir);
+    const next = await extractNextMilestoneSection(adapter, rawContent, workstream);
     if (next) {
       queuedMilestoneVersion = next.version;
       queuedMilestoneName = next.name;

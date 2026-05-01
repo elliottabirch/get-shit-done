@@ -23,7 +23,7 @@
 import { readFile, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { extractFrontmatter, stripFrontmatter } from './frontmatter.js';
-import { planningPaths, escapeRegex } from './helpers.js';
+import { adapterFor, planningPaths, escapeRegex } from './helpers.js';
 import {
   computeProgressPercent,
   normalizeProgressNumbers,
@@ -45,8 +45,10 @@ import type { QueryHandler } from './utils.js';
 export async function getMilestonePhaseFilter(projectDir: string, workstream?: string): Promise<((dirName: string) => boolean) & { phaseCount: number }> {
   const milestonePhaseNums = new Set<string>();
   try {
+    // Phase 2 Plan 02-02 transitional: extractCurrentMilestone migrated to adapter signature.
+    const adapter = await adapterFor(projectDir);
     const roadmapContent = await readFile(planningPaths(projectDir, workstream).roadmap, 'utf-8');
-    const roadmap = await extractCurrentMilestone(roadmapContent, projectDir, workstream);
+    const roadmap = await extractCurrentMilestone(adapter, roadmapContent, workstream);
     const phasePattern = /#{2,4}\s*Phase\s+([\w][\w.-]*)\s*:/gi;
     let m: RegExpExecArray | null;
     while ((m = phasePattern.exec(roadmap)) !== null) {
@@ -140,7 +142,9 @@ export async function buildStateFrontmatter(
   let milestone: string | null = null;
   let milestoneName: string | null = null;
   try {
-    const info = await getMilestoneInfo(projectDir, workstream);
+    // Phase 2 Plan 02-02 transitional: getMilestoneInfo migrated to adapter signature.
+    const adapter = await adapterFor(projectDir);
+    const info = await getMilestoneInfo(adapter, workstream);
     milestone = info.version;
     milestoneName = info.name;
   } catch { /* intentionally empty */ }

@@ -5,21 +5,22 @@
  * Provides find-phase (directory lookup with archived fallback)
  * and phase-plan-index (plan metadata with wave grouping).
  *
+ * Phase 2 Plan 02-02 Task 1 (D-12, D-10): adapter-as-first-arg signature;
+ * fs reads (readdir / readFile) routed through `adapter.listCollection` /
+ * `adapter.getRecord` per the Migration Recipe (Plan 02-01 exemplar).
+ *
  * @example
  * ```typescript
  * import { findPhase, phasePlanIndex } from './phase.js';
  *
- * const found = await findPhase(['9'], '/project');
+ * const found = await findPhase(adapter, ['9'], '/project');
  * // { data: { found: true, directory: '.planning/phases/09-foundation', ... } }
  *
- * const index = await phasePlanIndex(['9'], '/project');
+ * const index = await phasePlanIndex(adapter, ['9'], '/project');
  * // { data: { phase: '09', plans: [...], waves: { '1': [...] }, ... } }
  * ```
  */
 
-import { existsSync } from 'node:fs';
-import { readFile, readdir } from 'node:fs/promises';
-import { join } from 'node:path';
 import { GSDError, ErrorClassification } from '../errors.js';
 import { extractFrontmatter } from './frontmatter.js';
 import {
@@ -27,10 +28,11 @@ import {
   comparePhaseNum,
   phaseTokenMatches,
   toPosixPath,
-  planningPaths,
+  planningRelativePath,
 } from './helpers.js';
 import { relPlanningPath } from '../workstream-utils.js';
-import type { QueryHandler } from './utils.js';
+import type { QueryResult } from './utils.js';
+import type { StorageAdapter } from '../../../adapters/types.js';
 
 // ─── Types ─────────────────────────────────────────────────────────────────
 
@@ -100,8 +102,14 @@ export function describeNonCanonicalPlans(dirFiles: string[], matchedFiles: stri
  * Get file stats for a phase directory.
  *
  * Port of getPhaseFileStats from core.cjs lines 1461-1471.
+ *
+ * @param adapter - Storage adapter (Phase 2 D-10)
+ * @param phaseRel - Adapter-relative phase directory path (e.g. 'phases/09-foundation')
  */
-async function getPhaseFileStats(phaseDir: string): Promise<{
+async function getPhaseFileStats(
+  adapter: StorageAdapter,
+  phaseRel: string,
+): Promise<{
   plans: string[];
   summaries: string[];
   hasResearch: boolean;
@@ -110,7 +118,9 @@ async function getPhaseFileStats(phaseDir: string): Promise<{
   hasReviews: boolean;
   allFiles: string[];
 }> {
-  const files = await readdir(phaseDir);
+  // Pitfall 3: listCollection returns [] on ENOENT, no need for redundant exists check
+  const refs = await adapter.listCollection(phaseRel);
+  const files = refs.map(r => r.name);
   return {
     plans: files.filter(isCanonicalPlanFile),
     summaries: files.filter(f => f.endsWith('-SUMMARY.md') || f === 'SUMMARY.md'),
@@ -126,77 +136,77 @@ async function getPhaseFileStats(phaseDir: string): Promise<{
  * Search for a phase directory matching the normalized name.
  *
  * Port of searchPhaseInDir from core.cjs lines 956-1000.
+ *
+ * @param adapter - Storage adapter
+ * @param baseRel - Adapter-relative base directory (e.g. 'phases' or 'milestones/v1.0-phases')
+ * @param relBase - Display-relative base prefix (e.g. '.planning/phases') for the returned directory string
+ * @param normalized - Normalized phase identifier
  */
-function extractCanonicalPlanId(filename: string): string {
-  const base = filename.replace(/-PLAN\.md$/i, '').replace(/-SUMMARY\.md$/i, '').replace(/\.md$/i, '');
-  const parts = base.split('-').filter(Boolean);
-  const tokenRe = /^\d+[A-Z]?(?:\.\d+)*$/i;
-  const phaseIdx = parts.findIndex((p) => tokenRe.test(p));
-  if (phaseIdx >= 0 && phaseIdx + 1 < parts.length && tokenRe.test(parts[phaseIdx + 1])) {
-    return `${parts[phaseIdx]}-${parts[phaseIdx + 1]}`;
-  }
-  return base;
-}
+async function searchPhaseInDir(
+  adapter: StorageAdapter,
+  baseRel: string,
+  relBase: string,
+  normalized: string,
+): Promise<PhaseInfo | null> {
+  // Pitfall 3: listCollection returns [] on ENOENT, no need for redundant exists check
+  const refs = await adapter.listCollection(baseRel);
+  if (refs.length === 0) return null;
 
-async function searchPhaseInDir(baseDir: string, relBase: string, normalized: string): Promise<PhaseInfo | null> {
-  try {
-    const entries = await readdir(baseDir, { withFileTypes: true });
-    const dirs = entries
-      .filter(e => e.isDirectory())
-      .map(e => e.name)
-      .sort((a, b) => comparePhaseNum(a, b));
+  // We need only directories — probe via stat. Run in parallel (Pitfall 2).
+  const dirChecks = await Promise.all(
+    refs.map(async r => ({
+      ref: r,
+      isDir: ((await adapter.stat(r.path))?.kind === 'dir'),
+    })),
+  );
+  const dirs = dirChecks
+    .filter(c => c.isDir)
+    .map(c => c.ref.name)
+    .sort((a, b) => comparePhaseNum(a, b));
 
-    const match = dirs.find(d => phaseTokenMatches(d, normalized));
-    if (!match) return null;
+  const match = dirs.find(d => phaseTokenMatches(d, normalized));
+  if (!match) return null;
 
-    // Extract phase number and name
-    const dirMatch = match.match(/^(?:[A-Z]{1,6}-)(\d+[A-Z]?(?:\.\d+)*)-?(.*)/i)
-      || match.match(/^(\d+[A-Z]?(?:\.\d+)*)-?(.*)/i)
-      || match.match(/^([A-Z][A-Z0-9]*(?:-[A-Z0-9]+)*)-(.+)/i)
-      || [null, match, null];
-    const phaseNumber = dirMatch ? dirMatch[1] : normalized;
-    const phaseName = dirMatch && dirMatch[2] ? dirMatch[2] : null;
-    const phaseDir = join(baseDir, match);
+  // Extract phase number and name
+  const dirMatch = match.match(/^(?:[A-Z]{1,6}-)(\d+[A-Z]?(?:\.\d+)*)-?(.*)/i)
+    || match.match(/^(\d+[A-Z]?(?:\.\d+)*)-?(.*)/i)
+    || match.match(/^([A-Z][A-Z0-9]*(?:-[A-Z0-9]+)*)-(.+)/i)
+    || [null, match, null];
+  const phaseNumber = dirMatch ? dirMatch[1] : normalized;
+  const phaseName = dirMatch && dirMatch[2] ? dirMatch[2] : null;
+  const phaseRel = `${baseRel}/${match}`;
 
-    const { plans: unsortedPlans, summaries: unsortedSummaries, hasResearch, hasContext, hasVerification, hasReviews, allFiles } = await getPhaseFileStats(phaseDir);
-    const plans = unsortedPlans.sort();
-    const summaries = unsortedSummaries.sort();
-    // #2893 parity — emit the same warning shape as cmdPhasePlanIndex when a
-    // plan-shaped file would be skipped by the canonical filter.
-    const planNamingWarning = describeNonCanonicalPlans(allFiles, plans);
+  const { plans: unsortedPlans, summaries: unsortedSummaries, hasResearch, hasContext, hasVerification, hasReviews, allFiles } = await getPhaseFileStats(adapter, phaseRel);
+  const plans = unsortedPlans.sort();
+  const summaries = unsortedSummaries.sort();
+  // #2893 parity — emit the same warning shape as cmdPhasePlanIndex when a
+  // plan-shaped file would be skipped by the canonical filter.
+  const planNamingWarning = describeNonCanonicalPlans(allFiles, plans);
 
-    const completedPlanIds = new Set(
-      summaries.flatMap((s) => {
-        const exact = s.replace('-SUMMARY.md', '').replace('SUMMARY.md', '');
-        const canonical = extractCanonicalPlanId(s);
-        return canonical === exact ? [exact] : [exact, canonical];
-      })
-    );
-    const incompletePlans = plans.filter((p) => {
-      const planId = p.replace('-PLAN.md', '').replace('PLAN.md', '');
-      const canonical = extractCanonicalPlanId(p);
-      return !completedPlanIds.has(planId) && !completedPlanIds.has(canonical);
-    });
+  const completedPlanIds = new Set(
+    summaries.map(s => s.replace('-SUMMARY.md', '').replace('SUMMARY.md', ''))
+  );
+  const incompletePlans = plans.filter(p => {
+    const planId = p.replace('-PLAN.md', '').replace('PLAN.md', '');
+    return !completedPlanIds.has(planId);
+  });
 
-    const result: PhaseInfo = {
-      found: true,
-      directory: toPosixPath(join(relBase, match)),
-      phase_number: phaseNumber,
-      phase_name: phaseName,
-      phase_slug: phaseName ? phaseName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') : null,
-      plans,
-      summaries,
-      incomplete_plans: incompletePlans,
-      has_research: hasResearch,
-      has_context: hasContext,
-      has_verification: hasVerification,
-      has_reviews: hasReviews,
-    };
-    if (planNamingWarning) result.warning = planNamingWarning;
-    return result;
-  } catch {
-    return null;
-  }
+  const result: PhaseInfo = {
+    found: true,
+    directory: toPosixPath(`${relBase}/${match}`),
+    phase_number: phaseNumber,
+    phase_name: phaseName,
+    phase_slug: phaseName ? phaseName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') : null,
+    plans,
+    summaries,
+    incomplete_plans: incompletePlans,
+    has_research: hasResearch,
+    has_context: hasContext,
+    has_verification: hasVerification,
+    has_reviews: hasReviews,
+  };
+  if (planNamingWarning) result.warning = planNamingWarning;
+  return result;
 }
 
 /**
@@ -218,55 +228,77 @@ function extractObjective(content: string): string | null {
  * Port of cmdFindPhase from phase.cjs lines 152-196, combined with
  * findPhaseInternal from core.cjs lines 1002-1038.
  *
+ * @param adapter - Storage adapter (Phase 2 D-10)
  * @param args - args[0] is the phase identifier (required)
- * @param projectDir - Project root directory
+ * @param projectDir - Project root directory (kept for signature compatibility; unused now)
+ * @param workstream - Optional workstream name
  * @returns QueryResult with PhaseInfo
  * @throws GSDError with Validation classification if phase identifier missing
  */
-export const findPhase: QueryHandler = async (args, projectDir, workstream) => {
+export const findPhase = async (
+  adapter: StorageAdapter,
+  args: string[],
+  _projectDir: string,
+  workstream?: string,
+): Promise<QueryResult> => {
   const phase = args[0];
   if (!phase) {
     throw new GSDError('phase identifier required', ErrorClassification.Validation);
   }
 
-  const phasesDir = planningPaths(projectDir, workstream).phases;
   const normalized = normalizePhaseName(phase);
 
   // Track every directory we actually probed so the not-found payload can
   // surface them to the caller for diagnostics (#3164 acceptance criterion).
   const searchedDirectories: string[] = [];
 
-  // Search current phases first
-  const relPhasesDir = relPlanningPath(workstream) + '/phases';
-  if (existsSync(phasesDir)) {
-    searchedDirectories.push(relPhasesDir);
+  // Search current phases first.
+  // Adapter is rooted at .planning/, so adapter-relative path is workstream-aware
+  // ('phases' for root or 'workstreams/<ws>/phases' for workstream).
+  const phasesAdapterRel = planningRelativePath(workstream, 'phases');
+  // The display-relative base used in the returned `directory` field includes the
+  // .planning/[workstream/] prefix to match pre-migration output.
+  const phasesDisplayRel = `${relPlanningPath(workstream)}/phases`;
+  // #3164 — record which directories were searched for diagnostics.
+  if (await adapter.exists(phasesAdapterRel)) {
+    searchedDirectories.push(phasesDisplayRel);
   }
-  const current = await searchPhaseInDir(phasesDir, relPhasesDir, normalized);
+  const current = await searchPhaseInDir(adapter, phasesAdapterRel, phasesDisplayRel, normalized);
   if (current) return { data: current };
 
-  // Search archived milestone phases (newest first)
-  const milestonesDir = join(projectDir, '.planning', 'milestones');
-  try {
-    const milestoneEntries = await readdir(milestonesDir, { withFileTypes: true });
-    const archiveDirs = milestoneEntries
-      .filter(e => e.isDirectory() && /^v[\d.]+-phases$/.test(e.name))
-      .map(e => e.name)
-      .sort()
-      .reverse();
+  // Search archived milestone phases (newest first).
+  // milestones/ lives at the .planning/ root regardless of workstream — archived
+  // milestones are global (matches pre-migration behavior using join(projectDir, '.planning', 'milestones')).
+  const milestonesAdapterRel = 'milestones';
+  // Pitfall 3: listCollection returns [] on ENOENT
+  const milestoneRefs = await adapter.listCollection(milestonesAdapterRel);
+  // We need only directories matching v<...>-phases — stat in parallel (Pitfall 2)
+  const milestoneDirChecks = await Promise.all(
+    milestoneRefs
+      .filter(r => /^v[\d.]+-phases$/.test(r.name))
+      .map(async r => ({
+        ref: r,
+        isDir: ((await adapter.stat(r.path))?.kind === 'dir'),
+      })),
+  );
+  const archiveDirs = milestoneDirChecks
+    .filter(c => c.isDir)
+    .map(c => c.ref.name)
+    .sort()
+    .reverse();
 
-    for (const archiveName of archiveDirs) {
-      const versionMatch = archiveName.match(/^(v[\d.]+)-phases$/);
-      const version = versionMatch ? versionMatch[1] : archiveName;
-      const archivePath = join(milestonesDir, archiveName);
-      const relBase = '.planning/milestones/' + archiveName;
-      searchedDirectories.push(relBase);
-      const result = await searchPhaseInDir(archivePath, relBase, normalized);
-      if (result) {
-        result.archived = version;
-        return { data: result };
-      }
+  for (const archiveName of archiveDirs) {
+    const versionMatch = archiveName.match(/^(v[\d.]+)-phases$/);
+    const version = versionMatch ? versionMatch[1] : archiveName;
+    const archiveAdapterRel = `${milestonesAdapterRel}/${archiveName}`;
+    const archiveDisplayRel = '.planning/milestones/' + archiveName;
+    searchedDirectories.push(archiveDisplayRel);
+    const result = await searchPhaseInDir(adapter, archiveAdapterRel, archiveDisplayRel, normalized);
+    if (result) {
+      result.archived = version;
+      return { data: result };
     }
-  } catch { /* milestones dir doesn't exist */ }
+  }
 
   const notFound: PhaseInfo & { searched_directories: string[] } = {
     found: false,
@@ -293,44 +325,60 @@ export const findPhase: QueryHandler = async (args, projectDir, workstream) => {
  *
  * Port of cmdPhasePlanIndex from phase.cjs lines 203-310.
  *
+ * @param adapter - Storage adapter (Phase 2 D-10)
  * @param args - args[0] is the phase identifier (required)
- * @param projectDir - Project root directory
+ * @param projectDir - Project root directory (kept for signature compatibility; unused now)
+ * @param workstream - Optional workstream name
  * @returns QueryResult with { phase, plans[], waves{}, incomplete[], has_checkpoints }
  * @throws GSDError with Validation classification if phase identifier missing
  */
-export const phasePlanIndex: QueryHandler = async (args, projectDir, workstream) => {
+export const phasePlanIndex = async (
+  adapter: StorageAdapter,
+  args: string[],
+  _projectDir: string,
+  workstream?: string,
+): Promise<QueryResult> => {
   const phase = args[0];
   if (!phase) {
     throw new GSDError('phase required for phase-plan-index', ErrorClassification.Validation);
   }
 
-  const phasesDir = planningPaths(projectDir, workstream).phases;
   const normalized = normalizePhaseName(phase);
+  const phasesAdapterRel = planningRelativePath(workstream, 'phases');
 
-  // Find phase directory
-  let phaseDir: string | null = null;
-  try {
-    const entries = await readdir(phasesDir, { withFileTypes: true });
-    const dirs = entries
-      .filter(e => e.isDirectory())
-      .map(e => e.name)
-      .sort((a, b) => comparePhaseNum(a, b));
-    const match = dirs.find(d => phaseTokenMatches(d, normalized));
-    if (match) {
-      phaseDir = join(phasesDir, match);
-    }
-  } catch { /* phases dir doesn't exist */ }
+  // Find phase directory.
+  // Pitfall 3: listCollection returns [] on ENOENT
+  const refs = await adapter.listCollection(phasesAdapterRel);
+  const dirChecks = await Promise.all(
+    refs.map(async r => ({
+      ref: r,
+      isDir: ((await adapter.stat(r.path))?.kind === 'dir'),
+    })),
+  );
+  const dirs = dirChecks
+    .filter(c => c.isDir)
+    .map(c => c.ref.name)
+    .sort((a, b) => comparePhaseNum(a, b));
+  const match = dirs.find(d => phaseTokenMatches(d, normalized));
 
-  if (!phaseDir) {
-    const found = await findPhase([phase], projectDir, workstream);
+  let phaseAdapterRel: string | null = null;
+  if (match) {
+    phaseAdapterRel = `${phasesAdapterRel}/${match}`;
+  }
+
+  // Fallback: if not in current phases/, try findPhase which also searches
+  // archived milestones/ directories (matches HEAD #3164 behavior).
+  if (!phaseAdapterRel) {
+    const found = await findPhase(adapter, [phase], projectDir, workstream);
     const foundData = found.data as Record<string, unknown> | null;
     const relDir = foundData?.directory;
     if (foundData?.found && typeof relDir === 'string' && relDir.trim() !== '') {
-      phaseDir = join(projectDir, relDir);
+      // Convert display path (.planning/foo/bar) to adapter-relative (foo/bar).
+      phaseAdapterRel = relDir.replace(/^\.planning\//, '');
     }
   }
 
-  if (!phaseDir) {
+  if (!phaseAdapterRel) {
     return {
       data: {
         phase: normalized,
@@ -344,7 +392,8 @@ export const phasePlanIndex: QueryHandler = async (args, projectDir, workstream)
   }
 
   // Get all files in phase directory
-  const phaseFiles = await readdir(phaseDir);
+  const phaseRefs = await adapter.listCollection(phaseAdapterRel);
+  const phaseFiles = phaseRefs.map(r => r.name);
   const planFiles = phaseFiles.filter(isCanonicalPlanFile).sort();
   const summaryFiles = phaseFiles.filter(f => f.endsWith('-SUMMARY.md') || f === 'SUMMARY.md');
   // #2893 parity — same diagnostic format as find-phase / phases-list. Use the
@@ -353,11 +402,7 @@ export const phasePlanIndex: QueryHandler = async (args, projectDir, workstream)
 
   // Build set of plan IDs with summaries — match the planId derivation logic
   const completedPlanIds = new Set(
-    summaryFiles.flatMap((s) => {
-      const exact = s === 'SUMMARY.md' ? 'PLAN' : s.replace('-SUMMARY.md', '');
-      const canonical = extractCanonicalPlanId(s);
-      return canonical === exact ? [exact] : [exact, canonical];
-    })
+    summaryFiles.map(s => s === 'SUMMARY.md' ? 'PLAN' : s.replace('-SUMMARY.md', ''))
   );
 
   // ── Pass 1: parse each plan file ─────────────────────────────────────────
@@ -375,12 +420,18 @@ export const phasePlanIndex: QueryHandler = async (args, projectDir, workstream)
 
   const rawPlans: RawPlan[] = [];
 
-  for (const planFile of planFiles) {
+  // Read plan contents in parallel (Pitfall 2)
+  const planContents = await Promise.all(
+    planFiles.map(async planFile => ({
+      planFile,
+      content: (await adapter.getRecord(`${phaseAdapterRel}/${planFile}`)) ?? '',
+    })),
+  );
+
+  for (const { planFile, content } of planContents) {
     // For named plans (01-01-PLAN.md): strip suffix to get '01-01'
     // For bare PLAN.md: use the filename itself as the ID
     const planId = planFile === 'PLAN.md' ? 'PLAN' : planFile.replace('-PLAN.md', '');
-    const planPath = join(phaseDir, planFile);
-    const content = await readFile(planPath, 'utf-8');
     const fm = extractFrontmatter(content);
 
     // Count tasks: XML <task> tags (canonical) or ## Task N markdown (legacy)
@@ -417,6 +468,9 @@ export const phasePlanIndex: QueryHandler = async (args, projectDir, workstream)
     }
 
     const hasSummary = completedPlanIds.has(planId) || completedPlanIds.has(extractCanonicalPlanId(planFile));
+    if (!hasSummary) {
+      incomplete.push(planId);
+    }
 
     rawPlans.push({
       id: planId,

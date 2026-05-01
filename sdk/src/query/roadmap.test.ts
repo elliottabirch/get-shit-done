@@ -20,6 +20,8 @@ import {
   extractPhasesFromSection,
   stripShippedMilestones,
 } from './roadmap.js';
+import { MarkdownAdapter } from '../../../adapters/markdown/index.js';
+import type { StorageAdapter } from '../../../adapters/types.js';
 
 // ─── Test fixtures ────────────────────────────────────────────────────────
 
@@ -75,9 +77,11 @@ status: executing
 // ─── Helpers ──────────────────────────────────────────────────────────────
 
 let tmpDir: string;
+let adapter: StorageAdapter;
 
 beforeEach(async () => {
   tmpDir = await mkdtemp(join(tmpdir(), 'roadmap-test-'));
+  adapter = new MarkdownAdapter(tmpDir);
   await mkdir(join(tmpDir, '.planning', 'phases', '09-foundation'), { recursive: true });
   await mkdir(join(tmpDir, '.planning', 'phases', '10-read-only-queries'), { recursive: true });
 });
@@ -180,7 +184,7 @@ describe('stripShippedMilestones', () => {
 describe('getMilestoneInfo', () => {
   it('extracts version and name from heading format', async () => {
     await writeFile(join(tmpDir, '.planning', 'ROADMAP.md'), ROADMAP_CONTENT);
-    const info = await getMilestoneInfo(tmpDir);
+    const info = await getMilestoneInfo(adapter);
     expect(info.version).toBe('v3.0');
     expect(info.name).toBe('SDK-First Migration');
   });
@@ -188,7 +192,7 @@ describe('getMilestoneInfo', () => {
   it('extracts from in-progress marker format', async () => {
     const roadmap = '- \u{1F6A7} **v2.1 Belgium** \u2014 Phases 24-28 (in progress)';
     await writeFile(join(tmpDir, '.planning', 'ROADMAP.md'), roadmap);
-    const info = await getMilestoneInfo(tmpDir);
+    const info = await getMilestoneInfo(adapter);
     expect(info.version).toBe('v2.1');
     expect(info.name).toBe('Belgium');
   });
@@ -196,7 +200,7 @@ describe('getMilestoneInfo', () => {
   it('extracts from yellow-circle in-flight marker (GSD ROADMAP template)', async () => {
     const roadmap = '- 🟡 **v3.1 Upstream Landing** — Phase 15 (in flight)';
     await writeFile(join(tmpDir, '.planning', 'ROADMAP.md'), roadmap);
-    const info = await getMilestoneInfo(tmpDir);
+    const info = await getMilestoneInfo(adapter);
     expect(info.version).toBe('v3.1');
     expect(info.name).toBe('Upstream Landing');
   });
@@ -211,7 +215,7 @@ describe('getMilestoneInfo', () => {
 ## Phases
 `;
     await writeFile(join(tmpDir, '.planning', 'ROADMAP.md'), roadmap);
-    const info = await getMilestoneInfo(tmpDir);
+    const info = await getMilestoneInfo(adapter);
     expect(info.version).toBe('v3.1');
     expect(info.name).toBe('Current Name');
   });
@@ -221,7 +225,7 @@ describe('getMilestoneInfo', () => {
       join(tmpDir, '.planning', 'STATE.md'),
       '---\nmilestone: v4.2\nmilestone_name: From State\n---\n\n# State\n',
     );
-    const info = await getMilestoneInfo(tmpDir);
+    const info = await getMilestoneInfo(adapter);
     // CJS parity: when ROADMAP is missing, catch block fires. SDK preserves version from
     // STATE.md (v4.2) but name is always 'milestone' — STATE.md milestone_name is NOT used.
     // This matches CJS catch behavior (core.cjs returns v1.0/'milestone' on ROADMAP error,
@@ -231,7 +235,7 @@ describe('getMilestoneInfo', () => {
   });
 
   it('falls back to v1.0 when ROADMAP.md and STATE.md lack milestone', async () => {
-    const info = await getMilestoneInfo(tmpDir);
+    const info = await getMilestoneInfo(adapter);
     expect(info.version).toBe('v1.0');
     expect(info.name).toBe('milestone');
   });
@@ -252,7 +256,7 @@ describe('getMilestoneInfo', () => {
       join(tmpDir, '.planning', 'STATE.md'),
       '---\nmilestone: v2.0\nmilestone_name: Current Active\n---\n',
     );
-    const info = await getMilestoneInfo(tmpDir);
+    const info = await getMilestoneInfo(adapter);
     expect(info.version).toBe('v2.0');
     expect(info.name).toBe('Current Active');
   });
@@ -270,7 +274,7 @@ describe('getMilestoneInfo', () => {
       join(tmpDir, '.planning', 'STATE.md'),
       '---\nmilestone: v2.0\n---\n',  // no milestone_name
     );
-    const info = await getMilestoneInfo(tmpDir);
+    const info = await getMilestoneInfo(adapter);
     expect(info.version).toBe('v2.0');
     expect(info.name).toBe('Real Name From Roadmap');
   });
@@ -291,7 +295,7 @@ describe('getMilestoneInfo', () => {
       join(tmpDir, '.planning', 'STATE.md'),
       '---\nmilestone: v2.0\nmilestone_name: New\n---\n',
     );
-    const info = await getMilestoneInfo(tmpDir);
+    const info = await getMilestoneInfo(adapter);
     expect(info.version).toBe('v2.0');
     expect(info.name).toBe('New');
   });
@@ -303,7 +307,7 @@ describe('extractCurrentMilestone', () => {
   it('scopes content to current milestone from STATE.md version', async () => {
     await writeFile(join(tmpDir, '.planning', 'STATE.md'), STATE_WITH_MILESTONE);
     await writeFile(join(tmpDir, '.planning', 'ROADMAP.md'), ROADMAP_CONTENT);
-    const result = await extractCurrentMilestone(ROADMAP_CONTENT, tmpDir);
+    const result = await extractCurrentMilestone(adapter, ROADMAP_CONTENT);
     expect(result).toContain('Phase 10');
     expect(result).toContain('v3.0');
   });
@@ -311,7 +315,7 @@ describe('extractCurrentMilestone', () => {
   it('strips shipped milestones when no cwd version found', async () => {
     const content = '<details>old</details>current content';
     // No STATE.md, no in-progress marker
-    const result = await extractCurrentMilestone(content, tmpDir);
+    const result = await extractCurrentMilestone(adapter, content);
     expect(result).toBe('current content');
   });
 
@@ -334,7 +338,7 @@ describe('extractCurrentMilestone', () => {
     await writeFile(join(tmpDir, '.planning', 'STATE.md'), state);
     await writeFile(join(tmpDir, '.planning', 'ROADMAP.md'), roadmapWithBacklog);
 
-    const result = await extractCurrentMilestone(roadmapWithBacklog, tmpDir);
+    const result = await extractCurrentMilestone(adapter, roadmapWithBacklog);
 
     // Must NOT include backlog phases
     expect(result).not.toContain('Phase 999.1');
@@ -368,7 +372,7 @@ describe('extractCurrentMilestone', () => {
     await writeFile(join(tmpDir, '.planning', 'STATE.md'), state);
     await writeFile(join(tmpDir, '.planning', 'ROADMAP.md'), roadmapWithPhaseVersion);
 
-    const result = await extractCurrentMilestone(roadmapWithPhaseVersion, tmpDir);
+    const result = await extractCurrentMilestone(adapter, roadmapWithPhaseVersion);
 
     // Phase 12 and Phase 19 must both survive — the slice cannot be truncated
     // at "### Phase 12: v1.0 Tech-Debt Closure".
@@ -400,7 +404,7 @@ describe('extractCurrentMilestone', () => {
     await writeFile(join(tmpDir, '.planning', 'STATE.md'), state);
     await writeFile(join(tmpDir, '.planning', 'ROADMAP.md'), roadmapMixedCase);
 
-    const result = await extractCurrentMilestone(roadmapMixedCase, tmpDir);
+    const result = await extractCurrentMilestone(adapter, roadmapMixedCase);
 
     expect(result).toContain('### PHASE 11: Structured Logging');
     expect(result).toContain('### phase 12: v1.0 Tech-Debt Closure');
@@ -807,7 +811,7 @@ Detail
     await writeFile(join(tmpDir, '.planning', 'STATE.md'), state);
     await writeFile(join(tmpDir, '.planning', 'ROADMAP.md'), roadmapWithDetails);
 
-    const result = await extractCurrentMilestone(roadmapWithDetails, tmpDir);
+    const result = await extractCurrentMilestone(adapter, roadmapWithDetails);
 
     // The detail section must survive — not be cut off
     expect(result).toContain('Phase 100');
@@ -886,7 +890,7 @@ describe('roadmapGetPhase', () => {
   it('returns phase info for existing phase', async () => {
     await writeFile(join(tmpDir, '.planning', 'ROADMAP.md'), ROADMAP_CONTENT);
     await writeFile(join(tmpDir, '.planning', 'STATE.md'), STATE_WITH_MILESTONE);
-    const result = await roadmapGetPhase(['10'], tmpDir);
+    const result = await roadmapGetPhase(adapter, ['10'], tmpDir);
     const data = result.data as Record<string, unknown>;
     expect(data.found).toBe(true);
     expect(data.phase_number).toBe('10');
@@ -899,27 +903,27 @@ describe('roadmapGetPhase', () => {
   it('returns { found: false } for nonexistent phase', async () => {
     await writeFile(join(tmpDir, '.planning', 'ROADMAP.md'), ROADMAP_CONTENT);
     await writeFile(join(tmpDir, '.planning', 'STATE.md'), STATE_WITH_MILESTONE);
-    const result = await roadmapGetPhase(['999'], tmpDir);
+    const result = await roadmapGetPhase(adapter, ['999'], tmpDir);
     const data = result.data as Record<string, unknown>;
     expect(data.found).toBe(false);
     expect(data.phase_number).toBe('999');
   });
 
   it('throws GSDError when no phase number provided', async () => {
-    await expect(roadmapGetPhase([], tmpDir)).rejects.toThrow();
+    await expect(roadmapGetPhase(adapter, [], tmpDir)).rejects.toThrow();
   });
 
   it('handles malformed roadmap (checklist-only, no detail section)', async () => {
     const malformed = `# Roadmap\n\n- [ ] **Phase 99: Missing Detail**\n`;
     await writeFile(join(tmpDir, '.planning', 'ROADMAP.md'), malformed);
-    const result = await roadmapGetPhase(['99'], tmpDir);
+    const result = await roadmapGetPhase(adapter, ['99'], tmpDir);
     const data = result.data as Record<string, unknown>;
     expect(data.error).toBe('malformed_roadmap');
     expect(data.phase_name).toBe('Missing Detail');
   });
 
   it('returns error object when ROADMAP.md not found', async () => {
-    const result = await roadmapGetPhase(['10'], tmpDir);
+    const result = await roadmapGetPhase(adapter, ['10'], tmpDir);
     const data = result.data as Record<string, unknown>;
     expect(data.found).toBe(false);
     expect(data.error).toBe('ROADMAP.md not found');
@@ -973,7 +977,7 @@ describe('roadmapAnalyze', () => {
     await writeFile(join(tmpDir, '.planning', 'phases', '09-foundation', '09-01-SUMMARY.md'), '---\n---\n');
     await writeFile(join(tmpDir, '.planning', 'phases', '10-read-only-queries', '10-01-PLAN.md'), '---\n---\n');
 
-    const result = await roadmapAnalyze([], tmpDir);
+    const result = await roadmapAnalyze(adapter, [], tmpDir);
     const data = result.data as Record<string, unknown>;
 
     expect(data.phase_count).toBe(3);
@@ -1002,7 +1006,7 @@ describe('roadmapAnalyze', () => {
   });
 
   it('returns error when ROADMAP.md not found', async () => {
-    const result = await roadmapAnalyze([], tmpDir);
+    const result = await roadmapAnalyze(adapter, [], tmpDir);
     const data = result.data as Record<string, unknown>;
     expect(data.error).toBe('ROADMAP.md not found');
   });
@@ -1012,7 +1016,7 @@ describe('roadmapAnalyze', () => {
     await writeFile(join(tmpDir, '.planning', 'STATE.md'), STATE_WITH_MILESTONE);
 
     // Phase 9 dir is empty (no plans/summaries) but roadmap has [x]
-    const result = await roadmapAnalyze([], tmpDir);
+    const result = await roadmapAnalyze(adapter, [], tmpDir);
     const data = result.data as Record<string, unknown>;
     const phases = data.phases as Array<Record<string, unknown>>;
     const p9 = phases.find(p => p.number === '9');
@@ -1025,7 +1029,7 @@ describe('roadmapAnalyze', () => {
     await writeFile(join(tmpDir, '.planning', 'ROADMAP.md'), roadmapWithExtra);
     await writeFile(join(tmpDir, '.planning', 'STATE.md'), STATE_WITH_MILESTONE);
 
-    const result = await roadmapAnalyze([], tmpDir);
+    const result = await roadmapAnalyze(adapter, [], tmpDir);
     const data = result.data as Record<string, unknown>;
     expect(data.missing_phase_details).toContain('99');
   });
@@ -1034,8 +1038,8 @@ describe('roadmapAnalyze', () => {
     await writeFile(join(tmpDir, '.planning', 'ROADMAP.md'), ROADMAP_CONTENT);
     await writeFile(join(tmpDir, '.planning', 'STATE.md'), STATE_WITH_MILESTONE);
 
-    const result1 = await roadmapAnalyze([], tmpDir);
-    const result2 = await roadmapAnalyze([], tmpDir);
+    const result1 = await roadmapAnalyze(adapter, [], tmpDir);
+    const result2 = await roadmapAnalyze(adapter, [], tmpDir);
     const data1 = result1.data as Record<string, unknown>;
     const data2 = result2.data as Record<string, unknown>;
 
@@ -1150,7 +1154,7 @@ describe('extractNextMilestoneSection', () => {
       join(tmpDir, '.planning', 'STATE.md'),
       '---\nmilestone: v2.0.5\nmilestone_name: Current Milestone\n---\n',
     );
-    const next = await extractNextMilestoneSection(MULTI, tmpDir);
+    const next = await extractNextMilestoneSection(adapter, MULTI);
     expect(next).not.toBeNull();
     expect(next!.version).toBe('v2.1');
     expect(next!.name).toBe('Daily Emails');
@@ -1174,12 +1178,12 @@ describe('extractNextMilestoneSection', () => {
       join(tmpDir, '.planning', 'STATE.md'),
       '---\nmilestone: v2.0.5\n---\n',
     );
-    const next = await extractNextMilestoneSection(roadmap, tmpDir);
+    const next = await extractNextMilestoneSection(adapter, roadmap);
     expect(next).toBeNull();
   });
 
   it('returns null when no current milestone can be resolved', async () => {
-    const next = await extractNextMilestoneSection('# Roadmap\nno milestones\n', tmpDir);
+    const next = await extractNextMilestoneSection(adapter, '# Roadmap\nno milestones\n');
     expect(next).toBeNull();
   });
 });

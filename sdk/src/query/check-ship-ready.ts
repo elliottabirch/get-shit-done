@@ -15,7 +15,7 @@
 
 import { execFileSync } from 'node:child_process';
 import { GSDError, ErrorClassification } from '../errors.js';
-import { normalizePhaseName } from './helpers.js';
+import { adapterFor, normalizePhaseName } from './helpers.js';
 import { checkVerificationStatus } from './check-verification-status.js';
 import type { QueryHandler } from './utils.js';
 
@@ -103,7 +103,9 @@ export const checkShipReady: QueryHandler = async (args, projectDir) => {
   // Verification status
   let verification_passed = false;
   try {
-    const verRes = await checkVerificationStatus([raw], projectDir);
+    // Phase 2 Plan 02-02 transitional: checkVerificationStatus migrated to adapter.
+    const adapter = await adapterFor(projectDir);
+    const verRes = await checkVerificationStatus(adapter, [raw], projectDir);
     const vdata = verRes.data as Record<string, unknown>;
     const status = String(vdata.status ?? '').toLowerCase();
     verification_passed = status === 'pass' || status === 'passed';

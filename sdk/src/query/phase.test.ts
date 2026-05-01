@@ -12,6 +12,8 @@ import { tmpdir } from 'node:os';
 import { GSDError } from '../errors.js';
 
 import { findPhase, phasePlanIndex } from './phase.js';
+import { MarkdownAdapter } from '../../../adapters/markdown/index.js';
+import type { StorageAdapter } from '../../../adapters/types.js';
 
 // ─── Fixtures ──────────────────────────────────────────────────────────────
 
@@ -83,6 +85,7 @@ Golden file tests.
 `;
 
 let tmpDir: string;
+let adapter: StorageAdapter;
 
 // ─── Setup / Teardown ──────────────────────────────────────────────────────
 
@@ -92,6 +95,8 @@ beforeEach(async () => {
   const phasesDir = join(planningDir, 'phases');
 
   await mkdir(phasesDir, { recursive: true });
+
+  adapter = new MarkdownAdapter(tmpDir);
 
   // Phase 09
   const phase09 = join(phasesDir, '09-foundation');
@@ -119,7 +124,7 @@ afterEach(async () => {
 
 describe('findPhase', () => {
   it('finds existing phase by number', async () => {
-    const result = await findPhase(['9'], tmpDir);
+    const result = await findPhase(adapter, ['9'], tmpDir);
     const data = result.data as Record<string, unknown>;
 
     expect(data.found).toBe(true);
@@ -128,7 +133,7 @@ describe('findPhase', () => {
   });
 
   it('returns posix-style directory path', async () => {
-    const result = await findPhase(['9'], tmpDir);
+    const result = await findPhase(adapter, ['9'], tmpDir);
     const data = result.data as Record<string, unknown>;
 
     expect(data.directory).toBe('.planning/phases/09-foundation');
@@ -137,7 +142,7 @@ describe('findPhase', () => {
   });
 
   it('lists plans and summaries', async () => {
-    const result = await findPhase(['9'], tmpDir);
+    const result = await findPhase(adapter, ['9'], tmpDir);
     const data = result.data as Record<string, unknown>;
 
     const plans = data.plans as string[];
@@ -150,7 +155,7 @@ describe('findPhase', () => {
   });
 
   it('returns not found for nonexistent phase', async () => {
-    const result = await findPhase(['99'], tmpDir);
+    const result = await findPhase(adapter, ['99'], tmpDir);
     const data = result.data as Record<string, unknown>;
 
     expect(data.found).toBe(false);
@@ -161,16 +166,16 @@ describe('findPhase', () => {
   });
 
   it('throws GSDError with Validation classification when no args', async () => {
-    await expect(findPhase([], tmpDir)).rejects.toThrow(GSDError);
+    await expect(findPhase(adapter, [], tmpDir)).rejects.toThrow(GSDError);
     try {
-      await findPhase([], tmpDir);
+      await findPhase(adapter, [], tmpDir);
     } catch (err) {
       expect((err as GSDError).classification).toBe('validation');
     }
   });
 
   it('handles two-digit phase numbers', async () => {
-    const result = await findPhase(['10'], tmpDir);
+    const result = await findPhase(adapter, ['10'], tmpDir);
     const data = result.data as Record<string, unknown>;
 
     expect(data.found).toBe(true);
@@ -179,7 +184,7 @@ describe('findPhase', () => {
   });
 
   it('includes file stats (research, context)', async () => {
-    const result = await findPhase(['9'], tmpDir);
+    const result = await findPhase(adapter, ['9'], tmpDir);
     const data = result.data as Record<string, unknown>;
 
     expect(data.has_research).toBe(true);
@@ -187,7 +192,7 @@ describe('findPhase', () => {
   });
 
   it('computes incomplete plans', async () => {
-    const result = await findPhase(['9'], tmpDir);
+    const result = await findPhase(adapter, ['9'], tmpDir);
     const data = result.data as Record<string, unknown>;
     const incompletePlans = data.incomplete_plans as string[];
 
@@ -202,7 +207,7 @@ describe('findPhase', () => {
     await writeFile(join(archiveDir, '01-01-PLAN.md'), '---\nphase: 01\nplan: 01\n---\nPlan');
     await writeFile(join(archiveDir, '01-01-SUMMARY.md'), 'Summary');
 
-    const result = await findPhase(['1'], tmpDir);
+    const result = await findPhase(adapter, ['1'], tmpDir);
     const data = result.data as Record<string, unknown>;
 
     expect(data.found).toBe(true);
@@ -214,7 +219,7 @@ describe('findPhase', () => {
 
 describe('phasePlanIndex', () => {
   it('returns plan metadata for phase', async () => {
-    const result = await phasePlanIndex(['9'], tmpDir);
+    const result = await phasePlanIndex(adapter, ['9'], tmpDir);
     const data = result.data as Record<string, unknown>;
 
     expect(data.phase).toBe('09');
@@ -223,7 +228,7 @@ describe('phasePlanIndex', () => {
   });
 
   it('includes plan details (id, wave, autonomous, objective, task_count)', async () => {
-    const result = await phasePlanIndex(['9'], tmpDir);
+    const result = await phasePlanIndex(adapter, ['9'], tmpDir);
     const data = result.data as Record<string, unknown>;
     const plans = data.plans as Array<Record<string, unknown>>;
 
@@ -237,7 +242,7 @@ describe('phasePlanIndex', () => {
   });
 
   it('correctly counts XML task tags', async () => {
-    const result = await phasePlanIndex(['9'], tmpDir);
+    const result = await phasePlanIndex(adapter, ['9'], tmpDir);
     const data = result.data as Record<string, unknown>;
     const plans = data.plans as Array<Record<string, unknown>>;
 
@@ -252,7 +257,7 @@ describe('phasePlanIndex', () => {
   });
 
   it('groups plans by wave', async () => {
-    const result = await phasePlanIndex(['9'], tmpDir);
+    const result = await phasePlanIndex(adapter, ['9'], tmpDir);
     const data = result.data as Record<string, unknown>;
     const waves = data.waves as Record<string, string[]>;
 
@@ -262,7 +267,7 @@ describe('phasePlanIndex', () => {
   });
 
   it('identifies incomplete plans', async () => {
-    const result = await phasePlanIndex(['9'], tmpDir);
+    const result = await phasePlanIndex(adapter, ['9'], tmpDir);
     const data = result.data as Record<string, unknown>;
     const incomplete = data.incomplete as string[];
 
@@ -271,7 +276,7 @@ describe('phasePlanIndex', () => {
   });
 
   it('detects has_checkpoints from non-autonomous plans', async () => {
-    const result = await phasePlanIndex(['9'], tmpDir);
+    const result = await phasePlanIndex(adapter, ['9'], tmpDir);
     const data = result.data as Record<string, unknown>;
 
     // Plan 02 has autonomous: false
@@ -279,7 +284,7 @@ describe('phasePlanIndex', () => {
   });
 
   it('parses files_modified from frontmatter', async () => {
-    const result = await phasePlanIndex(['9'], tmpDir);
+    const result = await phasePlanIndex(adapter, ['9'], tmpDir);
     const data = result.data as Record<string, unknown>;
     const plans = data.plans as Array<Record<string, unknown>>;
 
@@ -291,16 +296,16 @@ describe('phasePlanIndex', () => {
   });
 
   it('throws GSDError with Validation classification when no args', async () => {
-    await expect(phasePlanIndex([], tmpDir)).rejects.toThrow(GSDError);
+    await expect(phasePlanIndex(adapter, [], tmpDir)).rejects.toThrow(GSDError);
     try {
-      await phasePlanIndex([], tmpDir);
+      await phasePlanIndex(adapter, [], tmpDir);
     } catch (err) {
       expect((err as GSDError).classification).toBe('validation');
     }
   });
 
   it('returns error for nonexistent phase', async () => {
-    const result = await phasePlanIndex(['99'], tmpDir);
+    const result = await phasePlanIndex(adapter, ['99'], tmpDir);
     const data = result.data as Record<string, unknown>;
 
     expect(data.error).toBe('Phase not found');

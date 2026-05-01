@@ -10,7 +10,7 @@
 import { findPhase } from './phase.js';
 import { readModifyWriteRoadmapMd, replaceInCurrentMilestone } from './phase-roadmap-mutation.js';
 import { existsSync } from 'node:fs';
-import { escapeRegex, planningPaths } from './helpers.js';
+import { adapterFor, escapeRegex, planningPaths } from './helpers.js';
 import { GSDError, ErrorClassification } from '../errors.js';
 import type { QueryHandler } from './utils.js';
 
@@ -47,7 +47,9 @@ export const roadmapUpdatePlanProgress: QueryHandler = async (args, projectDir, 
     throw new GSDError('phase number required for roadmap update-plan-progress', ErrorClassification.Validation);
   }
 
-  const phaseResult = await findPhase([phaseNum], projectDir, workstream);
+  // Phase 2 Plan 02-02 transitional: findPhase migrated to adapter signature.
+  const adapter = await adapterFor(projectDir);
+  const phaseResult = await findPhase(adapter, [phaseNum], projectDir, workstream);
   const info = phaseResult.data as {
     found: boolean;
     plans: string[];
