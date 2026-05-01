@@ -30,7 +30,7 @@
 ### READS — Wire SDK read queries to adapter
 
 - [ ] **READS-01**: All ~40 SDK read queries call `adapter.*` instead of `node:fs` directly (`progressJson`, `roadmapAnalyze`, `stateJson`, `findPhase`, `phasesList`, `phasePlanIndex`, `summaryExtract`, etc.) — _Plan 02-02 covered ~50 read sites in 8 files; Plans 02-03/04 cover the remaining document/init reads before this completes._
-- [ ] **READS-02**: Workflow init bundlers (~13 `getXxxInit()` Bin B methods) compose adapter primitives internally (resolves OQ-9 by keeping coarse method shape, decomposing internally)
+- [x] **READS-02**: Workflow init bundlers (~13 `getXxxInit()` Bin B methods) compose adapter primitives internally (resolves OQ-9 by keeping coarse method shape, decomposing internally)
 - [x] **READS-03**: Skill frontmatter `<context>`-block `@.planning/...` references audited; each leak is either rewritten through the adapter or documented as out-of-scope for skill activation
 
 ### WRITES — Wire SDK write methods + recordStateEvent
