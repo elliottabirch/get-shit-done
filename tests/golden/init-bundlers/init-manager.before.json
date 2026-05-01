@@ -1,0 +1,211 @@
+{
+  "milestone_version": "v1.0",
+  "milestone_name": "milestone",
+  "phases": [
+    {
+      "number": "1",
+      "name": "Fork bootstrap + StorageAdapter interface skeleton + MarkdownAdapter scaffold",
+      "display_name": "Fork bootstrap + St…",
+      "goal": "A locked StorageAdapter TypeScript contract exists, with a MarkdownAdapter scaffold that delegates to today's `node:fs` code, wired into `index.js` via dependency injection — and we know how that contract relates to upstream's recent seam work before we commit.",
+      "depends_on": "Nothing (first phase)",
+      "disk_status": "complete",
+      "has_context": true,
+      "has_research": true,
+      "plan_count": 5,
+      "summary_count": 6,
+      "roadmap_complete": true,
+      "last_activity": "2026-05-01T09:20:38.512Z",
+      "is_active": false,
+      "deps_satisfied": true,
+      "dep_phases": [],
+      "deps_display": "—",
+      "is_next_to_discuss": false
+    },
+    {
+      "number": "2",
+      "name": "Wire core read methods to adapter",
+      "display_name": "Wire core read meth…",
+      "goal": "Every SDK read query — including the ~13 workflow init bundlers and every skill frontmatter `@.planning/...` reference — flows through the adapter, not direct `node:fs`.",
+      "depends_on": "Phase 1 (the interface must exist before reads can route through it)",
+      "disk_status": "planned",
+      "has_context": true,
+      "has_research": true,
+      "plan_count": 5,
+      "summary_count": 0,
+      "roadmap_complete": false,
+      "last_activity": "2026-05-01T09:20:38.516Z",
+      "is_active": false,
+      "deps_satisfied": true,
+      "dep_phases": [
+        "1"
+      ],
+      "deps_display": "1",
+      "is_next_to_discuss": false
+    },
+    {
+      "number": "3",
+      "name": "Wire core write methods + recordStateEvent",
+      "display_name": "Wire core write met…",
+      "goal": "Every SDK write goes through the adapter; the 10+ ad-hoc state-mutation handlers collapse into one `recordStateEvent({type, payload})` discriminated-union call, and `phase-lifecycle.js`'s 13 handlers route through Bin B named methods over Bin A primitives.",
+      "depends_on": "Phase 1 (interface) and Phase 2 (read patterns inform write patterns and a routed read surface is needed to verify writes round-trip correctly)",
+      "disk_status": "no_directory",
+      "has_context": false,
+      "has_research": false,
+      "plan_count": 0,
+      "summary_count": 0,
+      "roadmap_complete": false,
+      "last_activity": null,
+      "is_active": false,
+      "deps_satisfied": false,
+      "dep_phases": [
+        "1",
+        "2"
+      ],
+      "deps_display": "1,2",
+      "is_next_to_discuss": true
+    },
+    {
+      "number": "4",
+      "name": "Plug workflow leaks (top-10 + `<context>`-block class)",
+      "display_name": "Plug workflow leaks…",
+      "goal": "The 10 heaviest leaking workflows + the new `<context>`-block frontmatter leak class no longer touch `.planning/` directly; a CI gate prevents regression; the two raw-git outliers are fixed.",
+      "depends_on": "Phase 3 (writes must already route through the adapter so leaks can be replaced cleanly)",
+      "disk_status": "no_directory",
+      "has_context": false,
+      "has_research": false,
+      "plan_count": 0,
+      "summary_count": 0,
+      "roadmap_complete": false,
+      "last_activity": null,
+      "is_active": false,
+      "deps_satisfied": false,
+      "dep_phases": [
+        "3"
+      ],
+      "deps_display": "3",
+      "is_next_to_discuss": false
+    },
+    {
+      "number": "5",
+      "name": "Foundational primitive lift",
+      "display_name": "Foundational primit…",
+      "goal": "The six foundational primitives are implemented and adopted, and the dry-run pipeline is hoisted off the filesystem so it works on any adapter — gating BeadsAdapter readiness per the SYNTHESIS §9 high-severity risk.",
+      "depends_on": "Phase 3 (write surface must be stable before primitive lift refactors it)",
+      "disk_status": "no_directory",
+      "has_context": false,
+      "has_research": false,
+      "plan_count": 0,
+      "summary_count": 0,
+      "roadmap_complete": false,
+      "last_activity": null,
+      "is_active": false,
+      "deps_satisfied": false,
+      "dep_phases": [
+        "3"
+      ],
+      "deps_display": "3",
+      "is_next_to_discuss": false
+    },
+    {
+      "number": "6",
+      "name": "BeadsAdapter implementation",
+      "display_name": "BeadsAdapter implem…",
+      "goal": "A complete `BeadsAdapter` implementation against `bd` exists in the sibling repo, built against the *primitive-lifted* StorageAdapter interface (post-Phase 5), with the knowledge-graph-subsystem scope decision resolved.",
+      "depends_on": "Phase 5 (BeadsAdapter is implemented against the primitive-lifted interface, not the pre-lift one — per SYNTHESIS §9 high-severity risk: \"Don't ship Phase 6 until dry-run is stable on MarkdownAdapter\")",
+      "disk_status": "no_directory",
+      "has_context": false,
+      "has_research": false,
+      "plan_count": 0,
+      "summary_count": 0,
+      "roadmap_complete": false,
+      "last_activity": null,
+      "is_active": false,
+      "deps_satisfied": false,
+      "dep_phases": [
+        "5",
+        "9",
+        "6"
+      ],
+      "deps_display": "5,9,6",
+      "is_next_to_discuss": false
+    },
+    {
+      "number": "7",
+      "name": "Conformance test suite",
+      "display_name": "Conformance test su…",
+      "goal": "A conformance test suite asserts MarkdownAdapter and BeadsAdapter produce equivalent outcomes for every Bin B method, every record-type round-trip, every section-mode semantic, and every dry-run failure-injection scenario.",
+      "depends_on": "Phase 6 (need both adapter implementations to run conformance against)",
+      "disk_status": "no_directory",
+      "has_context": false,
+      "has_research": false,
+      "plan_count": 0,
+      "summary_count": 0,
+      "roadmap_complete": false,
+      "last_activity": null,
+      "is_active": false,
+      "deps_satisfied": false,
+      "dep_phases": [
+        "6"
+      ],
+      "deps_display": "6",
+      "is_next_to_discuss": false
+    },
+    {
+      "number": "8",
+      "name": "Migration + distribution",
+      "display_name": "Migration + distrib…",
+      "goal": "Existing markdown-backed users have a working migration path to bd and a documented distribution story (fork rebase, leak-grep CI behavior on rebase, conflict playbook, PR-vs-long-lived-fork decision).",
+      "depends_on": "Phase 7 (the migration tool needs a conformance-validated adapter pair so users can trust the round-trip)",
+      "disk_status": "no_directory",
+      "has_context": false,
+      "has_research": false,
+      "plan_count": 0,
+      "summary_count": 0,
+      "roadmap_complete": false,
+      "last_activity": null,
+      "is_active": false,
+      "deps_satisfied": false,
+      "dep_phases": [
+        "7"
+      ],
+      "deps_display": "7",
+      "is_next_to_discuss": false
+    }
+  ],
+  "phase_count": 8,
+  "completed_count": 1,
+  "in_progress_count": 1,
+  "recommended_actions": [
+    {
+      "phase": "2",
+      "phase_name": "Wire core read methods to adapter",
+      "action": "execute",
+      "reason": "5 plans ready, dependencies met",
+      "command": "/gsd-execute-phase 2"
+    },
+    {
+      "phase": "3",
+      "phase_name": "Wire core write methods + recordStateEvent",
+      "action": "discuss",
+      "reason": "Unblocked, ready to gather context",
+      "command": "/gsd-discuss-phase 3"
+    }
+  ],
+  "waiting_signal": null,
+  "all_complete": false,
+  "queued_phases": [],
+  "queued_milestone_version": null,
+  "queued_milestone_name": null,
+  "project_exists": true,
+  "roadmap_exists": true,
+  "state_exists": true,
+  "manager_flags": {
+    "discuss": "",
+    "plan": "",
+    "execute": ""
+  },
+  "project_root": "/home/ellio/code/get-shit-done/.claude/worktrees/agent-afe48fc6f178f469c",
+  "agents_installed": true,
+  "missing_agents": [],
+  "project_title": "Project: get-shit-done (fork — adapter-interface seam)"
+}

@@ -1,0 +1,20 @@
+{
+  "commit_docs": true,
+  "milestone_version": "v1.0",
+  "milestone_name": "milestone",
+  "milestone_slug": "milestone",
+  "phase_count": 8,
+  "completed_phases": 1,
+  "all_phases_complete": false,
+  "archived_milestones": [],
+  "archive_count": 0,
+  "project_exists": true,
+  "roadmap_exists": true,
+  "state_exists": true,
+  "archive_exists": false,
+  "phases_dir_exists": true,
+  "project_root": "/home/ellio/code/get-shit-done/.claude/worktrees/agent-afe48fc6f178f469c",
+  "agents_installed": true,
+  "missing_agents": [],
+  "project_title": "Project: get-shit-done (fork — adapter-interface seam)"
+}

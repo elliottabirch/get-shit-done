@@ -1,0 +1,12 @@
+{
+  "default_workspace_base": "/home/ellio/gsd-workspaces",
+  "child_repos": [],
+  "child_repo_count": 0,
+  "worktree_available": true,
+  "is_git_repo": true,
+  "cwd_repo_name": "agent-afe48fc6f178f469c",
+  "project_root": "/home/ellio/code/get-shit-done/.claude/worktrees/agent-afe48fc6f178f469c",
+  "agents_installed": true,
+  "missing_agents": [],
+  "project_title": "Project: get-shit-done (fork — adapter-interface seam)"
+}
