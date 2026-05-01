@@ -1,0 +1,18 @@
+{
+  "name": "@gsd-build/adapters",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "dist/types.js",
+  "types": "dist/types.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/types.js",
+      "types": "./dist/types.d.ts"
+    },
+    "./markdown": {
+      "import": "./dist/markdown/index.js",
+      "types": "./dist/markdown/index.d.ts"
+    }
+  },
+  "private": true
+}

@@ -23,7 +23,8 @@ export default defineConfig({
         test: {
           name: 'adapters',
           root: './adapters',
-          include: ['**/*.test.ts'],
+          // types.test.ts is compile-time only (no vitest describe/it blocks)
+          include: ['markdown/**/*.test.ts'],
           exclude: ['dist/**'],
         },
       },
