@@ -62,6 +62,7 @@ Thumbs.db
 .next/
 dist/
 build/
+*.tsbuildinfo
 __pycache__/
 *.pyc
 .venv/
