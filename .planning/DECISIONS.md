@@ -256,6 +256,33 @@ questions), and its risk register derives from §9.
 
 ---
 
+## D-2026-04-30-11 — Phase 1 debt fixes: fork-side SDK patches for CJS parity
+
+**Date:** 2026-04-30
+**Trigger:** After Phase 1 execution, `cd sdk && npm test -- --run` showed 16 failures across 6 files. Debug session (`phase-1-parity-regressions.md`) classified all 16 as pre-existing or environment-triggered — zero Phase 1 regressions. User authorized fixing all 5 causes.
+
+**Decision:** Apply all 5 causes as fork-side patches in `sdk/src/*`. These patches WILL create rebase friction when we next merge `upstream/main`. Mitigation: file one upstream GitHub issue per source-code cause (4 issues total) so the fixes can be merged at source and our patches go away on the next rebase.
+
+**Causes fixed:**
+
+| Cause | Files | Nature | Upstream issue |
+|-------|-------|--------|----------------|
+| A — getMilestoneInfo ignores STATE.md milestone_name | `sdk/src/query/roadmap.ts` | CJS faithfulness (SDK was arguably more correct) | File: "SDK getMilestoneInfo uses STATE.md milestone_name as Priority 1; CJS derives name from ROADMAP only" |
+| B — loadConfig applies user-defaults even when .planning/ exists | `sdk/src/config.ts` | Clear upstream bug (0f8f7537/#2663 omitted the CJS guard) | File: "SDK loadConfig layers ~/.gsd/defaults.json when .planning/ exists; CJS only does so for pre-project contexts" |
+| C — validateHealth emits W006 for missing phase dirs; omits W019; includes repairs_performed:undefined | `sdk/src/query/validate.ts` | CJS parity gap | File: "SDK validateHealth W006/W019/repairs_performed diverges from CJS verify.cjs" |
+| D — stateUpdate returns {updated, field, value}; CJS returns {updated: true} only | `sdk/src/query/state-mutation.ts` | CJS parity gap (002bcf2a) | File: "SDK stateUpdate response includes extra field/value keys not in CJS state.cjs output" |
+| E — 6 test expectations wrong for current SDK behavior | 4 test files | Test bugs (pre-existing, non-Phase-1) | No upstream issue needed (test-only) |
+
+**Rebase strategy:** When next rebasing against upstream/main:
+1. `git rebase upstream/main` — conflicts will appear in the 4 patched files.
+2. For each conflict: if upstream has fixed the underlying issue (check the 4 filed issues), discard our patch. If not, re-apply the patch and update the upstream issue with the current diff.
+3. Check DEBT-FIXES-SUMMARY.md for exact upstream issue titles to track.
+
+**Trade-off documented:**
+- Cause A makes SDK *less* correct in service of CJS parity. The STATE.md `milestone_name` field is semantically intentional (users set it explicitly). Ignoring it in `getMilestoneInfo` means workstreams and custom setups lose their name. This is a known regression accepted for parity. Cause A's upstream issue should propose making CJS ALSO read STATE.md `milestone_name` as Priority 1 (making CJS more correct, not SDK less correct).
+
+---
+
 # Open questions deferred to v1.0 milestone phases
 
 These were identified in SYNTHESIS.md §6 but are NOT blocking for Phase 1.
