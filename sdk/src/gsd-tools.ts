@@ -18,8 +18,10 @@ import { homedir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import type { InitNewProjectInfo, PhaseOpInfo, PhasePlanIndex, RoadmapAnalysis } from './types.js';
 import type { GSDEventStream } from './event-stream.js';
+import type { StorageAdapter } from '../../adapters/types.js';
 import { GSDError, exitCodeFor } from './errors.js';
 import { createRegistry } from './query/index.js';
+import { MarkdownAdapter } from '../../adapters/markdown/index.js';
 import { resolveQueryArgv } from './query/registry.js';
 import { normalizeQueryCommand } from './query/normalize-query-command.js';
 import { formatStateLoadRawStdout } from './query/state-project-load.js';
@@ -112,6 +114,8 @@ export class GSDTools {
 
   constructor(opts: {
     projectDir: string;
+    /** Required StorageAdapter implementation (D-07: no default, no fallback). */
+    adapter: StorageAdapter;
     gsdToolsPath?: string;
     timeoutMs?: number;
     workstream?: string;
@@ -131,7 +135,11 @@ export class GSDTools {
     this.timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
     this.workstream = opts.workstream;
     this.preferNativeQuery = opts.preferNativeQuery ?? true;
-    this.registry = createRegistry(opts.eventStream, opts.sessionId);
+    this.registry = createRegistry({
+      adapter: opts.adapter,
+      eventStream: opts.eventStream,
+      correlationSessionId: opts.sessionId,
+    });
   }
 
   private shouldUseNativeQuery(): boolean {
@@ -564,7 +572,7 @@ export async function runGsdToolsQuery(projectDir: string, queryArgv: string[]):
   }
   const queryCommand = queryArgv[0];
   const [normCmd, normArgs] = normalizeQueryCommand(queryCommand, queryArgv.slice(1));
-  const registry = createRegistry();
+  const registry = createRegistry({ adapter: new MarkdownAdapter(projectDir) });
   const tokens = [normCmd, ...normArgs];
   const matched = resolveQueryArgv(tokens, registry);
   if (!matched) {

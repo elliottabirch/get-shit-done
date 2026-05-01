@@ -8,8 +8,9 @@
  * @example
  * ```typescript
  * import { createRegistry } from './query/index.js';
+ * import { MarkdownAdapter } from '../../adapters/markdown/index.js';
  *
- * const registry = createRegistry();
+ * const registry = createRegistry({ adapter: new MarkdownAdapter(projectDir) });
  * const result = await registry.dispatch('generate-slug', ['My Phase'], projectDir);
  * ```
  */
@@ -110,6 +111,7 @@ import { checkGates } from './check-gates.js';
 import { checkVerificationStatus } from './check-verification-status.js';
 import { checkShipReady } from './check-ship-ready.js';
 import { GSDEventStream } from '../event-stream.js';
+import type { StorageAdapter } from '../../../adapters/types.js';
 import {
   GSDEventType,
   type GSDEvent,
@@ -266,14 +268,23 @@ function buildMutationEvent(
 /**
  * Create a fully-wired QueryRegistry with all native handlers registered.
  *
- * @param eventStream - Optional event stream for mutation event emission
- * @param correlationSessionId - Optional session id threaded into mutation-related events
+ * @param opts.adapter - Required StorageAdapter implementation (per D-2026-04-30-05 + D-07).
+ *                       In Phase 1 the adapter is held but not yet consumed by handlers;
+ *                       Phase 2-3 migrates handlers to call adapter.* methods.
+ * @param opts.eventStream - Optional event stream for mutation event emission
+ * @param opts.correlationSessionId - Optional session id threaded into mutation-related events
  * @returns A QueryRegistry instance with all handlers registered
  */
-export function createRegistry(
-  eventStream?: GSDEventStream,
-  correlationSessionId?: string,
-): QueryRegistry {
+export function createRegistry(opts: {
+  adapter: StorageAdapter;
+  eventStream?: GSDEventStream;
+  correlationSessionId?: string;
+}): QueryRegistry {
+  const { eventStream, correlationSessionId } = opts;
+  // Phase 1 plumbing only: adapter is held but not yet consumed by handlers.
+  // Phase 2-3 will start passing it to individual handlers.
+  const _adapter = opts.adapter;
+  void _adapter;
   const mutationSessionId = correlationSessionId ?? '';
   const registry = new QueryRegistry();
 

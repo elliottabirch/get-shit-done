@@ -2,6 +2,11 @@ import { describe, it, expect } from 'vitest';
 import { createRequire } from 'node:module';
 
 import { createRegistry } from './index.js';
+import { MarkdownAdapter } from '../../../adapters/markdown/index.js';
+
+function makeRegistry(projectDir: string) {
+  return createRegistry({ adapter: new MarkdownAdapter(projectDir) });
+}
 import { STATE_COMMAND_MANIFEST } from './command-manifest.state.js';
 import { VERIFY_COMMAND_MANIFEST } from './command-manifest.verify.js';
 import { INIT_COMMAND_MANIFEST } from './command-manifest.init.js';
@@ -88,7 +93,7 @@ describe('command seam coverage (manifest -> generated -> adapters)', () => {
   });
 
   it('registry has every canonical + alias for migrated families', () => {
-    const registry = createRegistry();
+    const registry = makeRegistry(process.cwd());
     for (const entry of [...STATE_COMMAND_ALIASES, ...VERIFY_COMMAND_ALIASES, ...INIT_COMMAND_ALIASES, ...PHASE_COMMAND_ALIASES, ...PHASES_COMMAND_ALIASES, ...VALIDATE_COMMAND_ALIASES, ...ROADMAP_COMMAND_ALIASES]) {
       expect(registry.has(entry.canonical), `missing registry canonical ${entry.canonical}`).toBe(true);
       for (const alias of entry.aliases) {
