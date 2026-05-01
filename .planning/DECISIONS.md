@@ -194,6 +194,68 @@ questions), and its risk register derives from §9.
 
 ---
 
+## D-2026-04-30-07 — Upstream PR #2898 reconciliation (durable planning runtime)
+
+**Date:** 2026-04-30
+**Decision:** **IRRELEVANT** to the StorageAdapter contract. PR #2898 lands `PlanningRuntime`, `PlanningJournal`, `RuntimeGate` classes that append JSONL events to `.planning/.journal/` for plan-execution event sourcing. This is a different layer (plan lifecycle events, not planning content) and operates on a separate path tree (`.planning/.journal/`).
+
+**Contract impact:** NONE. The journal does not touch STATE.md, ROADMAP.md, or any document the StorageAdapter owns.
+
+**Rebase risk:** LOW. Separate files, separate directory.
+
+**Alternatives considered:** Should journal writes eventually flow through `adapter.putRecord`? Deferred — append-only JSONL semantics do not fit `putRecord/getRecord` cleanly. PR #2898's design explicitly chose a separate `PlanningJournal` class.
+
+**Implication:** No changes needed to the StorageAdapter interface or MarkdownAdapter scaffold as a result of this PR. Monitor on rebase — if upstream routes journal writes through a storage seam in a future PR, reassess.
+
+---
+
+## D-2026-04-30-08 — Upstream PR #2901 reconciliation (planning-workspace seam)
+
+**Date:** 2026-04-30
+**Decision:** **REUSE**. PR #2901 extracts `planning-workspace.cjs` exposing `planningDir(cwd)`, `planningRoot()`, `planningPaths()`, `withPlanningLock()` from core.cjs. This is exactly the path-resolution seam MarkdownAdapter (Plan 03) needs. We import `planningDir` directly inside MarkdownAdapter to resolve `.planning/`-relative paths.
+
+**Contract impact:** NONE on the StorageAdapter type signature. Implementation impact: MarkdownAdapter constructor calls `planningDir(projectDir)` to compute its path base.
+
+**Rebase risk:** LOW. We consume the existing module, do not modify it.
+
+**Alternatives considered:** Implement custom path-resolution logic inside MarkdownAdapter. Rejected — `planning-workspace.cjs` already handles workstream routing, project root detection, and path normalization. Wrapping avoids re-implementing battle-tested logic.
+
+**Implication:** MarkdownAdapter (Plan 03) imports `planningDir` from `planning-workspace.cjs` via `createRequire`. No new dependency; the module is already present in the fork's working tree.
+
+---
+
+## D-2026-04-30-09 — Upstream PR #2908 reconciliation (manifest-backed routing seam)
+
+**Date:** 2026-04-30
+**Decision:** **COORDINATE**. PR #2908 adds `CommandManifestEntry` types, `COMMAND_MANIFEST` array, and `command-seam-coverage.test.ts`. The manifest covers command-routing inspection (`state | verify | init | phase | phases | validate | roadmap` families); our adapter seam covers storage pluggability. They are complementary, not competing.
+
+**Contract impact:** NONE on the StorageAdapter shape. Plan 04 must update the one site (`registry-canonical-commands.ts:10`) where the manifest coverage test calls `createRegistry()` — no semantic change, just signature update.
+
+**Rebase risk:** LOW-MEDIUM. Future upstream may add new manifest entries that need monitoring via leak-grep (this plan's deliverable).
+
+**Alternatives considered:** Treat as IRRELEVANT and skip the `registry-canonical-commands.ts` update. Rejected — the test file calls `createRegistry()` and will fail to compile after Plan 04's signature change; updating it is mandatory to keep the suite green.
+
+**Implication:** Plan 04 patches the single `registry-canonical-commands.ts` call site as part of the `createRegistry({adapter})` signature sweep. Future upstream manifest expansions are caught by leak-grep on rebase.
+
+---
+
+## D-2026-04-30-10 — Upstream PR #2909 reconciliation (golden parity matrix)
+
+**Date:** 2026-04-30
+**Decision:** **COORDINATE**. PR #2909 adds golden integration tests comparing SDK registry dispatch to CJS gsd-tools.cjs output for `phases.*`, `validate.*`, `roadmap.*`. Per CONTEXT.md D-13, Phase 1's CI does NOT need to pass the #2909 parity matrix — that is **Phase 8 (DIST-04)**. Phase 1 only updates the `createRegistry()` call signatures inside these tests via Plan 04.
+
+**Contract impact:** NONE on the StorageAdapter type signature.
+
+**Rebase risk:** MEDIUM. Future #2909 expansions add more `createRegistry()` call sites that need adapter injection. Plan 04 establishes the pattern; the rebase script (D-14, this plan) catches new call sites.
+
+**Alternatives considered:** Defer ALL #2909 changes to Phase 8 (DIST-04). Rejected — the signature change in Plan 04 (`createRegistry({adapter})`) breaks these tests immediately; call-site updates are mandatory in Phase 1. What IS deferred is achieving empirical output parity with the golden matrix.
+
+**Note:** This entry locks D-13's deferral. The empirical match against #2909's parity matrix is owned by Phase 8 (DIST-04).
+
+**Implication:** Plan 04 updates all `createRegistry()` call sites in `golden.integration.test.ts` to pass `{adapter: new MarkdownAdapter(projectDir)}`. The tests may still fail due to parity gaps — that is acceptable in Phase 1. Phase 8 achieves full parity.
+
+---
+
 # Open questions deferred to v1.0 milestone phases
 
 These were identified in SYNTHESIS.md §6 but are NOT blocking for Phase 1.
