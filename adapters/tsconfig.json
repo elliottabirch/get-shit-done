@@ -14,8 +14,10 @@
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
     "isolatedModules": true,
-    "composite": true
+    "composite": true,
+    "typeRoots": ["../sdk/node_modules/@types"],
+    "types": ["node"]
   },
   "include": ["**/*.ts"],
-  "exclude": ["**/*.test.ts", "dist", "node_modules"]
+  "exclude": ["**/*.test.ts", "vitest.config.ts", "dist", "node_modules"]
 }
