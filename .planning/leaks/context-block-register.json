@@ -1,0 +1,257 @@
+{
+  "audited": "2026-05-01",
+  "scan_dirs": [
+    "commands",
+    "agents",
+    "get-shit-done",
+    "docs"
+  ],
+  "total": 30,
+  "counts": {
+    "REWRITE-CANDIDATE": 5,
+    "INTERCEPT-CANDIDATE": 0,
+    "EXCEPTION": 25
+  },
+  "records": [
+    {
+      "file": "commands/gsd/add-tests.md",
+      "line": 34,
+      "ref": "@.planning/STATE.md",
+      "excerpt": " / Phase: $ARGUMENTS /  / @.planning/STATE.md / @.planning/ROADMAP.md / ",
+      "bucket": "REWRITE-CANDIDATE",
+      "rationale": "canonical doc; skill body can call gsd-sdk query at runtime"
+    },
+    {
+      "file": "commands/gsd/add-tests.md",
+      "line": 35,
+      "ref": "@.planning/ROADMAP.md",
+      "excerpt": " / Phase: $ARGUMENTS /  / @.planning/STATE.md / @.planning/ROADMAP.md / ",
+      "bucket": "REWRITE-CANDIDATE",
+      "rationale": "canonical doc; skill body can call gsd-sdk query at runtime"
+    },
+    {
+      "file": "agents/gsd-planner.md",
+      "line": 421,
+      "ref": "@.planning/PROJECT.md",
+      "excerpt": " / @.planning/PROJECT.md / @.planning/ROADMAP.md / @.planning/STATE.md /  / # Only reference prior plan SUMMARYs if genu",
+      "bucket": "REWRITE-CANDIDATE",
+      "rationale": "canonical doc; skill body can call gsd-sdk query at runtime"
+    },
+    {
+      "file": "agents/gsd-planner.md",
+      "line": 422,
+      "ref": "@.planning/ROADMAP.md",
+      "excerpt": " / @.planning/PROJECT.md / @.planning/ROADMAP.md / @.planning/STATE.md /  / # Only reference prior plan SUMMARYs if genu",
+      "bucket": "REWRITE-CANDIDATE",
+      "rationale": "canonical doc; skill body can call gsd-sdk query at runtime"
+    },
+    {
+      "file": "agents/gsd-planner.md",
+      "line": 423,
+      "ref": "@.planning/STATE.md",
+      "excerpt": " / @.planning/PROJECT.md / @.planning/ROADMAP.md / @.planning/STATE.md /  / # Only reference prior plan SUMMARYs if genu",
+      "bucket": "REWRITE-CANDIDATE",
+      "rationale": "canonical doc; skill body can call gsd-sdk query at runtime"
+    },
+    {
+      "file": "get-shit-done/references/planner-antipatterns.md",
+      "line": 64,
+      "ref": "@.planning/phases/01-foundation/01-01-SUMMARY.md",
+      "excerpt": " / @.planning/phases/01-foundation/01-01-SUMMARY.md / @.planning/phases/01-foundation/01-02-SUMMARY.md  <!-- Does Plan 0",
+      "bucket": "EXCEPTION",
+      "rationale": "template/reference content; not a runtime activation ref"
+    },
+    {
+      "file": "get-shit-done/references/planner-antipatterns.md",
+      "line": 65,
+      "ref": "@.planning/phases/01-foundation/01-02-SUMMARY.md",
+      "excerpt": " / @.planning/phases/01-foundation/01-01-SUMMARY.md / @.planning/phases/01-foundation/01-02-SUMMARY.md  <!-- Does Plan 0",
+      "bucket": "EXCEPTION",
+      "rationale": "template/reference content; not a runtime activation ref"
+    },
+    {
+      "file": "get-shit-done/references/planner-antipatterns.md",
+      "line": 66,
+      "ref": "@.planning/phases/01-foundation/01-03-SUMMARY.md",
+      "excerpt": " / @.planning/phases/01-foundation/01-01-SUMMARY.md / @.planning/phases/01-foundation/01-02-SUMMARY.md  <!-- Does Plan 0",
+      "bucket": "EXCEPTION",
+      "rationale": "template/reference content; not a runtime activation ref"
+    },
+    {
+      "file": "get-shit-done/references/planner-antipatterns.md",
+      "line": 76,
+      "ref": "@.planning/PROJECT.md",
+      "excerpt": " / @.planning/PROJECT.md / @.planning/STATE.md / @.planning/phases/01-foundation/01-01-SUMMARY.md  <!-- Uses User type d",
+      "bucket": "EXCEPTION",
+      "rationale": "template/reference content; not a runtime activation ref"
+    },
+    {
+      "file": "get-shit-done/references/planner-antipatterns.md",
+      "line": 77,
+      "ref": "@.planning/STATE.md",
+      "excerpt": " / @.planning/PROJECT.md / @.planning/STATE.md / @.planning/phases/01-foundation/01-01-SUMMARY.md  <!-- Uses User type d",
+      "bucket": "EXCEPTION",
+      "rationale": "template/reference content; not a runtime activation ref"
+    },
+    {
+      "file": "get-shit-done/references/planner-antipatterns.md",
+      "line": 78,
+      "ref": "@.planning/phases/01-foundation/01-01-SUMMARY.md",
+      "excerpt": " / @.planning/PROJECT.md / @.planning/STATE.md / @.planning/phases/01-foundation/01-01-SUMMARY.md  <!-- Uses User type d",
+      "bucket": "EXCEPTION",
+      "rationale": "template/reference content; not a runtime activation ref"
+    },
+    {
+      "file": "get-shit-done/references/tdd.md",
+      "line": 53,
+      "ref": "@.planning/PROJECT.md",
+      "excerpt": " / @.planning/PROJECT.md / @.planning/ROADMAP.md / @relevant/source/files.ts / ",
+      "bucket": "EXCEPTION",
+      "rationale": "template/reference content; not a runtime activation ref"
+    },
+    {
+      "file": "get-shit-done/references/tdd.md",
+      "line": 54,
+      "ref": "@.planning/ROADMAP.md",
+      "excerpt": " / @.planning/PROJECT.md / @.planning/ROADMAP.md / @relevant/source/files.ts / ",
+      "bucket": "EXCEPTION",
+      "rationale": "template/reference content; not a runtime activation ref"
+    },
+    {
+      "file": "get-shit-done/templates/phase-prompt.md",
+      "line": 48,
+      "ref": "@.planning/PROJECT.md",
+      "excerpt": " / @.planning/PROJECT.md / @.planning/ROADMAP.md / @.planning/STATE.md /  / # Only reference prior plan SUMMARYs if genu",
+      "bucket": "EXCEPTION",
+      "rationale": "template/reference content; not a runtime activation ref"
+    },
+    {
+      "file": "get-shit-done/templates/phase-prompt.md",
+      "line": 49,
+      "ref": "@.planning/ROADMAP.md",
+      "excerpt": " / @.planning/PROJECT.md / @.planning/ROADMAP.md / @.planning/STATE.md /  / # Only reference prior plan SUMMARYs if genu",
+      "bucket": "EXCEPTION",
+      "rationale": "template/reference content; not a runtime activation ref"
+    },
+    {
+      "file": "get-shit-done/templates/phase-prompt.md",
+      "line": 50,
+      "ref": "@.planning/STATE.md",
+      "excerpt": " / @.planning/PROJECT.md / @.planning/ROADMAP.md / @.planning/STATE.md /  / # Only reference prior plan SUMMARYs if genu",
+      "bucket": "EXCEPTION",
+      "rationale": "template/reference content; not a runtime activation ref"
+    },
+    {
+      "file": "get-shit-done/templates/phase-prompt.md",
+      "line": 219,
+      "ref": "@.planning/PROJECT.md",
+      "excerpt": " / @.planning/PROJECT.md / @.planning/ROADMAP.md / @.planning/STATE.md /  / # Only include SUMMARY refs if genuinely nee",
+      "bucket": "EXCEPTION",
+      "rationale": "template/reference content; not a runtime activation ref"
+    },
+    {
+      "file": "get-shit-done/templates/phase-prompt.md",
+      "line": 220,
+      "ref": "@.planning/ROADMAP.md",
+      "excerpt": " / @.planning/PROJECT.md / @.planning/ROADMAP.md / @.planning/STATE.md /  / # Only include SUMMARY refs if genuinely nee",
+      "bucket": "EXCEPTION",
+      "rationale": "template/reference content; not a runtime activation ref"
+    },
+    {
+      "file": "get-shit-done/templates/phase-prompt.md",
+      "line": 221,
+      "ref": "@.planning/STATE.md",
+      "excerpt": " / @.planning/PROJECT.md / @.planning/ROADMAP.md / @.planning/STATE.md /  / # Only include SUMMARY refs if genuinely nee",
+      "bucket": "EXCEPTION",
+      "rationale": "template/reference content; not a runtime activation ref"
+    },
+    {
+      "file": "get-shit-done/templates/phase-prompt.md",
+      "line": 238,
+      "ref": "@.planning/phases/03-features/03-01-SUMMARY.md",
+      "excerpt": " / @.planning/phases/03-features/03-01-SUMMARY.md  # Just because it's earlier / @.planning/phases/03-features/03-02-SUM",
+      "bucket": "EXCEPTION",
+      "rationale": "template/reference content; not a runtime activation ref"
+    },
+    {
+      "file": "get-shit-done/templates/phase-prompt.md",
+      "line": 239,
+      "ref": "@.planning/phases/03-features/03-02-SUMMARY.md",
+      "excerpt": " / @.planning/phases/03-features/03-01-SUMMARY.md  # Just because it's earlier / @.planning/phases/03-features/03-02-SUM",
+      "bucket": "EXCEPTION",
+      "rationale": "template/reference content; not a runtime activation ref"
+    },
+    {
+      "file": "get-shit-done/templates/phase-prompt.md",
+      "line": 326,
+      "ref": "@.planning/PROJECT.md",
+      "excerpt": " / @.planning/PROJECT.md / @.planning/ROADMAP.md / @.planning/STATE.md / ",
+      "bucket": "EXCEPTION",
+      "rationale": "template/reference content; not a runtime activation ref"
+    },
+    {
+      "file": "get-shit-done/templates/phase-prompt.md",
+      "line": 327,
+      "ref": "@.planning/ROADMAP.md",
+      "excerpt": " / @.planning/PROJECT.md / @.planning/ROADMAP.md / @.planning/STATE.md / ",
+      "bucket": "EXCEPTION",
+      "rationale": "template/reference content; not a runtime activation ref"
+    },
+    {
+      "file": "get-shit-done/templates/phase-prompt.md",
+      "line": 328,
+      "ref": "@.planning/STATE.md",
+      "excerpt": " / @.planning/PROJECT.md / @.planning/ROADMAP.md / @.planning/STATE.md / ",
+      "bucket": "EXCEPTION",
+      "rationale": "template/reference content; not a runtime activation ref"
+    },
+    {
+      "file": "get-shit-done/templates/phase-prompt.md",
+      "line": 391,
+      "ref": "@.planning/PROJECT.md",
+      "excerpt": " / @.planning/PROJECT.md / @.planning/ROADMAP.md / @.planning/phases/03-features/03-01-SUMMARY.md / @.planning/phases/03",
+      "bucket": "EXCEPTION",
+      "rationale": "template/reference content; not a runtime activation ref"
+    },
+    {
+      "file": "get-shit-done/templates/phase-prompt.md",
+      "line": 392,
+      "ref": "@.planning/ROADMAP.md",
+      "excerpt": " / @.planning/PROJECT.md / @.planning/ROADMAP.md / @.planning/phases/03-features/03-01-SUMMARY.md / @.planning/phases/03",
+      "bucket": "EXCEPTION",
+      "rationale": "template/reference content; not a runtime activation ref"
+    },
+    {
+      "file": "get-shit-done/templates/phase-prompt.md",
+      "line": 393,
+      "ref": "@.planning/phases/03-features/03-01-SUMMARY.md",
+      "excerpt": " / @.planning/PROJECT.md / @.planning/ROADMAP.md / @.planning/phases/03-features/03-01-SUMMARY.md / @.planning/phases/03",
+      "bucket": "EXCEPTION",
+      "rationale": "template/reference content; not a runtime activation ref"
+    },
+    {
+      "file": "get-shit-done/templates/phase-prompt.md",
+      "line": 394,
+      "ref": "@.planning/phases/03-features/03-02-SUMMARY.md",
+      "excerpt": " / @.planning/PROJECT.md / @.planning/ROADMAP.md / @.planning/phases/03-features/03-01-SUMMARY.md / @.planning/phases/03",
+      "bucket": "EXCEPTION",
+      "rationale": "template/reference content; not a runtime activation ref"
+    },
+    {
+      "file": "docs/zh-CN/references/tdd.md",
+      "line": 53,
+      "ref": "@.planning/PROJECT.md",
+      "excerpt": " / @.planning/PROJECT.md / @.planning/ROADMAP.md / @relevant/source/files.ts / ",
+      "bucket": "EXCEPTION",
+      "rationale": "template/reference content; not a runtime activation ref"
+    },
+    {
+      "file": "docs/zh-CN/references/tdd.md",
+      "line": 54,
+      "ref": "@.planning/ROADMAP.md",
+      "excerpt": " / @.planning/PROJECT.md / @.planning/ROADMAP.md / @relevant/source/files.ts / ",
+      "bucket": "EXCEPTION",
+      "rationale": "template/reference content; not a runtime activation ref"
+    }
+  ]
+}
