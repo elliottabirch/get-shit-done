@@ -18,7 +18,7 @@ import { readFile, readdir } from 'node:fs/promises';
 import { existsSync, readdirSync, readFileSync, mkdirSync, writeFileSync, unlinkSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { GSDError, ErrorClassification } from '../errors.js';
-import { comparePhaseNum, normalizePhaseName, planningPaths, toPosixPath } from './helpers.js';
+import { adapterFor, comparePhaseNum, normalizePhaseName, planningPaths, toPosixPath } from './helpers.js';
 import { getMilestoneInfo, extractCurrentMilestone, roadmapGetPhase } from './roadmap.js';
 import { getMilestonePhaseFilter } from './state.js';
 import { findPhase } from './phase.js';
@@ -78,7 +78,10 @@ export async function determinePhaseStatus(
  */
 export const progressJson: QueryHandler = async (_args, projectDir, workstream) => {
   const phasesDir = planningPaths(projectDir, workstream).phases;
-  const milestone = await getMilestoneInfo(projectDir, workstream);
+  // Phase 2 Plan 02-02 transitional: getMilestoneInfo migrated to adapter; this
+  // handler still uses raw fs reads in its body (Plan 02-02 Task 2 will migrate).
+  const adapter = await adapterFor(projectDir);
+  const milestone = await getMilestoneInfo(adapter, workstream);
 
   const phases: Array<Record<string, unknown>> = [];
   let totalPlans = 0;
@@ -189,7 +192,10 @@ export const statsJson: QueryHandler = async (args, projectDir, workstream) => {
   const roadmapPath = planningPaths(projectDir, workstream).roadmap;
   const reqPath = planningPaths(projectDir, workstream).requirements;
   const statePath = planningPaths(projectDir, workstream).state;
-  const milestone = await getMilestoneInfo(projectDir, workstream);
+  // Phase 2 Plan 02-02 transitional: getMilestoneInfo + extractCurrentMilestone
+  // migrated to adapter; statsJson body still uses raw fs reads (Plan 02-02 Task 2).
+  const adapter = await adapterFor(projectDir);
+  const milestone = await getMilestoneInfo(adapter, workstream);
   const isDirInMilestone = await getMilestonePhaseFilter(projectDir, workstream);
 
   const phasesByNumber = new Map<
@@ -201,7 +207,7 @@ export const statsJson: QueryHandler = async (args, projectDir, workstream) => {
   let totalSummaries = 0;
 
   try {
-    const roadmapContent = await extractCurrentMilestone(await readFile(roadmapPath, 'utf-8'), projectDir, workstream);
+    const roadmapContent = await extractCurrentMilestone(adapter, await readFile(roadmapPath, 'utf-8'), workstream);
     const headingPattern = /#{2,4}\s*Phase\s+(\d+[A-Z]?(?:\.\d+)*)\s*:\s*([^\n]+)/gi;
     let match: RegExpExecArray | null;
     while ((match = headingPattern.exec(roadmapContent)) !== null) {
@@ -397,7 +403,9 @@ export const todoMatchPhase: QueryHandler = async (args, projectDir) => {
     return { data: { phase, matches: [], todo_count: 0 } };
   }
 
-  const rp = await roadmapGetPhase([phase], projectDir);
+  // Phase 2 Plan 02-02 transitional: roadmapGetPhase + findPhase migrated to adapter.
+  const adapter = await adapterFor(projectDir);
+  const rp = await roadmapGetPhase(adapter, [phase], projectDir);
   const pd = rp.data as Record<string, unknown>;
   let phaseName = '';
   let phaseGoal = '';
@@ -420,7 +428,7 @@ export const todoMatchPhase: QueryHandler = async (args, projectDir) => {
       .filter(w => w.length > 2 && !stopWords.has(w)),
   );
 
-  const fp = await findPhase([phase], projectDir);
+  const fp = await findPhase(adapter, [phase], projectDir);
   const phaseInfoDisk = fp.data as Record<string, unknown>;
   const phasePlans: string[] = [];
   if (phaseInfoDisk && phaseInfoDisk.found) {

@@ -7,13 +7,17 @@ import { mkdir, writeFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { detectPhaseType } from './detect-phase-type.js';
+import { MarkdownAdapter } from '../../../adapters/markdown/index.js';
+import type { StorageAdapter } from '../../../adapters/types.js';
 
 describe('detectPhaseType', () => {
   let projectDir: string;
+  let adapter: StorageAdapter;
 
   beforeEach(async () => {
     projectDir = join(tmpdir(), `gsd-detect-phase-${Date.now()}-${Math.random().toString(36).slice(2)}`);
     await mkdir(join(projectDir, '.planning', 'phases'), { recursive: true });
+    adapter = new MarkdownAdapter(projectDir);
   });
 
   afterEach(async () => {
@@ -21,11 +25,11 @@ describe('detectPhaseType', () => {
   });
 
   it('throws when phase arg is missing', async () => {
-    await expect(detectPhaseType([], projectDir)).rejects.toThrow();
+    await expect(detectPhaseType(adapter, [], projectDir)).rejects.toThrow();
   });
 
   it('returns all false/null/[] when phase dir does not exist', async () => {
-    const { data } = await detectPhaseType(['99'], projectDir);
+    const { data } = await detectPhaseType(adapter, ['99'], projectDir);
     const d = data as Record<string, unknown>;
     expect(d.has_frontend).toBe(false);
     expect(d.has_schema).toBe(false);
@@ -41,7 +45,7 @@ describe('detectPhaseType', () => {
     await writeFile(join(projectDir, '.planning', 'ROADMAP.md'), roadmapContent, 'utf-8');
     await mkdir(join(projectDir, '.planning', 'phases', '01-ui-dashboard'), { recursive: true });
 
-    const { data } = await detectPhaseType(['1'], projectDir);
+    const { data } = await detectPhaseType(adapter, ['1'], projectDir);
     const d = data as Record<string, unknown>;
     expect(d.has_frontend).toBe(true);
     expect((d.frontend_indicators as string[]).length).toBeGreaterThan(0);
@@ -52,7 +56,7 @@ describe('detectPhaseType', () => {
     await mkdir(join(phaseDir, 'prisma'), { recursive: true });
     await writeFile(join(phaseDir, 'prisma', 'schema.prisma'), 'model User {}', 'utf-8');
 
-    const { data } = await detectPhaseType(['2'], projectDir);
+    const { data } = await detectPhaseType(adapter, ['2'], projectDir);
     const d = data as Record<string, unknown>;
     expect(d.has_schema).toBe(true);
     expect(d.schema_orm).toBe('prisma');
@@ -64,7 +68,7 @@ describe('detectPhaseType', () => {
     await mkdir(phaseDir, { recursive: true });
     await writeFile(join(phaseDir, 'UI-SPEC.md'), '# UI Spec', 'utf-8');
 
-    const { data } = await detectPhaseType(['3'], projectDir);
+    const { data } = await detectPhaseType(adapter, ['3'], projectDir);
     const d = data as Record<string, unknown>;
     expect(d.has_frontend).toBe(true);
   });
@@ -74,7 +78,7 @@ describe('detectPhaseType', () => {
     await mkdir(phaseDir, { recursive: true });
     await writeFile(join(phaseDir, 'user.route.ts'), 'export {}', 'utf-8');
 
-    const { data } = await detectPhaseType(['4'], projectDir);
+    const { data } = await detectPhaseType(adapter, ['4'], projectDir);
     const d = data as Record<string, unknown>;
     expect(d.has_api).toBe(true);
   });
@@ -84,21 +88,21 @@ describe('detectPhaseType', () => {
     await mkdir(phaseDir, { recursive: true });
     await writeFile(join(phaseDir, 'dockerfile.yml'), '', 'utf-8');
 
-    const { data } = await detectPhaseType(['5'], projectDir);
+    const { data } = await detectPhaseType(adapter, ['5'], projectDir);
     const d = data as Record<string, unknown>;
     expect(d.has_infra).toBe(true);
   });
 
   it('returns push_command null (reserved field)', async () => {
     await mkdir(join(projectDir, '.planning', 'phases', '06-misc'), { recursive: true });
-    const { data } = await detectPhaseType(['6'], projectDir);
+    const { data } = await detectPhaseType(adapter, ['6'], projectDir);
     const d = data as Record<string, unknown>;
     expect(d.push_command).toBeNull();
   });
 
   it('returns correct phase field in output', async () => {
     await mkdir(join(projectDir, '.planning', 'phases', '07-test'), { recursive: true });
-    const { data } = await detectPhaseType(['7'], projectDir);
+    const { data } = await detectPhaseType(adapter, ['7'], projectDir);
     const d = data as Record<string, unknown>;
     expect(d.phase).toBe('07');
   });

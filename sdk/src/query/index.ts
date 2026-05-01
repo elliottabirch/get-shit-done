@@ -335,15 +335,23 @@ export function createRegistry(opts: {
   }
 
   registry.register('state-snapshot', stateSnapshot);
-  registry.register('find-phase', findPhase);
-  registry.register('phase-plan-index', phasePlanIndex);
+  // Phase 2 Plan 02-02 Task 1: findPhase + phasePlanIndex migrated to adapter-as-first-arg.
+  registry.register('find-phase', (args, projectDir, ws) =>
+    findPhase(adapter, args, projectDir, ws),
+  );
+  registry.register('phase-plan-index', (args, projectDir, ws) =>
+    phasePlanIndex(adapter, args, projectDir, ws),
+  );
   registry.register('plan.task-structure', planTaskStructure);
   registry.register('plan task-structure', planTaskStructure);
   registry.register('requirements.extract-from-plans', requirementsExtractFromPlans);
   registry.register('requirements extract-from-plans', requirementsExtractFromPlans);
+  // Phase 2 Plan 02-02 Task 1: roadmapAnalyze + roadmapGetPhase migrated to adapter-as-first-arg.
+  // roadmapUpdatePlanProgress and roadmapAnnotateDependencies retain QueryHandler shape (write
+  // handlers; Phase 3 will fully migrate them).
   const roadmapHandlers: Record<string, QueryHandler> = {
-    'roadmap.analyze': roadmapAnalyze,
-    'roadmap.get-phase': roadmapGetPhase,
+    'roadmap.analyze': (args, projectDir, ws) => roadmapAnalyze(adapter, args, projectDir, ws),
+    'roadmap.get-phase': (args, projectDir, ws) => roadmapGetPhase(adapter, args, projectDir, ws),
     'roadmap.update-plan-progress': roadmapUpdatePlanProgress,
     'roadmap.annotate-dependencies': roadmapAnnotateDependencies,
   };
@@ -436,8 +444,13 @@ export function createRegistry(opts: {
   registry.register('check config-gates', checkConfigGates);
   registry.register('check.auto-mode', checkAutoMode);
   registry.register('check auto-mode', checkAutoMode);
-  registry.register('check.phase-ready', checkPhaseReady);
-  registry.register('check phase-ready', checkPhaseReady);
+  // Phase 2 Plan 02-02 Task 1: checkPhaseReady migrated to adapter-as-first-arg.
+  registry.register('check.phase-ready', (args, projectDir, ws) =>
+    checkPhaseReady(adapter, args, projectDir, ws),
+  );
+  registry.register('check phase-ready', (args, projectDir, ws) =>
+    checkPhaseReady(adapter, args, projectDir, ws),
+  );
   // Phase 2 Plan 02-01 Task 5: routeNextAction migrated to adapter-as-first-arg
   // signature. Closure wrapper threads the adapter from createRegistry's opts.
   registry.register('route.next-action', (args, projectDir, ws) =>
@@ -446,14 +459,24 @@ export function createRegistry(opts: {
   registry.register('route next-action', (args, projectDir, ws) =>
     routeNextAction(adapter, args, projectDir, ws),
   );
-  registry.register('detect.phase-type', detectPhaseType);
-  registry.register('detect phase-type', detectPhaseType);
+  // Phase 2 Plan 02-02 Task 1: detectPhaseType migrated to adapter-as-first-arg.
+  registry.register('detect.phase-type', (args, projectDir, ws) =>
+    detectPhaseType(adapter, args, projectDir, ws),
+  );
+  registry.register('detect phase-type', (args, projectDir, ws) =>
+    detectPhaseType(adapter, args, projectDir, ws),
+  );
   registry.register('check.completion', checkCompletion);
   registry.register('check completion', checkCompletion);
   registry.register('check.gates', checkGates);
   registry.register('check gates', checkGates);
-  registry.register('check.verification-status', checkVerificationStatus);
-  registry.register('check verification-status', checkVerificationStatus);
+  // Phase 2 Plan 02-02 Task 1: checkVerificationStatus migrated to adapter-as-first-arg.
+  registry.register('check.verification-status', (args, projectDir, ws) =>
+    checkVerificationStatus(adapter, args, projectDir, ws),
+  );
+  registry.register('check verification-status', (args, projectDir, ws) =>
+    checkVerificationStatus(adapter, args, projectDir, ws),
+  );
   registry.register('check.ship-ready', checkShipReady);
   registry.register('check ship-ready', checkShipReady);
 

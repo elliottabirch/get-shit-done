@@ -10,7 +10,7 @@ import { existsSync } from 'node:fs';
 import { readFile, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { GSDError, ErrorClassification } from '../errors.js';
-import { normalizePhaseName, planningPaths } from './helpers.js';
+import { adapterFor, normalizePhaseName, planningPaths } from './helpers.js';
 import { findPhase } from './phase.js';
 import { roadmapAnalyze } from './roadmap.js';
 import type { QueryHandler } from './utils.js';
@@ -53,7 +53,9 @@ function deriveUatStatus(content: string | null): string | null {
 // ─── Phase scope ───────────────────────────────────────────────────────────
 
 async function checkPhaseCompletion(phaseArg: string, projectDir: string): Promise<Record<string, unknown>> {
-  const phaseRes = await findPhase([phaseArg], projectDir);
+  // Phase 2 Plan 02-02 transitional: findPhase migrated to adapter signature.
+  const adapter = await adapterFor(projectDir);
+  const phaseRes = await findPhase(adapter, [phaseArg], projectDir);
   const pdata = phaseRes.data as Record<string, unknown>;
   const found = Boolean(pdata.found);
 
@@ -127,7 +129,9 @@ async function checkPhaseCompletion(phaseArg: string, projectDir: string): Promi
 // ─── Milestone scope ───────────────────────────────────────────────────────
 
 async function checkMilestoneCompletion(projectDir: string): Promise<Record<string, unknown>> {
-  const analysis = await roadmapAnalyze([], projectDir);
+  // Phase 2 Plan 02-02 transitional: roadmapAnalyze migrated to adapter signature.
+  const adapter = await adapterFor(projectDir);
+  const analysis = await roadmapAnalyze(adapter, [], projectDir);
   const adata = analysis.data as { phases?: Array<Record<string, unknown>> };
   const phases = adata.phases ?? [];
 

@@ -3,16 +3,22 @@
  *
  * Deterministic file + plan/summary counts and a suggested `next_step` for orchestration.
  * See `.planning/research/decision-routing-audit.md` §3.4.
+ *
+ * Phase 2 Plan 02-02 Task 1 (D-12, D-10): adapter-as-first-arg signature;
+ * fs reads (readFile, existsSync, readdirSync) routed through adapter.
  */
 
-import { readFile } from 'node:fs/promises';
-import { join } from 'node:path';
-import { existsSync, readdirSync } from 'node:fs';
 import { GSDError, ErrorClassification } from '../errors.js';
-import { comparePhaseNum, escapeRegex, normalizePhaseName, planningPaths } from './helpers.js';
+import {
+  comparePhaseNum,
+  escapeRegex,
+  normalizePhaseName,
+  planningRelativePath,
+} from './helpers.js';
 import { findPhase } from './phase.js';
 import { roadmapAnalyze } from './roadmap.js';
-import type { QueryHandler } from './utils.js';
+import type { QueryResult } from './utils.js';
+import type { StorageAdapter } from '../../../adapters/types.js';
 
 const UI_INDICATOR_RE = /UI|interface|frontend|component|layout|page|screen|view|form|dashboard|widget/i;
 
@@ -20,17 +26,12 @@ const UI_INDICATOR_RE = /UI|interface|frontend|component|layout|page|screen|view
  * True if ROADMAP phase heading line for this phase matches UI_INDICATOR_RE.
  */
 async function roadmapPhaseLineHasUiIndicators(
-  projectDir: string,
+  adapter: StorageAdapter,
   phaseNum: string,
   workstream?: string,
 ): Promise<boolean> {
-  const roadmapPath = planningPaths(projectDir, workstream).roadmap;
-  let content: string;
-  try {
-    content = await readFile(roadmapPath, 'utf-8');
-  } catch {
-    return false;
-  }
+  const content = await adapter.getRecord(planningRelativePath(workstream, 'ROADMAP.md'));
+  if (content === null) return false;
   const re = new RegExp(
     `#{2,4}\\s*Phase\\s+${escapeRegex(phaseNum)}\\s*:[^\\n]*`,
     'i',
@@ -40,14 +41,19 @@ async function roadmapPhaseLineHasUiIndicators(
   return UI_INDICATOR_RE.test(m[0]);
 }
 
-function hasUiSpecFile(phaseDirFull: string): boolean {
-  if (!existsSync(phaseDirFull)) return false;
-  try {
-    const files = readdirSync(phaseDirFull);
-    return files.some(f => f === 'UI-SPEC.md' || f.endsWith('-UI-SPEC.md'));
-  } catch {
-    return false;
-  }
+/**
+ * Check whether a phase directory contains a UI-SPEC.md file.
+ *
+ * @param adapter - Storage adapter (Phase 2 D-10)
+ * @param phaseAdapterRel - Adapter-relative phase directory (e.g. 'phases/03-foo' or
+ *                          'workstreams/<ws>/phases/03-foo'; not the display-relative
+ *                          `.planning/phases/...` path returned by findPhase).
+ */
+async function hasUiSpecFile(adapter: StorageAdapter, phaseAdapterRel: string): Promise<boolean> {
+  // Pitfall 3: listCollection returns [] on ENOENT
+  const refs = await adapter.listCollection(phaseAdapterRel);
+  if (refs.length === 0) return false;
+  return refs.some(r => r.name === 'UI-SPEC.md' || r.name.endsWith('-UI-SPEC.md'));
 }
 
 /**
@@ -90,14 +96,31 @@ function inferNextStep(params: {
   return 'complete';
 }
 
-export const checkPhaseReady: QueryHandler = async (args, projectDir, workstream) => {
+/**
+ * Strip leading `.planning/` segment from a directory string returned by findPhase
+ * (which formats them as `.planning/phases/<dir>` or `.planning/milestones/<v>/<dir>`)
+ * to get an adapter-resolvable path. Adapter is rooted at `.planning/`.
+ */
+function toAdapterDir(planningRelDir: string): string {
+  if (planningRelDir.startsWith('.planning/')) {
+    return planningRelDir.slice('.planning/'.length);
+  }
+  return planningRelDir;
+}
+
+export const checkPhaseReady = async (
+  adapter: StorageAdapter,
+  args: string[],
+  projectDir: string,
+  workstream?: string,
+): Promise<QueryResult> => {
   const raw = args[0];
   if (!raw) {
     throw new GSDError('phase number required for check phase-ready', ErrorClassification.Validation);
   }
   const phaseArg = normalizePhaseName(raw);
 
-  const phaseRes = await findPhase([raw], projectDir, workstream);
+  const phaseRes = await findPhase(adapter, [raw], projectDir, workstream);
   const pdata = phaseRes.data as Record<string, unknown>;
   const found = Boolean(pdata.found);
 
@@ -108,18 +131,16 @@ export const checkPhaseReady: QueryHandler = async (args, projectDir, workstream
   const has_verification = Boolean(pdata.has_verification);
 
   let has_ui_spec = false;
-  let phaseDirFull: string | null = null;
   if (found && pdata.directory) {
-    phaseDirFull = join(projectDir, pdata.directory as string);
-    has_ui_spec = hasUiSpecFile(phaseDirFull);
+    has_ui_spec = await hasUiSpecFile(adapter, toAdapterDir(pdata.directory as string));
   }
 
   const phaseNumForRoadmap = (pdata.phase_number as string) || phaseArg;
   const has_ui_indicators =
-    (await roadmapPhaseLineHasUiIndicators(projectDir, phaseNumForRoadmap, workstream)) ||
-    (phaseNumForRoadmap !== phaseArg ? await roadmapPhaseLineHasUiIndicators(projectDir, phaseArg, workstream) : false);
+    (await roadmapPhaseLineHasUiIndicators(adapter, phaseNumForRoadmap, workstream)) ||
+    (phaseNumForRoadmap !== phaseArg ? await roadmapPhaseLineHasUiIndicators(adapter, phaseArg, workstream) : false);
 
-  const analysis = await roadmapAnalyze([], projectDir, workstream);
+  const analysis = await roadmapAnalyze(adapter, [], projectDir, workstream);
   const adata = analysis.data as { phases?: Array<Record<string, unknown>> };
   const phases = adata.phases ?? [];
   const deps = dependenciesMet(phases, phaseArg);
