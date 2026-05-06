@@ -1,5 +1,6 @@
 import type { QueryHandler } from './utils.js';
 import { createRegistry } from './index.js';
+import { MarkdownAdapter } from '../../../adapters/markdown/index.js';
 
 /**
  * `commands` — return the full list of registered query command strings.
@@ -13,7 +14,7 @@ import { createRegistry } from './index.js';
  * and for agent auto-complete when constructing `gsd-sdk query` calls.
  */
 export const commandsList: QueryHandler<string[]> = async (_args, _projectDir) => {
-  const registry = createRegistry();
+  const registry = createRegistry({ adapter: new MarkdownAdapter(_projectDir) });
   const cmds = registry.commands().sort((a, b) => a.localeCompare(b));
   return { data: cmds };
 };

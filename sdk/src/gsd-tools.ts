@@ -23,7 +23,7 @@ import { GSDError, exitCodeFor } from './errors.js';
 import { createRegistry } from './query/index.js';
 import { MarkdownAdapter } from '../../adapters/markdown/index.js';
 import { resolveQueryArgv } from './query/registry.js';
-import { normalizeQueryCommand } from './query/normalize-query-command.js';
+import { normalizeQueryCommand } from './query/query-command-resolution-strategy.js';
 import { formatStateLoadRawStdout } from './query/state-project-load.js';
 
 // ─── Error type ──────────────────────────────────────────────────────────────
@@ -564,7 +564,7 @@ export class GSDTools {
 export async function runGsdToolsQuery(projectDir: string, queryArgv: string[]): Promise<unknown> {
   const { createRegistry } = await import('./query/index.js');
   const { resolveQueryArgv } = await import('./query/registry.js');
-  const { normalizeQueryCommand } = await import('./query/normalize-query-command.js');
+  const { normalizeQueryCommand } = await import('./query/query-command-resolution-strategy.js');
   const { GSDError, ErrorClassification } = await import('./errors.js');
 
   if (queryArgv.length === 0 || !queryArgv[0]) {

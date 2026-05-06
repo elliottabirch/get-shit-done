@@ -1,5 +1,7 @@
 import type { GSDEventStream } from './event-stream.js';
 import { createRegistry } from './query/index.js';
+import { MarkdownAdapter } from '../../adapters/markdown/index.js';
+import type { StorageAdapter } from '../../adapters/types.js';
 import { GSDTransport } from './gsd-transport.js';
 import { QueryExecutionPolicy } from './query-execution-policy.js';
 import { QuerySubprocessAdapter } from './query-subprocess-adapter.js';
@@ -23,11 +25,13 @@ export function createGSDToolsRuntime(opts: {
   shouldUseNativeQuery: () => boolean;
   execJsonFallback: (legacyCommand: string, legacyArgs: string[]) => Promise<unknown>;
   execRawFallback: (legacyCommand: string, legacyArgs: string[]) => Promise<string>;
+  adapter?: StorageAdapter;
   strictSdk?: boolean;
   allowFallbackToSubprocess?: boolean;
   onDispatchEvent?: RuntimeBridgeOptions['onDispatchEvent'];
 }): GSDToolsRuntime {
-  const registry = createRegistry(opts.eventStream, opts.sessionId);
+  const adapter = opts.adapter ?? new MarkdownAdapter(opts.projectDir);
+  const registry = createRegistry({ adapter, eventStream: opts.eventStream, correlationSessionId: opts.sessionId });
 
   const queryToolsErrorFactory = createQueryToolsErrorFactory();
 
