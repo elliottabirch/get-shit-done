@@ -19,6 +19,7 @@ const COMMAND_ALIASES_FILE = path.join(REPO_ROOT, 'get-shit-done', 'bin', 'lib',
 // Prose tokens that repeatedly appear after `gsd-sdk query` in English
 // documentation but aren't real command names.
 const PROSE_ALLOWLIST = new Set([
+  'at',
   'commands',
   'intel',
   'into',
