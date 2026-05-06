@@ -400,7 +400,7 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<void
 
     try {
       const queryCommand = queryArgs[0];
-      const { normalizeQueryCommand } = await import('./query/normalize-query-command.js');
+      const { normalizeQueryCommand } = await import('./query/query-command-resolution-strategy.js');
       const [normCmd, normArgs] = normalizeQueryCommand(queryCommand, queryArgs.slice(1));
       if (!normCmd || !String(normCmd).trim()) {
         console.error('Error: "gsd-sdk query" requires a command');

@@ -134,16 +134,6 @@ export class GSD {
       workstream: this.workstream,
       eventStream: this.eventStream,
       sessionId: this.sessionId,
-      strictSdk: this.strictSdk,
-      allowFallbackToSubprocess: this.allowFallbackToSubprocess,
-      onDispatchEvent: (event) => {
-        this.eventStream.emitEvent({
-          type: GSDEventType.StreamEvent,
-          timestamp: new Date().toISOString(),
-          sessionId: this.sessionId ?? '',
-          event,
-        });
-      },
     });
   }
 

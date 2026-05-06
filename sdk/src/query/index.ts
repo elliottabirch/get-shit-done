@@ -23,17 +23,14 @@ import { stateJson, stateGet, stateSnapshot } from './state.js';
 import { stateProjectLoad } from './state-project-load.js';
 import {
   STATE_COMMAND_ALIASES,
-  STATE_MUTATION_COMMANDS,
   VERIFY_COMMAND_ALIASES,
   INIT_COMMAND_ALIASES,
   PHASE_COMMAND_ALIASES,
-  PHASE_MUTATION_COMMANDS,
   PHASES_COMMAND_ALIASES,
-  PHASES_MUTATION_COMMANDS,
   VALIDATE_COMMAND_ALIASES,
   ROADMAP_COMMAND_ALIASES,
-  ROADMAP_MUTATION_COMMANDS,
 } from './command-aliases.generated.js';
+import { QUERY_MUTATION_COMMAND_LIST } from './query-policy-capability.js';
 import { findPhase, phasePlanIndex } from './phase.js';
 import { phaseListPlans, phaseListArtifacts } from './phase-list-queries.js';
 import { planTaskStructure } from './plan-task-structure.js';
@@ -128,7 +125,7 @@ import type { QueryHandler, QueryResult } from './utils.js';
 export type { QueryResult, QueryHandler } from './utils.js';
 export { extractField } from './registry.js';
 /** Same argv normalization as `gsd-sdk query` — use when calling `registry.dispatch()` with CLI-style `command` + `args`. */
-export { normalizeQueryCommand } from './normalize-query-command.js';
+export { normalizeQueryCommand } from './query-command-resolution-strategy.js';
 
 // ─── Mutation commands set ────────────────────────────────────────────────
 
@@ -140,27 +137,7 @@ export { normalizeQueryCommand } from './normalize-query-command.js';
  * See QUERY-HANDLERS.md for semantics. Init composition handlers are omitted
  * (they emit JSON for workflows; agents perform writes).
  */
-export const QUERY_MUTATION_COMMANDS = new Set<string>([
-  ...STATE_MUTATION_COMMANDS,
-  'frontmatter.set', 'frontmatter.merge', 'frontmatter.validate', 'frontmatter validate',
-  'config-set', 'config-set-model-profile', 'config-new-project', 'config-ensure-section',
-  'commit', 'check-commit', 'commit-to-subrepo',
-  'template.fill', 'template.select', 'template select',
-  ...PHASE_MUTATION_COMMANDS,
-  ...PHASES_MUTATION_COMMANDS,
-  ...ROADMAP_MUTATION_COMMANDS,
-  'requirements.mark-complete', 'requirements mark-complete',
-  'todo.complete', 'todo complete',
-  'milestone.complete', 'milestone complete',
-  'workstream.create', 'workstream.set', 'workstream.complete', 'workstream.progress',
-  'workstream create', 'workstream set', 'workstream complete', 'workstream progress',
-  'docs-init',
-  'learnings.copy', 'learnings copy',
-  'learnings.prune', 'learnings prune',
-  'learnings.delete', 'learnings delete',
-  'intel.snapshot', 'intel.patch-meta', 'intel snapshot', 'intel patch-meta',
-  'write-profile', 'generate-claude-profile', 'generate-dev-preferences', 'generate-claude-md',
-]);
+export const QUERY_MUTATION_COMMANDS = new Set<string>(QUERY_MUTATION_COMMAND_LIST);
 
 // ─── Event builder ────────────────────────────────────────────────────────
 
@@ -532,62 +509,23 @@ export function createRegistry(opts: {
   // assertion can grep them deterministically; the alias loop below registers
   // the space-form aliases ('init execute-phase', etc.) for each canonical
   // entry by reusing the same closure wrapper.
-  registry.register('init.execute-phase', (args, projectDir, ws) =>
-    initExecutePhase(adapter, args, projectDir, ws),
-  );
-  registry.register('init.plan-phase', (args, projectDir, ws) =>
-    initPlanPhase(adapter, args, projectDir, ws),
-  );
-  registry.register('init.new-milestone', (args, projectDir, ws) =>
-    initNewMilestone(adapter, args, projectDir, ws),
-  );
-  registry.register('init.quick', (args, projectDir, ws) =>
-    initQuick(adapter, args, projectDir, ws),
-  );
-  registry.register('init.ingest-docs', (args, projectDir, ws) =>
-    initIngestDocs(adapter, args, projectDir, ws),
-  );
-  registry.register('init.resume', (args, projectDir, ws) =>
-    initResume(adapter, args, projectDir, ws),
-  );
-  registry.register('init.verify-work', (args, projectDir, ws) =>
-    initVerifyWork(adapter, args, projectDir, ws),
-  );
-  registry.register('init.phase-op', (args, projectDir, ws) =>
-    initPhaseOp(adapter, args, projectDir, ws),
-  );
-  registry.register('init.todos', (args, projectDir, ws) =>
-    initTodos(adapter, args, projectDir, ws),
-  );
-  registry.register('init.milestone-op', (args, projectDir, ws) =>
-    initMilestoneOp(adapter, args, projectDir, ws),
-  );
-  registry.register('init.map-codebase', (args, projectDir, ws) =>
-    initMapCodebase(adapter, args, projectDir, ws),
-  );
-  registry.register('init.new-workspace', (args, projectDir, ws) =>
-    initNewWorkspace(adapter, args, projectDir, ws),
-  );
-  registry.register('init.list-workspaces', (args, projectDir, ws) =>
-    initListWorkspaces(adapter, args, projectDir, ws),
-  );
-  registry.register('init.remove-workspace', (args, projectDir, ws) =>
-    initRemoveWorkspace(adapter, args, projectDir, ws),
-  );
-
-  // Phase 2 Plan 02-04 Task 2: the 3 complex bundlers (init.new-project,
-  // init.progress, init.manager) live in init-complex.ts. They are
-  // adapter-aware (Task 2 migration). Registering with literal canonical keys
-  // here for MED-2 count parity with the 14 wrappers above.
-  registry.register('init.new-project', (args, projectDir, ws) =>
-    initNewProject(adapter, args, projectDir, ws),
-  );
-  registry.register('init.progress', (args, projectDir, ws) =>
-    initProgress(adapter, args, projectDir, ws),
-  );
-  registry.register('init.manager', (args, projectDir, ws) =>
-    initManager(adapter, args, projectDir, ws),
-  );
+  registry.register('init.execute-phase', initExecutePhase);
+  registry.register('init.plan-phase', initPlanPhase);
+  registry.register('init.new-milestone', initNewMilestone);
+  registry.register('init.quick', initQuick);
+  registry.register('init.ingest-docs', initIngestDocs);
+  registry.register('init.resume', initResume);
+  registry.register('init.verify-work', initVerifyWork);
+  registry.register('init.phase-op', initPhaseOp);
+  registry.register('init.todos', initTodos);
+  registry.register('init.milestone-op', initMilestoneOp);
+  registry.register('init.map-codebase', initMapCodebase);
+  registry.register('init.new-workspace', initNewWorkspace);
+  registry.register('init.list-workspaces', initListWorkspaces);
+  registry.register('init.remove-workspace', initRemoveWorkspace);
+  registry.register('init.new-project', initNewProject);
+  registry.register('init.progress', initProgress);
+  registry.register('init.manager', initManager);
 
   // Wire space-form aliases (e.g. 'init execute-phase') to the same closure
   // wrappers via the alias manifest.

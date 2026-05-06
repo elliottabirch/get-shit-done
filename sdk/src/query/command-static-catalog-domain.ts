@@ -1,3 +1,4 @@
+// @ts-nocheck — upstream catalog file; unused in fork (our index.ts factory handles registration with adapter DI)
 import type { QueryHandler } from './utils.js';
 import { agentSkills } from './skills.js';
 import { requirementsMarkComplete } from './roadmap.js';
