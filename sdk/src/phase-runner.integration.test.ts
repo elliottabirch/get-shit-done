@@ -13,6 +13,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
 import { GSDTools, resolveGsdToolsPath } from './gsd-tools.js';
+import { MarkdownAdapter } from '../../adapters/markdown/index.js';
 import { PhaseRunner } from './phase-runner.js';
 import type { PhaseRunnerDeps } from './phase-runner.js';
 import { ContextEngine } from './context-engine.js';
@@ -74,6 +75,7 @@ describe.skipIf(!gsdToolsAvailable)('Integration: PhaseRunner against real gsd-t
     tmpDir = await createTempPlanningDir();
     tools = new GSDTools({
       projectDir: tmpDir,
+      adapter: new MarkdownAdapter(tmpDir),
       gsdToolsPath: GSD_TOOLS_PATH,
       timeoutMs: 10_000,
     });
@@ -312,6 +314,7 @@ describe.skipIf(!gsdToolsAvailable)('Integration: phasePlanIndex and wave execut
     tmpDir = await createMultiWavePlanningDir();
     tools = new GSDTools({
       projectDir: tmpDir,
+      adapter: new MarkdownAdapter(tmpDir),
       gsdToolsPath: GSD_TOOLS_PATH,
       timeoutMs: 10_000,
     });

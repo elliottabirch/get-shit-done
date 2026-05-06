@@ -98,6 +98,7 @@ import {
 import { skillManifest } from './skill-manifest.js';
 import { auditOpen } from './audit-open.js';
 import { detectCustomFiles } from './detect-custom-files.js';
+import { commandsList } from './commands-list.js';
 import { checkConfigGates } from './config-gates.js';
 import { checkAutoMode } from './check-auto-mode.js';
 import { checkPhaseReady } from './phase-ready.js';
@@ -109,6 +110,7 @@ import { checkVerificationStatus } from './check-verification-status.js';
 import { checkShipReady } from './check-ship-ready.js';
 import { GSDEventStream } from '../event-stream.js';
 import type { StorageAdapter } from '../../../adapters/types.js';
+import { MarkdownAdapter } from '../../../adapters/markdown/index.js';
 import {
   GSDEventType,
   type GSDEvent,
@@ -256,12 +258,14 @@ function buildMutationEvent(
  * @param opts.correlationSessionId - Optional session id threaded into mutation-related events
  * @returns A QueryRegistry instance with all handlers registered
  */
-export function createRegistry(opts: {
-  adapter: StorageAdapter;
+export function createRegistry(opts?: {
+  adapter?: StorageAdapter;
   eventStream?: GSDEventStream;
   correlationSessionId?: string;
 }): QueryRegistry {
-  const { adapter, eventStream, correlationSessionId } = opts;
+  const adapter = opts?.adapter ?? new MarkdownAdapter(process.cwd());
+  const eventStream = opts?.eventStream;
+  const correlationSessionId = opts?.correlationSessionId;
   // Phase 2 D-10 (Plan 02-01 onwards): adapter is consumed by per-handler
   // closure wrappers. Each adapter-aware handler is registered via a closure
   // that binds `adapter` as the first argument; non-adapter-aware handlers
@@ -623,6 +627,7 @@ export function createRegistry(opts: {
     auditOpen(adapter, args, projectDir, ws),
   );
   registry.register('detect-custom-files', detectCustomFiles);
+  registry.register('commands', commandsList);
   registry.register('extract-messages', extractMessages);
   registry.register('extract.messages', extractMessages);
   // Phase 2 Plan 02-03 Task 1: auditUat + uatRenderCheckpoint migrated to
