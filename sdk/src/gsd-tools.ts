@@ -114,8 +114,8 @@ export class GSDTools {
 
   constructor(opts: {
     projectDir: string;
-    /** Required StorageAdapter implementation (D-07: no default, no fallback). */
-    adapter: StorageAdapter;
+    /** StorageAdapter implementation. Defaults to MarkdownAdapter(projectDir). */
+    adapter?: StorageAdapter;
     gsdToolsPath?: string;
     timeoutMs?: number;
     workstream?: string;
@@ -136,7 +136,7 @@ export class GSDTools {
     this.workstream = opts.workstream;
     this.preferNativeQuery = opts.preferNativeQuery ?? true;
     this.registry = createRegistry({
-      adapter: opts.adapter,
+      adapter: opts.adapter ?? new MarkdownAdapter(opts.projectDir),
       eventStream: opts.eventStream,
       correlationSessionId: opts.sessionId,
     });
