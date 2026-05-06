@@ -86,12 +86,12 @@ function parseCliArgsQueryPermissive(argv: string[]): ParsedCliArgs {
       i += 2;
       continue;
     }
-    if (a === '-h' || a === '--help') {
+    if ((a === '-h' || a === '--help') && queryArgv.length === 0) {
       help = true;
       i += 1;
       continue;
     }
-    if (a === '-v' || a === '--version') {
+    if ((a === '-v' || a === '--version') && queryArgv.length === 0) {
       version = true;
       i += 1;
       continue;
@@ -352,8 +352,10 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<void
     if (validateWorkstreamName(envWs)) {
       args = { ...args, ws: envWs };
     }
-    // If the env var contains an invalid name, silently ignore it (same as CJS).
   }
+  // Clear env var so MarkdownAdapter's planningDir() resolves to root .planning/.
+  // Workstream routing is handled by the query layer via planningRelativePath().
+  delete process.env.GSD_WORKSTREAM;
 
   // Multi-repo project-root resolution (issue #2623).
   //
@@ -431,7 +433,14 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<void
           args.ws,
         );
         if (stderr.trim()) console.error(stderr.trimEnd());
-        let output: unknown = await parseCliQueryJsonOutput(stdout, args.projectDir);
+        let output: unknown;
+        try {
+          output = await parseCliQueryJsonOutput(stdout, args.projectDir);
+        } catch {
+          // gsd-tools returned plain text (e.g. help/usage) — forward as-is
+          process.stdout.write(stdout);
+          return;
+        }
         if (pickField) {
           output = extractField(output, pickField);
         }
