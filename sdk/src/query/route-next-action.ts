@@ -87,7 +87,7 @@ export const routeNextAction = async (
     planningRelativePath(workstream, '.continue-here.md'),
   );
 
-  const sj = await stateJson([], projectDir, workstream);
+  const sj = await stateJson(adapter, [], projectDir, workstream);
   const sjd = sj.data as Record<string, unknown>;
   if (sjd.error) {
     return {

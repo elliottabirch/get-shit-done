@@ -25,7 +25,7 @@ import { homedir } from 'node:os';
 
 import { loadConfig } from '../config.js';
 import { resolveModel } from './config-query.js';
-import { adapterFor, planningPaths, normalizePhaseName, phaseTokenMatches, toPosixPath } from './helpers.js';
+import { planningPaths, normalizePhaseName, phaseTokenMatches, toPosixPath } from './helpers.js';
 import {
   getMilestoneInfo,
   extractCurrentMilestone,
@@ -33,7 +33,8 @@ import {
   extractPhasesFromSection,
 } from './roadmap.js';
 import { withProjectRoot } from './init.js';
-import type { QueryHandler } from './utils.js';
+import type { QueryResult } from './utils.js';
+import type { StorageAdapter } from '../../../adapters/types.js';
 
 // ─── Internal helpers ──────────────────────────────────────────────────────
 
@@ -113,7 +114,12 @@ function listPhasePlanAndSummaryCounts(phasePath: string): { plans: string[]; su
  *
  * Port of cmdInitNewProject from init.cjs lines 296-399.
  */
-export const initNewProject: QueryHandler = async (_args, projectDir, workstream) => {
+export const initNewProject = async (
+  adapter: StorageAdapter,
+  _args: string[],
+  projectDir: string,
+  workstream?: string,
+): Promise<QueryResult> => {
   const config = await loadConfig(projectDir, workstream);
 
   // Detect search API key availability from env vars and ~/.gsd/ files
@@ -217,7 +223,7 @@ export const initNewProject: QueryHandler = async (_args, projectDir, workstream
     project_path: '.planning/PROJECT.md',
   };
 
-  return { data: withProjectRoot(projectDir, result, config as Record<string, unknown>) };
+  return { data: await withProjectRoot(adapter, projectDir, result, config as Record<string, unknown>) };
 };
 
 // ─── initProgress ─────────────────────────────────────────────────────────
@@ -229,10 +235,13 @@ export const initNewProject: QueryHandler = async (_args, projectDir, workstream
  *
  * Port of cmdInitProgress from init.cjs lines 1139-1284.
  */
-export const initProgress: QueryHandler = async (_args, projectDir, workstream) => {
+export const initProgress = async (
+  adapter: StorageAdapter,
+  _args: string[],
+  projectDir: string,
+  workstream?: string,
+): Promise<QueryResult> => {
   const config = await loadConfig(projectDir, workstream);
-  // Phase 2 Plan 02-02 transitional: getMilestoneInfo + extractCurrentMilestone migrated to adapter signature.
-  const adapter = await adapterFor(projectDir);
   const milestone = await getMilestoneInfo(adapter, workstream);
   const paths = planningPaths(projectDir, workstream);
 
@@ -380,7 +389,7 @@ export const initProgress: QueryHandler = async (_args, projectDir, workstream) 
     config_path: toPosixPath(relative(projectDir, paths.config)),
   };
 
-  return { data: withProjectRoot(projectDir, result, config as Record<string, unknown>) };
+  return { data: await withProjectRoot(adapter, projectDir, result, config as Record<string, unknown>) };
 };
 
 // ─── initManager ─────────────────────────────────────────────────────────
@@ -393,10 +402,13 @@ export const initProgress: QueryHandler = async (_args, projectDir, workstream) 
  *
  * Port of cmdInitManager from init.cjs lines 854-1137.
  */
-export const initManager: QueryHandler = async (_args, projectDir, workstream) => {
+export const initManager = async (
+  adapter: StorageAdapter,
+  _args: string[],
+  projectDir: string,
+  workstream?: string,
+): Promise<QueryResult> => {
   const config = await loadConfig(projectDir, workstream);
-  // Phase 2 Plan 02-02 transitional: getMilestoneInfo + extractCurrentMilestone + extractNextMilestoneSection migrated to adapter signature.
-  const adapter = await adapterFor(projectDir);
   const milestone = await getMilestoneInfo(adapter, workstream);
   const paths = planningPaths(projectDir, workstream);
 
@@ -680,5 +692,5 @@ export const initManager: QueryHandler = async (_args, projectDir, workstream) =
     manager_flags: managerFlags,
   };
 
-  return { data: withProjectRoot(projectDir, result, config as Record<string, unknown>) };
+  return { data: await withProjectRoot(adapter, projectDir, result, config as Record<string, unknown>) };
 };

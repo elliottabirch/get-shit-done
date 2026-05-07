@@ -231,7 +231,7 @@ export const statsJson: QueryHandler = async (args, projectDir, workstream) => {
   // Phase 2 Plan 02-02 Task 2: statsJson body's read paths route through adapter.
   const adapter = await adapterFor(projectDir);
   const milestone = await getMilestoneInfo(adapter, workstream);
-  const isDirInMilestone = await getMilestonePhaseFilter(projectDir, workstream);
+  const isDirInMilestone = await getMilestonePhaseFilter(adapter, workstream);
 
   const phasesByNumber = new Map<
     string,

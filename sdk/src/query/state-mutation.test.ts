@@ -224,13 +224,14 @@ describe('stateUpdate', () => {
   it('updates a single field and round-trips through stateLoad', async () => {
     const { stateUpdate } = await import('./state-mutation.js');
     const { stateJson } = await import('./state.js');
+    const { MarkdownAdapter } = await import('../../../adapters/markdown/index.js');
 
     const result = await stateUpdate(['Status', 'Phase complete'], tmpDir);
     const data = result.data as Record<string, unknown>;
     expect(data.updated).toBe(true);
 
     // Verify round-trip
-    const loaded = await stateJson([], tmpDir);
+    const loaded = await stateJson(new MarkdownAdapter(tmpDir), [], tmpDir);
     const loadedData = loaded.data as Record<string, unknown>;
     // Status gets normalized by buildStateFrontmatter
     expect(loadedData.status).toBeTruthy();

@@ -27,6 +27,7 @@ import { GSDError, ErrorClassification } from '../errors.js';
 import { extractFrontmatter, stripFrontmatter } from './frontmatter.js';
 import { reconstructFrontmatter, spliceFrontmatter } from './frontmatter-mutation.js';
 import {
+  adapterFor,
   comparePhaseNum,
   escapeRegex,
   normalizePhaseName,
@@ -237,7 +238,8 @@ export async function releaseStateLock(lockPath: string): Promise<void> {
 async function syncStateFrontmatter(content: string, projectDir: string): Promise<string> {
   const existingFm = extractFrontmatter(content);
   const body = stripFrontmatter(content);
-  const derivedFm = await buildStateFrontmatter(body, projectDir);
+  const syncAdapter = await adapterFor(projectDir);
+  const derivedFm = await buildStateFrontmatter(syncAdapter, body, projectDir);
 
   // Preserve existing status when body-derived is 'unknown'
   if (derivedFm.status === 'unknown' && existingFm.status && existingFm.status !== 'unknown') {
@@ -689,7 +691,8 @@ export const stateUpdateProgress: QueryHandler = async (_args, projectDir, works
   let totalSummaries = 0;
 
   try {
-    const isDirInMilestone = await getMilestonePhaseFilter(projectDir, workstream);
+    const progressAdapter = await adapterFor(projectDir);
+    const isDirInMilestone = await getMilestonePhaseFilter(progressAdapter, workstream);
     const entries = await readdir(phasesDir, { withFileTypes: true });
     const phaseDirs = entries
       .filter(e => e.isDirectory())

@@ -453,7 +453,11 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<void
           output = extractField(output, pickField);
         }
 
-        console.log(JSON.stringify(output, null, 2));
+        if ((result as { format?: string }).format === 'text' && !pickField) {
+          process.stdout.write(String(output) + '\n');
+        } else {
+          console.log(JSON.stringify(output, null, 2));
+        }
       }
     } catch (err) {
       if (err instanceof GSDError) {

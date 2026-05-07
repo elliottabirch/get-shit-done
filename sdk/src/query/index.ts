@@ -128,6 +128,7 @@ export type { QueryResult, QueryHandler } from './utils.js';
 export { extractField } from './registry.js';
 /** Same argv normalization as `gsd-sdk query` — use when calling `registry.dispatch()` with CLI-style `command` + `args`. */
 export { normalizeQueryCommand } from './query-command-resolution-strategy.js';
+export { buildRegistry, decorateRegistryMutations } from './registry-assembly.js';
 
 // ─── Mutation commands set ────────────────────────────────────────────────
 
@@ -284,8 +285,8 @@ export function createRegistry(opts?: {
     // Phase 2 Plan 02-01 Task 4: stateProjectLoad migrated to adapter-as-first-arg
     // signature. Closure wrapper threads the adapter from createRegistry's opts.
     'state.load': (args, projectDir, ws) => stateProjectLoad(adapter, args, projectDir, ws),
-    'state.json': stateJson,
-    'state.get': stateGet,
+    'state.json': (args, projectDir, ws) => stateJson(adapter, args, projectDir, ws),
+    'state.get': (args, projectDir, ws) => stateGet(adapter, args, projectDir, ws),
     'state.update': stateUpdate,
     'state.patch': statePatch,
     'state.begin-phase': stateBeginPhase,
@@ -315,7 +316,7 @@ export function createRegistry(opts?: {
     }
   }
 
-  registry.register('state-snapshot', stateSnapshot);
+  registry.register('state-snapshot', (args, projectDir, ws) => stateSnapshot(adapter, args, projectDir, ws));
   // Phase 2 Plan 02-02 Task 1: findPhase + phasePlanIndex migrated to adapter-as-first-arg.
   registry.register('find-phase', (args, projectDir, ws) =>
     findPhase(adapter, args, projectDir, ws),
@@ -513,23 +514,23 @@ export function createRegistry(opts?: {
   // assertion can grep them deterministically; the alias loop below registers
   // the space-form aliases ('init execute-phase', etc.) for each canonical
   // entry by reusing the same closure wrapper.
-  registry.register('init.execute-phase', initExecutePhase);
-  registry.register('init.plan-phase', initPlanPhase);
-  registry.register('init.new-milestone', initNewMilestone);
-  registry.register('init.quick', initQuick);
-  registry.register('init.ingest-docs', initIngestDocs);
-  registry.register('init.resume', initResume);
-  registry.register('init.verify-work', initVerifyWork);
-  registry.register('init.phase-op', initPhaseOp);
-  registry.register('init.todos', initTodos);
-  registry.register('init.milestone-op', initMilestoneOp);
-  registry.register('init.map-codebase', initMapCodebase);
-  registry.register('init.new-workspace', initNewWorkspace);
-  registry.register('init.list-workspaces', initListWorkspaces);
-  registry.register('init.remove-workspace', initRemoveWorkspace);
-  registry.register('init.new-project', initNewProject);
-  registry.register('init.progress', initProgress);
-  registry.register('init.manager', initManager);
+  registry.register('init.execute-phase', (args, projectDir, ws) => initExecutePhase(adapter, args, projectDir, ws));
+  registry.register('init.plan-phase', (args, projectDir, ws) => initPlanPhase(adapter, args, projectDir, ws));
+  registry.register('init.new-milestone', (args, projectDir, ws) => initNewMilestone(adapter, args, projectDir, ws));
+  registry.register('init.quick', (args, projectDir, ws) => initQuick(adapter, args, projectDir, ws));
+  registry.register('init.ingest-docs', (args, projectDir, ws) => initIngestDocs(adapter, args, projectDir, ws));
+  registry.register('init.resume', (args, projectDir, ws) => initResume(adapter, args, projectDir, ws));
+  registry.register('init.verify-work', (args, projectDir, ws) => initVerifyWork(adapter, args, projectDir, ws));
+  registry.register('init.phase-op', (args, projectDir, ws) => initPhaseOp(adapter, args, projectDir, ws));
+  registry.register('init.todos', (args, projectDir, ws) => initTodos(adapter, args, projectDir, ws));
+  registry.register('init.milestone-op', (args, projectDir, ws) => initMilestoneOp(adapter, args, projectDir, ws));
+  registry.register('init.map-codebase', (args, projectDir, ws) => initMapCodebase(adapter, args, projectDir, ws));
+  registry.register('init.new-workspace', (args, projectDir, ws) => initNewWorkspace(adapter, args, projectDir, ws));
+  registry.register('init.list-workspaces', (args, projectDir, ws) => initListWorkspaces(adapter, args, projectDir, ws));
+  registry.register('init.remove-workspace', (args, projectDir, ws) => initRemoveWorkspace(adapter, args, projectDir, ws));
+  registry.register('init.new-project', (args, projectDir, ws) => initNewProject(adapter, args, projectDir, ws));
+  registry.register('init.progress', (args, projectDir, ws) => initProgress(adapter, args, projectDir, ws));
+  registry.register('init.manager', (args, projectDir, ws) => initManager(adapter, args, projectDir, ws));
 
   // Wire space-form aliases (e.g. 'init execute-phase') to the same closure
   // wrappers via the alias manifest.

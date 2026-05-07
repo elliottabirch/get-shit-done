@@ -342,7 +342,7 @@ describe('initExecutePhase', () => {
       workflow: { research: true, plan_check: true, verifier: true, nyquist_validation: true },
     }));
 
-    const result = await initExecutePhase(['9'], tmpDir);
+    const result = await initExecutePhase(adapter, ['9'], tmpDir);
     const data = result.data as Record<string, unknown>;
     expect(data.branching_strategy).toBe('phase');
     expect(typeof data.branch_name).toBe('string');

@@ -1332,7 +1332,8 @@ export const phaseComplete: QueryHandler = async (args, projectDir, workstream) 
   let completedPhaseInPrimaryMilestone = true;
 
   try {
-    const isDirInMilestone = await getMilestonePhaseFilter(projectDir, workstream);
+    const milestoneAdapter = await adapterFor(projectDir);
+    const isDirInMilestone = await getMilestonePhaseFilter(milestoneAdapter, workstream);
     const entries = await readdir(paths.phases, { withFileTypes: true });
     const allDirs = entries.filter(e => e.isDirectory()).map(e => e.name);
 
@@ -1675,7 +1676,8 @@ export const phasesArchive: QueryHandler = async (args, projectDir, workstream) 
 
   const paths = planningPaths(projectDir, workstream);
   const phasesDir = paths.phases;
-  const isDirInMilestone = await getMilestonePhaseFilter(projectDir, workstream);
+  const archiveAdapter = await adapterFor(projectDir);
+  const isDirInMilestone = await getMilestonePhaseFilter(archiveAdapter, workstream);
 
   const archiveDir = join(paths.planning, 'milestones', `${version}-phases`);
   await mkdir(archiveDir, { recursive: true });
@@ -1748,7 +1750,8 @@ export const milestoneComplete: QueryHandler = async (args, projectDir, workstre
 
   await mkdir(archiveDir, { recursive: true });
 
-  const isDirInMilestone = await getMilestonePhaseFilter(projectDir, workstream);
+  const completeAdapter = await adapterFor(projectDir);
+  const isDirInMilestone = await getMilestonePhaseFilter(completeAdapter, workstream);
 
   let phaseCount = 0;
   let totalPlans = 0;

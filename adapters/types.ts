@@ -64,10 +64,20 @@ export class UnsupportedCapabilityError extends Error {
   override readonly name = 'UnsupportedCapabilityError';
   readonly capability: string;
   readonly adapterName: string;
+  /** Brand field for cross-module instanceof resilience (dual-package/vitest transform). */
+  readonly __brand = 'UnsupportedCapabilityError' as const;
   constructor(capability: string, adapterName: string) {
     super(`Adapter '${adapterName}' does not support capability '${capability}'`);
     this.capability = capability;
     this.adapterName = adapterName;
+  }
+
+  static [Symbol.hasInstance](instance: unknown): boolean {
+    return (
+      instance != null &&
+      typeof instance === 'object' &&
+      (instance as Record<string, unknown>).__brand === 'UnsupportedCapabilityError'
+    );
   }
 }
 
