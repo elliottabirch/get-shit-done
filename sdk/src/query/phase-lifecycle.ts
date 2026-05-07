@@ -32,6 +32,7 @@ import {
   phaseTokenMatches,
   toPosixPath,
   planningPaths,
+  planningRelativePath,
   stateExtractField,
 } from './helpers.js';
 import { extractFrontmatter } from './frontmatter.js';
@@ -1547,9 +1548,8 @@ export const phasesClear: QueryHandler = async (args, projectDir, workstream) =>
  * @param projectDir - Project root directory
  * @returns QueryResult with { archived: count, version, archive_directory }
  */
-export const phasesList = async (adapter: StorageAdapter, args: string[], projectDir: string, workstream?: string): Promise<QueryResult> => {
-  const paths = planningPaths(projectDir, workstream);
-  const phasesDir = paths.phases;
+export const phasesList = async (adapter: StorageAdapter, args: string[], _projectDir: string, workstream?: string): Promise<QueryResult> => {
+  const phasesRel = planningRelativePath(workstream, 'phases');
 
   const typeIdx = args.indexOf('--type');
   const phaseIdx = args.indexOf('--phase');
@@ -1557,22 +1557,31 @@ export const phasesList = async (adapter: StorageAdapter, args: string[], projec
   const phase = phaseIdx !== -1 ? args[phaseIdx + 1] : null;
   const includeArchived = args.includes('--include-archived');
 
-  if (!existsSync(phasesDir)) {
+  if (!(await adapter.exists(phasesRel))) {
     return { data: type ? { files: [], count: 0 } : { directories: [], count: 0 } };
   }
 
-  const entries = await readdir(phasesDir, { withFileTypes: true });
-  let dirs = entries.filter(e => e.isDirectory()).map(e => e.name);
+  const phaseRefs = await adapter.listCollection(phasesRel);
+  const dirChecks = await Promise.all(
+    phaseRefs.map(async r => ({ ref: r, isDir: (await adapter.stat(r.path))?.kind === 'dir' })),
+  );
+  let dirs = dirChecks.filter(c => c.isDir).map(c => c.ref.name);
 
   if (includeArchived) {
-    const milestonesDir = join(paths.planning, 'milestones');
-    if (existsSync(milestonesDir)) {
-      const milestoneEntries = await readdir(milestonesDir, { withFileTypes: true });
-      for (const mDir of milestoneEntries.filter(e => e.isDirectory() && e.name.endsWith('-phases'))) {
-        const milestone = mDir.name.replace(/-phases$/, '');
-        const archivedEntries = await readdir(join(milestonesDir, mDir.name), { withFileTypes: true });
-        for (const a of archivedEntries.filter(e => e.isDirectory())) {
-          dirs.push(`${a.name} [${milestone}]`);
+    const milestonesRel = planningRelativePath(workstream, 'milestones');
+    if (await adapter.exists(milestonesRel)) {
+      const milestoneRefs = await adapter.listCollection(milestonesRel);
+      const mDirChecks = await Promise.all(
+        milestoneRefs.map(async r => ({ ref: r, isDir: (await adapter.stat(r.path))?.kind === 'dir' })),
+      );
+      for (const mDir of mDirChecks.filter(c => c.isDir && c.ref.name.endsWith('-phases'))) {
+        const milestone = mDir.ref.name.replace(/-phases$/, '');
+        const archivedRefs = await adapter.listCollection(mDir.ref.path);
+        const aDirChecks = await Promise.all(
+          archivedRefs.map(async r => ({ ref: r, isDir: (await adapter.stat(r.path))?.kind === 'dir' })),
+        );
+        for (const a of aDirChecks.filter(c => c.isDir)) {
+          dirs.push(`${a.ref.name} [${milestone}]`);
         }
       }
     }
@@ -1592,16 +1601,17 @@ export const phasesList = async (adapter: StorageAdapter, args: string[], projec
   if (type) {
     const files: string[] = [];
     for (const dir of dirs) {
-      const dirPath = join(phasesDir, dir);
-      if (!existsSync(dirPath)) continue;
-      const dirFiles = await readdir(dirPath);
+      const dirPath = `${phasesRel}/${dir}`;
+      if (!(await adapter.exists(dirPath))) continue;
+      const fileRefs = await adapter.listCollection(dirPath);
+      const fileNames = fileRefs.map(r => r.name);
       let filtered: string[];
       if (type === 'plans') {
-        filtered = dirFiles.filter(f => f.endsWith('-PLAN.md') || f === 'PLAN.md');
+        filtered = fileNames.filter(f => f.endsWith('-PLAN.md') || f === 'PLAN.md');
       } else if (type === 'summaries') {
-        filtered = dirFiles.filter(f => f.endsWith('-SUMMARY.md') || f === 'SUMMARY.md');
+        filtered = fileNames.filter(f => f.endsWith('-SUMMARY.md') || f === 'SUMMARY.md');
       } else {
-        filtered = dirFiles;
+        filtered = fileNames;
       }
       files.push(...filtered.sort());
     }
@@ -1611,22 +1621,25 @@ export const phasesList = async (adapter: StorageAdapter, args: string[], projec
   return { data: { directories: dirs, count: dirs.length } };
 };
 
-export const phaseNextDecimal = async (adapter: StorageAdapter, args: string[], projectDir: string, workstream?: string): Promise<QueryResult> => {
+export const phaseNextDecimal = async (adapter: StorageAdapter, args: string[], _projectDir: string, workstream?: string): Promise<QueryResult> => {
   const basePhase = args[0];
   if (!basePhase) {
     throw new GSDError('base phase number required', ErrorClassification.Validation);
   }
   assertNoNullBytes(basePhase, 'basePhase');
 
-  const paths = planningPaths(projectDir, workstream);
-  const phasesDir = paths.phases;
+  const phasesRel = planningRelativePath(workstream, 'phases');
+  const roadmapRel = planningRelativePath(workstream, 'ROADMAP.md');
   const normalized = normalizePhaseName(basePhase);
   const decimalSet = new Set<number>();
   let baseExists = false;
 
-  if (existsSync(phasesDir)) {
-    const entries = await readdir(phasesDir, { withFileTypes: true });
-    const dirNames = entries.filter(e => e.isDirectory()).map(e => e.name);
+  if (await adapter.exists(phasesRel)) {
+    const phaseRefs = await adapter.listCollection(phasesRel);
+    const dirChecks = await Promise.all(
+      phaseRefs.map(async r => ({ ref: r, isDir: (await adapter.stat(r.path))?.kind === 'dir' })),
+    );
+    const dirNames = dirChecks.filter(c => c.isDir).map(c => c.ref.name);
     baseExists = dirNames.some(d => phaseTokenMatches(d, normalized));
 
     const dirPattern = new RegExp(`^(?:[A-Z]{1,6}-)?${escapeRegex(normalized)}\\.(\\d+)`);
@@ -1636,18 +1649,15 @@ export const phaseNextDecimal = async (adapter: StorageAdapter, args: string[], 
     }
   }
 
-  const roadmapPath = paths.roadmap;
-  if (existsSync(roadmapPath)) {
-    try {
-      const roadmapContent = await readFile(roadmapPath, 'utf-8');
-      const phasePattern = new RegExp(
-        `#{2,4}\\s*Phase\\s+0*${escapeRegex(normalized)}\\.(\\d+)\\s*:`, 'gi',
-      );
-      let pm;
-      while ((pm = phasePattern.exec(roadmapContent)) !== null) {
-        decimalSet.add(parseInt(pm[1], 10));
-      }
-    } catch { /* ROADMAP.md read failure is non-fatal */ }
+  const roadmapContent = await adapter.getRecord(roadmapRel);
+  if (roadmapContent !== null) {
+    const phasePattern = new RegExp(
+      `#{2,4}\\s*Phase\\s+0*${escapeRegex(normalized)}\\.(\\d+)\\s*:`, 'gi',
+    );
+    let pm;
+    while ((pm = phasePattern.exec(roadmapContent)) !== null) {
+      decimalSet.add(parseInt(pm[1], 10));
+    }
   }
 
   const existingDecimals = Array.from(decimalSet)

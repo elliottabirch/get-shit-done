@@ -384,7 +384,7 @@ describe('Golden file tests', () => {
       const { gsdDir, sdkDir } = await withFreshPhasesProjects();
       try {
         const gsdOutput = await captureGsdToolsOutput('phases', ['list'], gsdDir);
-        const registry = makeRegistry(REPO_ROOT);
+        const registry = makeRegistry(sdkDir);
         const sdkResult = await registry.dispatch('phases.list', [], sdkDir);
         expect(sdkResult.data).toEqual(gsdOutput);
       } finally {
@@ -397,7 +397,7 @@ describe('Golden file tests', () => {
       const { gsdDir, sdkDir } = await withFreshPhasesProjects();
       try {
         const gsdOutput = await captureGsdToolsOutput('phases', ['list', '--type', 'plans'], gsdDir);
-        const registry = makeRegistry(REPO_ROOT);
+        const registry = makeRegistry(sdkDir);
         const sdkResult = await registry.dispatch('phases.list', ['--type', 'plans'], sdkDir);
         expect(sdkResult.data).toEqual(gsdOutput);
       } finally {
@@ -410,7 +410,7 @@ describe('Golden file tests', () => {
       const { gsdDir, sdkDir } = await withFreshPhasesProjects();
       try {
         const gsdOutput = await captureGsdToolsOutput('phases', ['list', '--type', 'summaries'], gsdDir);
-        const registry = makeRegistry(REPO_ROOT);
+        const registry = makeRegistry(sdkDir);
         const sdkResult = await registry.dispatch('phases.list', ['--type', 'summaries'], sdkDir);
         expect(sdkResult.data).toEqual(gsdOutput);
       } finally {
@@ -423,7 +423,7 @@ describe('Golden file tests', () => {
       const { gsdDir, sdkDir } = await withFreshPhasesProjects();
       try {
         const gsdOutput = await captureGsdToolsOutput('phases', ['list', '--phase', '10'], gsdDir);
-        const registry = makeRegistry(REPO_ROOT);
+        const registry = makeRegistry(sdkDir);
         const sdkResult = await registry.dispatch('phases.list', ['--phase', '10'], sdkDir);
         expect(sdkResult.data).toEqual(gsdOutput);
       } finally {
@@ -436,7 +436,7 @@ describe('Golden file tests', () => {
       const { gsdDir, sdkDir } = await withFreshPhasesProjects();
       try {
         const gsdOutput = await captureGsdToolsOutput('phases', ['list', '--include-archived'], gsdDir);
-        const registry = makeRegistry(REPO_ROOT);
+        const registry = makeRegistry(sdkDir);
         const sdkResult = await registry.dispatch('phases.list', ['--include-archived'], sdkDir);
         expect(sdkResult.data).toEqual(gsdOutput);
       } finally {
@@ -449,7 +449,7 @@ describe('Golden file tests', () => {
       const { gsdDir, sdkDir } = await withFreshPhasesProjects();
       try {
         const gsdOutput = await captureGsdToolsOutput('phases', ['clear', '--confirm'], gsdDir);
-        const registry = makeRegistry(REPO_ROOT);
+        const registry = makeRegistry(sdkDir);
         const sdkResult = await registry.dispatch('phases.clear', ['--confirm'], sdkDir);
         expect(sdkResult.data).toEqual(gsdOutput);
       } finally {
