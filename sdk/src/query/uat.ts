@@ -312,7 +312,7 @@ export const auditUat = async (
     throw new GSDError('No phases directory found in planning directory', ErrorClassification.Blocked);
   }
 
-  const isDirInMilestone = await getMilestonePhaseFilter(projectDir, workstream);
+  const isDirInMilestone = await getMilestonePhaseFilter(adapter, workstream);
   const results: Record<string, unknown>[] = [];
 
   // Project-relative root for file_path display (matches CJS output shape).

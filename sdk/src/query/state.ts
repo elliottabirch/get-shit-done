@@ -20,10 +20,8 @@
  * ```
  */
 
-import { readFile, readdir } from 'node:fs/promises';
-import { join } from 'node:path';
 import { extractFrontmatter, stripFrontmatter } from './frontmatter.js';
-import { adapterFor, planningPaths, escapeRegex } from './helpers.js';
+import { adapterFor, planningPaths, planningRelativePath, escapeRegex } from './helpers.js';
 import {
   computeProgressPercent,
   normalizeProgressNumbers,
@@ -33,7 +31,8 @@ import {
 } from './state-document.js';
 import { getMilestoneInfo, extractCurrentMilestone } from './roadmap.js';
 import { scanPhasePlans } from './plan-scan.js';
-import type { QueryHandler } from './utils.js';
+import type { QueryHandler, QueryResult } from './utils.js';
+import type { StorageAdapter } from '../../../adapters/types.js';
 
 // ─── Internal helpers ──────────────────────────────────────────────────────
 
@@ -42,17 +41,18 @@ import type { QueryHandler } from './utils.js';
  *
  * Port of getMilestonePhaseFilter from core.cjs lines 1409-1442.
  */
-export async function getMilestonePhaseFilter(projectDir: string, workstream?: string): Promise<((dirName: string) => boolean) & { phaseCount: number }> {
+export async function getMilestonePhaseFilter(adapter: StorageAdapter, workstream?: string): Promise<((dirName: string) => boolean) & { phaseCount: number }> {
   const milestonePhaseNums = new Set<string>();
   try {
-    // Phase 2 Plan 02-02 transitional: extractCurrentMilestone migrated to adapter signature.
-    const adapter = await adapterFor(projectDir);
-    const roadmapContent = await readFile(planningPaths(projectDir, workstream).roadmap, 'utf-8');
-    const roadmap = await extractCurrentMilestone(adapter, roadmapContent, workstream);
-    const phasePattern = /#{2,4}\s*Phase\s+([\w][\w.-]*)\s*:/gi;
-    let m: RegExpExecArray | null;
-    while ((m = phasePattern.exec(roadmap)) !== null) {
-      milestonePhaseNums.add(m[1]);
+    const roadmapRel = planningRelativePath(workstream, 'ROADMAP.md');
+    const roadmapContent = await adapter.getRecord(roadmapRel);
+    if (roadmapContent) {
+      const roadmap = await extractCurrentMilestone(adapter, roadmapContent, workstream);
+      const phasePattern = /#{2,4}\s*Phase\s+([\w][\w.-]*)\s*:/gi;
+      let m: RegExpExecArray | null;
+      while ((m = phasePattern.exec(roadmap)) !== null) {
+        milestonePhaseNums.add(m[1]);
+      }
     }
   } catch { /* intentionally empty */ }
 
@@ -100,6 +100,7 @@ export async function getMilestonePhaseFilter(projectDir: string, workstream?: s
  * HIGH complexity: extracts fields, scans disk, computes progress.
  */
 export async function buildStateFrontmatter(
+  adapter: StorageAdapter,
   bodyContent: string,
   projectDir: string,
   workstream?: string,
@@ -135,15 +136,14 @@ export async function buildStateFrontmatter(
   // pattern: STATE.md is authoritative, re-derive only when absent.
   let existingFm: Record<string, unknown> = {};
   try {
-    const raw = await readFile(planningPaths(projectDir, workstream).state, 'utf-8');
-    existingFm = extractFrontmatter(raw);
+    const stateRel = planningRelativePath(workstream, 'STATE.md');
+    const raw = await adapter.getRecord(stateRel);
+    if (raw) existingFm = extractFrontmatter(raw);
   } catch { /* STATE.md missing on first write — no preservation needed */ }
 
   let milestone: string | null = null;
   let milestoneName: string | null = null;
   try {
-    // Phase 2 Plan 02-02 transitional: getMilestoneInfo migrated to adapter signature.
-    const adapter = await adapterFor(projectDir);
     const info = await getMilestoneInfo(adapter, workstream);
     milestone = info.version;
     milestoneName = info.name;
@@ -155,13 +155,15 @@ export async function buildStateFrontmatter(
   let completedPlans: number | null = null;
 
   try {
-    const phasesDir = planningPaths(projectDir, workstream).phases;
-    const isDirInMilestone = await getMilestonePhaseFilter(projectDir, workstream);
-    const entries = await readdir(phasesDir, { withFileTypes: true });
-    const phaseDirs = entries
-      .filter(e => e.isDirectory())
-      .map(e => e.name)
-      .filter(isDirInMilestone);
+    const phasesRel = planningRelativePath(workstream, 'phases');
+    const isDirInMilestone = await getMilestonePhaseFilter(adapter, workstream);
+    const phaseRefs = await adapter.listCollection(phasesRel);
+    const phaseDirNames: string[] = [];
+    for (const ref of phaseRefs) {
+      const st = await adapter.stat(`${phasesRel}/${ref.name}`);
+      if (st && st.kind === 'dir') phaseDirNames.push(ref.name);
+    }
+    const phaseDirs = phaseDirNames.filter(isDirInMilestone);
 
     let diskTotalPlans = 0;
     let diskTotalSummaries = 0;
@@ -172,6 +174,8 @@ export async function buildStateFrontmatter(
       // subdirectories (the planner default layout) get counted. The naive
       // top-level `-PLAN.md` filter undercounts every phase that uses the
       // canonical `phases/NN-name/plans/<NN>-PLAN-MM-slug.md` shape.
+      // TODO(adapter-migration): scanPhasePlans uses raw fs; migrate in a
+      // future commit so this whole path is adapter-clean.
       const { planCount, summaryCount, completed } = scanPhasePlans(join(phasesDir, dir));
       diskTotalPlans += planCount;
       diskTotalSummaries += summaryCount;
@@ -254,13 +258,11 @@ export async function buildStateFrontmatter(
  * @param projectDir - Project root directory
  * @returns QueryResult with rebuilt state frontmatter
  */
-export const stateJson: QueryHandler = async (_args, projectDir, workstream) => {
-  const statePath = planningPaths(projectDir, workstream).state;
+export const stateJson = async (adapter: StorageAdapter, _args: string[], projectDir: string, workstream?: string): Promise<QueryResult> => {
+  const stateRel = planningRelativePath(workstream, 'STATE.md');
 
-  let content: string;
-  try {
-    content = await readFile(statePath, 'utf-8');
-  } catch {
+  const content = await adapter.getRecord(stateRel);
+  if (!content) {
     return { data: { error: 'STATE.md not found' } };
   }
 
@@ -268,7 +270,7 @@ export const stateJson: QueryHandler = async (_args, projectDir, workstream) => 
   const body = stripFrontmatter(content);
 
   // Always rebuild from body + disk so progress reflects current state
-  const built = await buildStateFrontmatter(body, projectDir, workstream);
+  const built = await buildStateFrontmatter(adapter, body, projectDir, workstream);
 
   // Preserve frontmatter-only fields that cannot be recovered from body
   if (existingFm && existingFm.stopped_at && !built.stopped_at) {
@@ -304,13 +306,11 @@ export const stateJson: QueryHandler = async (_args, projectDir, workstream) => 
  * @param projectDir - Project root directory
  * @returns QueryResult with field value or full content
  */
-export const stateGet: QueryHandler = async (args, projectDir, workstream) => {
-  const statePath = planningPaths(projectDir, workstream).state;
+export const stateGet = async (adapter: StorageAdapter, args: string[], _projectDir: string, workstream?: string): Promise<QueryResult> => {
+  const stateRel = planningRelativePath(workstream, 'STATE.md');
 
-  let content: string;
-  try {
-    content = await readFile(statePath, 'utf-8');
-  } catch {
+  const content = await adapter.getRecord(stateRel);
+  if (!content) {
     return { data: { error: 'STATE.md not found' } };
   }
 
@@ -356,13 +356,11 @@ export const stateGet: QueryHandler = async (args, projectDir, workstream) => {
  * @param projectDir - Project root directory
  * @returns QueryResult with structured snapshot
  */
-export const stateSnapshot: QueryHandler = async (_args, projectDir, workstream) => {
-  const statePath = planningPaths(projectDir, workstream).state;
+export const stateSnapshot = async (adapter: StorageAdapter, _args: string[], _projectDir: string, workstream?: string): Promise<QueryResult> => {
+  const stateRel = planningRelativePath(workstream, 'STATE.md');
 
-  let content: string;
-  try {
-    content = await readFile(statePath, 'utf-8');
-  } catch {
+  const content = await adapter.getRecord(stateRel);
+  if (!content) {
     return { data: { error: 'STATE.md not found' } };
   }
 

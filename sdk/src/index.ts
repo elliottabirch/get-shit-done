@@ -134,6 +134,8 @@ export class GSD {
       workstream: this.workstream,
       eventStream: this.eventStream,
       sessionId: this.sessionId,
+      strictSdk: this.strictSdk,
+      allowFallbackToSubprocess: this.allowFallbackToSubprocess,
     });
   }
 

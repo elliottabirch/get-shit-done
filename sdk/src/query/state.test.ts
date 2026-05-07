@@ -10,8 +10,8 @@ import { mkdtemp, writeFile, mkdir, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
-// Will be imported once implemented
 import { stateJson, stateGet, stateSnapshot } from './state.js';
+import { MarkdownAdapter } from '../../../adapters/markdown/index.js';
 
 // ─── Fixtures ──────────────────────────────────────────────────────────────
 
@@ -81,11 +81,13 @@ const ROADMAP_CONTENT = `# Roadmap
 `;
 
 let tmpDir: string;
+let adapter: MarkdownAdapter;
 
 // ─── Setup / Teardown ──────────────────────────────────────────────────────
 
 beforeEach(async () => {
   tmpDir = await mkdtemp(join(tmpdir(), 'gsd-state-test-'));
+  adapter = new MarkdownAdapter(tmpDir);
   const planningDir = join(tmpDir, '.planning');
   const phasesDir = join(planningDir, 'phases');
 
@@ -134,7 +136,7 @@ afterEach(async () => {
 
 describe('stateJson', () => {
   it('rebuilds frontmatter from body + disk', async () => {
-    const result = await stateJson([], tmpDir);
+    const result = await stateJson(adapter, [], tmpDir);
     const data = result.data as Record<string, unknown>;
 
     expect(data.gsd_state_version).toBe('1.0');
@@ -145,7 +147,7 @@ describe('stateJson', () => {
   });
 
   it('returns progress with disk-scanned counts', async () => {
-    const result = await stateJson([], tmpDir);
+    const result = await stateJson(adapter, [], tmpDir);
     const data = result.data as Record<string, unknown>;
     const progress = data.progress as Record<string, unknown>;
 
@@ -188,7 +190,7 @@ ${STATE_BODY}`;
   });
 
   it('preserves stopped_at from existing frontmatter', async () => {
-    const result = await stateJson([], tmpDir);
+    const result = await stateJson(adapter, [], tmpDir);
     const data = result.data as Record<string, unknown>;
 
     expect(data.stopped_at).toBe('Completed 10-01-PLAN.md');
@@ -208,7 +210,7 @@ Plan: 2 of 3
 `;
     await writeFile(join(tmpDir, '.planning', 'STATE.md'), stateContent);
 
-    const result = await stateJson([], tmpDir);
+    const result = await stateJson(adapter, [], tmpDir);
     const data = result.data as Record<string, unknown>;
 
     // Body has no Status field -> derived is 'unknown', should preserve frontmatter 'paused'
@@ -219,7 +221,7 @@ Plan: 2 of 3
     const emptyDir = await mkdtemp(join(tmpdir(), 'gsd-state-empty-'));
     await mkdir(join(emptyDir, '.planning'), { recursive: true });
 
-    const result = await stateJson([], emptyDir);
+    const result = await stateJson(new MarkdownAdapter(emptyDir), [], emptyDir);
     const data = result.data as Record<string, unknown>;
 
     expect(data.error).toBe('STATE.md not found');
@@ -237,7 +239,7 @@ Status: In Progress
 `;
     await writeFile(join(tmpDir, '.planning', 'STATE.md'), stateContent);
 
-    const result = await stateJson([], tmpDir);
+    const result = await stateJson(adapter, [], tmpDir);
     const data = result.data as Record<string, unknown>;
 
     expect(data.status).toBe('executing');
@@ -256,7 +258,7 @@ Progress: [░░░░░░░░░░] 0%
 `;
     await writeFile(join(tmpDir, '.planning', 'STATE.md'), stateContent);
 
-    const result = await stateJson([], tmpDir);
+    const result = await stateJson(adapter, [], tmpDir);
     const data = result.data as Record<string, unknown>;
     const progress = data.progress as Record<string, unknown>;
 
@@ -269,7 +271,7 @@ Progress: [░░░░░░░░░░] 0%
 
 describe('stateGet', () => {
   it('returns full content when no field specified', async () => {
-    const result = await stateGet([], tmpDir);
+    const result = await stateGet(adapter, [], tmpDir);
     const data = result.data as Record<string, unknown>;
 
     expect(data.content).toBeDefined();
@@ -278,21 +280,21 @@ describe('stateGet', () => {
   });
 
   it('extracts bold-format field', async () => {
-    const result = await stateGet(['Core value'], tmpDir);
+    const result = await stateGet(adapter, ['Core value'], tmpDir);
     const data = result.data as Record<string, unknown>;
 
     expect(data['Core value']).toBe('Improve the project.');
   });
 
   it('extracts plain-format field', async () => {
-    const result = await stateGet(['Plan'], tmpDir);
+    const result = await stateGet(adapter, ['Plan'], tmpDir);
     const data = result.data as Record<string, unknown>;
 
     expect(data['Plan']).toBe('2 of 3');
   });
 
   it('extracts section content under ## heading', async () => {
-    const result = await stateGet(['Current Position'], tmpDir);
+    const result = await stateGet(adapter, ['Current Position'], tmpDir);
     const data = result.data as Record<string, unknown>;
 
     expect(data['Current Position']).toBeDefined();
@@ -300,7 +302,7 @@ describe('stateGet', () => {
   });
 
   it('returns error for missing field', async () => {
-    const result = await stateGet(['Nonexistent Field'], tmpDir);
+    const result = await stateGet(adapter, ['Nonexistent Field'], tmpDir);
     const data = result.data as Record<string, unknown>;
 
     expect(data.error).toBe('Section or field "Nonexistent Field" not found');
@@ -311,7 +313,7 @@ describe('stateGet', () => {
 
 describe('stateSnapshot', () => {
   it('returns structured snapshot', async () => {
-    const result = await stateSnapshot([], tmpDir);
+    const result = await stateSnapshot(adapter, [], tmpDir);
     const data = result.data as Record<string, unknown>;
 
     expect(data.current_phase).toBeDefined();
@@ -321,7 +323,7 @@ describe('stateSnapshot', () => {
   });
 
   it('parses decisions table into array', async () => {
-    const result = await stateSnapshot([], tmpDir);
+    const result = await stateSnapshot(adapter, [], tmpDir);
     const data = result.data as Record<string, unknown>;
     const decisions = data.decisions as Array<Record<string, string>>;
 
@@ -333,7 +335,7 @@ describe('stateSnapshot', () => {
   });
 
   it('parses blockers list', async () => {
-    const result = await stateSnapshot([], tmpDir);
+    const result = await stateSnapshot(adapter, [], tmpDir);
     const data = result.data as Record<string, unknown>;
     const blockers = data.blockers as string[];
 
@@ -343,7 +345,7 @@ describe('stateSnapshot', () => {
   });
 
   it('parses session info', async () => {
-    const result = await stateSnapshot([], tmpDir);
+    const result = await stateSnapshot(adapter, [], tmpDir);
     const data = result.data as Record<string, unknown>;
     const session = data.session as Record<string, string | null>;
 
@@ -355,7 +357,7 @@ describe('stateSnapshot', () => {
     const emptyDir = await mkdtemp(join(tmpdir(), 'gsd-snap-empty-'));
     await mkdir(join(emptyDir, '.planning'), { recursive: true });
 
-    const result = await stateSnapshot([], emptyDir);
+    const result = await stateSnapshot(new MarkdownAdapter(emptyDir), [], emptyDir);
     const data = result.data as Record<string, unknown>;
 
     expect(data.error).toBe('STATE.md not found');
@@ -363,7 +365,7 @@ describe('stateSnapshot', () => {
   });
 
   it('returns numeric fields as numbers', async () => {
-    const result = await stateSnapshot([], tmpDir);
+    const result = await stateSnapshot(adapter, [], tmpDir);
     const data = result.data as Record<string, unknown>;
 
     // progress_percent may be null if no Progress: N% format found
@@ -519,7 +521,7 @@ Status: planning
 
     // Root STATE.md still has the old values (SDK-First Migration).
     // When --ws is threaded, stateJson must read the workstream STATE.md, not the root.
-    const result = await stateJson([], tmpDir, wsName);
+    const result = await stateJson(adapter, [], tmpDir, wsName);
     const data = result.data as Record<string, unknown>;
 
     expect(data.milestone).toBe('ws-1.0');

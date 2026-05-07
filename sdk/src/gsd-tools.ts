@@ -17,6 +17,7 @@ import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import type { InitNewProjectInfo, PhaseOpInfo, PhasePlanIndex, RoadmapAnalysis } from './types.js';
+import { GSDEventType } from './types.js';
 import type { GSDEventStream } from './event-stream.js';
 import type { StorageAdapter } from '../../adapters/types.js';
 import { GSDError, exitCodeFor } from './errors.js';
@@ -25,6 +26,7 @@ import { MarkdownAdapter } from '../../adapters/markdown/index.js';
 import { resolveQueryArgv } from './query/registry.js';
 import { normalizeQueryCommand } from './query/query-command-resolution-strategy.js';
 import { formatStateLoadRawStdout } from './query/state-project-load.js';
+import { resolveTransportPolicy } from './gsd-transport-policy.js';
 
 // ─── Error type ──────────────────────────────────────────────────────────────
 
@@ -39,6 +41,17 @@ export class GSDToolsError extends Error {
   ) {
     super(message, options);
     this.name = 'GSDToolsError';
+  }
+
+  static failure(
+    message: string,
+    command: string,
+    args: string[],
+    exitCode: number | null,
+    stderr = '',
+    options?: { cause?: unknown },
+  ): GSDToolsError {
+    return new GSDToolsError(message, command, args, exitCode, stderr, options);
   }
 }
 
@@ -111,6 +124,10 @@ export class GSDTools {
   private readonly workstream?: string;
   private readonly registry: ReturnType<typeof createRegistry>;
   private readonly preferNativeQuery: boolean;
+  private readonly strictSdk: boolean;
+  private readonly allowFallbackToSubprocess: boolean;
+  private readonly eventStream?: GSDEventStream;
+  private readonly sessionId?: string;
 
   constructor(opts: {
     projectDir: string;
@@ -128,6 +145,16 @@ export class GSDTools {
      * Set false in tests that substitute a mock `gsdToolsPath` script.
      */
     preferNativeQuery?: boolean;
+    /**
+     * When true, commands with no native handler throw immediately instead of
+     * falling through to the subprocess.
+     */
+    strictSdk?: boolean;
+    /**
+     * When true (default), if a native handler throws, fall through to subprocess
+     * instead of re-throwing. Overridden per-command by transport policy.
+     */
+    allowFallbackToSubprocess?: boolean;
   }) {
     this.projectDir = opts.projectDir;
     this.gsdToolsPath =
@@ -135,6 +162,10 @@ export class GSDTools {
     this.timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
     this.workstream = opts.workstream;
     this.preferNativeQuery = opts.preferNativeQuery ?? true;
+    this.strictSdk = opts.strictSdk ?? false;
+    this.allowFallbackToSubprocess = opts.allowFallbackToSubprocess ?? true;
+    this.eventStream = opts.eventStream;
+    this.sessionId = opts.sessionId;
     this.registry = createRegistry({
       adapter: opts.adapter ?? new MarkdownAdapter(opts.projectDir),
       eventStream: opts.eventStream,
@@ -144,6 +175,17 @@ export class GSDTools {
 
   private shouldUseNativeQuery(): boolean {
     return this.preferNativeQuery && !this.workstream;
+  }
+
+  private emitQueryDispatchEvent(command: string, outcome: 'success' | 'error'): void {
+    if (this.eventStream) {
+      this.eventStream.emitEvent({
+        type: GSDEventType.StreamEvent,
+        timestamp: new Date().toISOString(),
+        sessionId: this.sessionId ?? '',
+        event: { type: 'query_dispatch', command, outcome },
+      });
+    }
   }
 
   private nativeMatch(command: string, args: string[]) {
@@ -272,12 +314,14 @@ export class GSDTools {
    * Handles the `@file:` prefix pattern for large results.
    *
    * With native query enabled, a matching registry handler runs in-process;
-   * if that handler throws, the error is surfaced (no automatic fallback to `gsd-tools.cjs`).
+   * transport policy and strictSdk control fallback/fail-fast behaviour.
    */
   async exec(command: string, args: string[] = []): Promise<unknown> {
     if (this.shouldUseNativeQuery()) {
       const matched = this.nativeMatch(command, args);
       if (matched) {
+        const policy = resolveTransportPolicy(command);
+        const fallbackAllowed = policy.allowFallbackToSubprocess && this.allowFallbackToSubprocess;
         try {
           const result = await this.withRegistryDispatchTimeout(
             command,
@@ -286,9 +330,20 @@ export class GSDTools {
           );
           return result.data;
         } catch (err) {
-          if (err instanceof GSDToolsError) throw err;
-          throw this.toToolsError(command, args, err);
+          if (!fallbackAllowed) {
+            if (err instanceof GSDToolsError) throw err;
+            throw this.toToolsError(command, args, err);
+          }
+          // fallback allowed — fall through to subprocess below
         }
+      } else if (this.strictSdk) {
+        this.emitQueryDispatchEvent(command, 'error');
+        throw GSDToolsError.failure(
+          `Strict SDK mode: command '${command}' has no native adapter`,
+          command,
+          args,
+          1,
+        );
       }
     }
 
@@ -462,8 +517,8 @@ export class GSDTools {
 
   // ─── Typed convenience methods ─────────────────────────────────────────
 
-  async stateLoad(): Promise<string> {
-    return this.dispatchNativeRaw('state', ['load'], 'state.load', []);
+  async stateLoad(): Promise<unknown> {
+    return this.dispatchNativeJson('state', ['load'], 'state.load', []);
   }
 
   async roadmapAnalyze(): Promise<RoadmapAnalysis> {
