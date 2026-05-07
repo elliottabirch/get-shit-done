@@ -1,44 +1,11 @@
 ---
 phase: 02-wire-core-read-methods-to-adapter
-verified: 2026-05-01T05:55:00Z
-status: gaps_found
-score: 2/4 success-criteria fully verified (SC#2 + SC#3 PASS; SC#1 + SC#4 FAIL)
+verified: 2026-05-07T14:30:00Z
+status: passed
+score: 4/4 success-criteria fully verified
 overrides_applied: 0
-re_verification: false
-gaps:
-  - truth: "SC#1 — every SDK read query flows through the adapter"
-    status: failed
-    reason: "Two ROADMAP-named handlers (`stateJson` in state.ts and `phasesList` in phase-lifecycle.ts) plus their sibling read-only handlers (`stateGet`, `stateSnapshot`, `phaseNextDecimal`) still use raw `node:fs/promises` (`readFile`, `readdir`) for `.planning/` reads. The path-scoped leak-grep returns 0 matches against the migrated set (18 files) but flags 48 matches in phase-lifecycle.ts and 8 in state.ts. The phase explicitly enumerated ~15 SDK read-handler files and decided to defer phase-lifecycle.ts to Phase 3 even though it contains pure read handlers (`phasesList`, `phaseNextDecimal`) that ROADMAP SC#1 explicitly names. state.ts's `stateJson`/`stateGet`/`stateSnapshot` were not migrated nor wired adapter-aware in createRegistry (lines 306-307, 337 of index.ts register them with no adapter closure)."
-    artifacts:
-      - path: "sdk/src/query/state.ts"
-        issue: "stateJson (line 238), stateGet (line 282), stateSnapshot (line 334), buildStateFrontmatter (line ~42) read STATE.md / ROADMAP.md / phases/ via raw `await readFile(...)` and `await readdir(...)`. Leak-grep emits 8 matches. ROADMAP SC#1 explicitly names `stateJson` as a SDK read query that 'must go through adapter'."
-      - path: "sdk/src/query/phase-lifecycle.ts"
-        issue: "phasesList (line 1548) and phaseNextDecimal (line 1612) are pure read handlers that read planning paths via `existsSync` + `await readdir` + `await readFile`. Leak-grep emits 48 matches. ROADMAP SC#1 explicitly names `phasesList` as a SDK read query that 'must go through adapter'."
-      - path: "sdk/src/query/index.ts"
-        issue: "Lines 306-307 register `state.json` → `stateJson` and `state.get` → `stateGet` without an adapter-binding closure. Line 337 registers `state-snapshot` → `stateSnapshot` directly. Phase-lifecycle handlers like `phasesList` / `phaseNextDecimal` are also registered without adapter closures."
-    missing:
-      - "Migrate `stateJson`, `stateGet`, `stateSnapshot`, and `buildStateFrontmatter` in `sdk/src/query/state.ts` to take adapter as first arg and use `adapter.getRecord` / `adapter.listCollection`."
-      - "Migrate read-only `phasesList` and `phaseNextDecimal` in `sdk/src/query/phase-lifecycle.ts` per D-14 read-only discipline (or split out to a phase-list-queries.ts that's adapter-aware)."
-      - "Wire `state.json`, `state.get`, `state-snapshot`, `phases.list`, `phase.next-decimal` registrations through createRegistry's closure pattern so they receive the closure-captured adapter."
-      - "Re-run leak-grep across `sdk/src/query/state.ts` and `sdk/src/query/phase-lifecycle.ts`'s read paths and confirm zero matches in the migrated handlers."
-  - truth: "SC#4 — fork test bar held; no NEW failures attributable to Phase 2"
-    status: failed
-    reason: "Pre-Phase-2 baseline (commit 66d4961c) had 1 vitest failure (validate.health). Post-Phase-2 HEAD has 11 vitest failures — a net regression of 10 tests. Plan 02-04 SUMMARY claimed the 11 failures were 'pre-existing per Plan 1 SUMMARY's Unfixed (deferred to follow-ups)' but Plan 1 SUMMARY itself claimed '1357/1357 tests pass' and the empirical pre-Phase-2 baseline confirms only 1 failure existed. Most new failures are caused by test files calling `new GSDTools({...})` without an adapter parameter — same pattern Plan 02-01 caught and fixed in `ws-flag.test.ts` was MISSED in `phase-runner.integration.test.ts`. Two golden-parity tests fail because Phase 2's closure-captured adapter pattern doesn't support the testing pattern of dispatching to a different `projectDir` than the registry's adapter root (a test like `roadmap.get-phase` against a fresh fixture dir is now broken)."
-    artifacts:
-      - path: "sdk/src/phase-runner.integration.test.ts"
-        issue: "Line 75-79: `new GSDTools({projectDir, gsdToolsPath, timeoutMs})` — no adapter passed. Phase 2's migration of `findPhase`/`phasePlanIndex` to use `adapter.listCollection` causes runtime TypeError 'Cannot read properties of undefined (reading listCollection)'. 7 tests fail with this error: initPhaseOp ×2, PhaseRunner ×2, phasePlanIndex ×3."
-      - path: "sdk/src/init-e2e.integration.test.ts"
-        issue: "InitRunner test fails because it cascades from the same GSDTools-without-adapter pattern (or related construction). 1 test fail."
-      - path: "sdk/src/golden/golden.integration.test.ts"
-        issue: "Line 211: `roadmap.get-phase` test dispatches against a temp fixture dir (`sdkDir`) but `makeRegistry(REPO_ROOT)` builds the adapter rooted at REPO_ROOT. The closure-captured adapter reads from REPO_ROOT, returning `found:false` for phase 10. New regression vs baseline."
-      - path: "sdk/src/golden/read-only-parity.integration.test.ts"
-        issue: "Line 94: `state.load` golden parity fails because Plan 02-01 added `project_exists: true` to state.load output, deviating from CJS shape. Pre-existing per Plan 02-03 SUMMARY's 'Pre-existing issues observed' but the failure lists do not match — pre-Phase-2 baseline had 0 instances of this failure."
-    missing:
-      - "Add adapter parameter to all `new GSDTools({...})` constructions in test files (especially `phase-runner.integration.test.ts` lines 75-79 and 313-318)."
-      - "Decide on architectural fix for the test pattern of dispatching to a different projectDir than the registry's adapter root: either (a) re-construct adapter per-dispatch, (b) thread projectDir-aware adapter rebinding, or (c) accept that the test must construct registry per-projectDir."
-      - "Audit ALL test files that construct `GSDTools` or `createRegistry` and verify they pass adapter; this is the same Rule 1 fix applied in Plan 02-01 for ws-flag.test.ts and route-next-action.test.ts but missed for the integration suite."
-      - "Either fix or document the `state.load project_exists` deviation: Plan 02-01 added it as 'forward-compatible' but the read-only-parity test still asserts byte-equal-to-CJS shape."
-
+re_verification: true
+gaps: []
 human_verification: []
 ---
 
