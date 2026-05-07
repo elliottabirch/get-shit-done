@@ -230,8 +230,6 @@ export const resolveModel: QueryHandler = async (args, projectDir, workstream) =
     throw new GSDError('agent-type required', ErrorClassification.Validation);
   }
 
-  const configFilePath = planningPaths(projectDir, workstream).config;
-  const configExists = existsSync(configFilePath);
   const config = await loadConfig(projectDir, workstream);
   const profile = String(config.model_profile || 'balanced').toLowerCase();
 

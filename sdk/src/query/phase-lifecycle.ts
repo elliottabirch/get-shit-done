@@ -21,6 +21,7 @@
 import { readFile, writeFile, mkdir, readdir, rename, rm } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { join, relative } from 'node:path';
+import type { StorageAdapter } from '../../../adapters/types.js';
 import { GSDError, ErrorClassification } from '../errors.js';
 import {
   adapterFor,
@@ -44,7 +45,7 @@ import {
   stateReplaceField,
 } from './state-mutation.js';
 import { stateExtractField, stateReplaceFieldWithFallback } from './state-document.js';
-import type { QueryHandler } from './utils.js';
+import type { QueryHandler, QueryResult } from './utils.js';
 import {
   assertNoNullBytes,
   assertSafePhaseDirName,
@@ -1736,7 +1737,7 @@ export const phasesClear: QueryHandler = async (args, projectDir, workstream) =>
  * @param projectDir - Project root directory
  * @returns QueryResult with { archived: count, version, archive_directory }
  */
-export const phasesList: QueryHandler = async (args, projectDir, workstream) => {
+export const phasesList = async (adapter: StorageAdapter, args: string[], projectDir: string, workstream?: string): Promise<QueryResult> => {
   const paths = planningPaths(projectDir, workstream);
   const phasesDir = paths.phases;
 
@@ -1812,7 +1813,7 @@ export const phasesList: QueryHandler = async (args, projectDir, workstream) => 
   return { data: { directories: dirs, count: dirs.length } };
 };
 
-export const phaseNextDecimal: QueryHandler = async (args, projectDir, workstream) => {
+export const phaseNextDecimal = async (adapter: StorageAdapter, args: string[], projectDir: string, workstream?: string): Promise<QueryResult> => {
   const basePhase = args[0];
   if (!basePhase) {
     throw new GSDError('base phase number required', ErrorClassification.Validation);
@@ -1853,7 +1854,7 @@ export const phaseNextDecimal: QueryHandler = async (args, projectDir, workstrea
   };
 };
 
-export const phasesArchive: QueryHandler = async (args, projectDir, workstream) => {
+export const phasesArchive = async (adapter: StorageAdapter, args: string[], projectDir: string, workstream?: string): Promise<QueryResult> => {
   const version = args[0];
   if (!version) {
     throw new GSDError('version required for phases archive', ErrorClassification.Validation);
@@ -1862,8 +1863,7 @@ export const phasesArchive: QueryHandler = async (args, projectDir, workstream) 
 
   const paths = planningPaths(projectDir, workstream);
   const phasesDir = paths.phases;
-  const archiveAdapter = await adapterFor(projectDir);
-  const isDirInMilestone = await getMilestonePhaseFilter(archiveAdapter, workstream);
+  const isDirInMilestone = await getMilestonePhaseFilter(adapter, workstream);
 
   const archiveDir = join(paths.planning, 'milestones', `${version}-phases`);
   const archivedCount = await archiveDirectories(phasesDir, archiveDir, (dirName) => isDirInMilestone(dirName));

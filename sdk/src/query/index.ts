@@ -476,7 +476,7 @@ export function createRegistry(opts?: {
     'phase.remove': phaseRemove,
     'phase.complete': phaseComplete,
     'phase.scaffold': phaseScaffold,
-    'phase.next-decimal': phaseNextDecimal,
+    'phase.next-decimal': (args, projectDir, ws) => phaseNextDecimal(adapter, args, projectDir, ws),
   };
 
   for (const entry of PHASE_COMMAND_ALIASES) {
@@ -489,9 +489,9 @@ export function createRegistry(opts?: {
   }
 
   const phasesHandlers: Record<string, QueryHandler> = {
-    'phases.list': phasesList,
+    'phases.list': (args, projectDir, ws) => phasesList(adapter, args, projectDir, ws),
     'phases.clear': phasesClear,
-    'phases.archive': phasesArchive,
+    'phases.archive': (args, projectDir, ws) => phasesArchive(adapter, args, projectDir, ws),
   };
 
   for (const entry of PHASES_COMMAND_ALIASES) {

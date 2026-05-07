@@ -257,10 +257,9 @@ export const docsInit = async (
   _workstream?: string,
 ): Promise<QueryResult> => {
   const config = await loadConfig(projectDir);
-  const configExists = existsSync(join(projectDir, '.planning', 'config.json'));
   const docModelResult = await resolveModel(['gsd-doc-writer'], projectDir);
   const docWriterData = docModelResult.data as Record<string, unknown>;
-  const doc_writer_model = configExists ? ((docWriterData?.model as string) || '') : '';
+  const doc_writer_model = (docWriterData?.model as string) || '';
 
   const agentStatus = checkAgentsInstalled(config as { runtime?: unknown });
 

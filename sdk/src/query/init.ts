@@ -399,12 +399,10 @@ export const initExecutePhase = async (
   const phase_req_ids = extractReqIds(roadmapPhase);
 
   const configExists = existsSync(join(planningDir, 'config.json'));
-  const [executorModel, verifierModel] = configExists
-    ? await Promise.all([
-        getModelAlias('gsd-executor', projectDir),
-        getModelAlias('gsd-verifier', projectDir),
-      ])
-    : ['', ''];
+  const [executorModel, verifierModel] = await Promise.all([
+    getModelAlias('gsd-executor', projectDir),
+    getModelAlias('gsd-verifier', projectDir),
+  ]);
 
   const milestone = await getMilestoneInfo(adapter, workstream);
 
@@ -490,14 +488,11 @@ export const initPlanPhase = async (
   const { phaseInfo, roadmapPhase } = await getPhaseInfoWithFallback(adapter, phase, projectDir, workstream);
   const phase_req_ids = extractReqIds(roadmapPhase);
 
-  const configExists = existsSync(join(planningDir, 'config.json'));
-  const [researcherModel, plannerModel, checkerModel] = configExists
-    ? await Promise.all([
-        getModelAlias('gsd-phase-researcher', projectDir),
-        getModelAlias('gsd-planner', projectDir),
-        getModelAlias('gsd-plan-checker', projectDir),
-      ])
-    : ['', '', ''];
+  const [researcherModel, plannerModel, checkerModel] = await Promise.all([
+    getModelAlias('gsd-phase-researcher', projectDir),
+    getModelAlias('gsd-planner', projectDir),
+    getModelAlias('gsd-plan-checker', projectDir),
+  ]);
 
   const phaseNumber = (phaseInfo?.phase_number as string) || null;
   const phaseName = (phaseInfo?.phase_name as string) ?? null;
@@ -684,15 +679,12 @@ export const initQuick = async (
         .replace('{slug}', branchSlug)
     : null;
 
-  const configExists = existsSync(join(planningDir, 'config.json'));
-  const [plannerModel, executorModel, checkerModel, verifierModel] = configExists
-    ? await Promise.all([
-        getModelAlias('gsd-planner', projectDir),
-        getModelAlias('gsd-executor', projectDir),
-        getModelAlias('gsd-plan-checker', projectDir),
-        getModelAlias('gsd-verifier', projectDir),
-      ])
-    : ['', '', '', ''];
+  const [plannerModel, executorModel, checkerModel, verifierModel] = await Promise.all([
+    getModelAlias('gsd-planner', projectDir),
+    getModelAlias('gsd-executor', projectDir),
+    getModelAlias('gsd-plan-checker', projectDir),
+    getModelAlias('gsd-verifier', projectDir),
+  ]);
 
   const result: Record<string, unknown> = {
     planner_model: plannerModel,
@@ -771,13 +763,10 @@ export const initVerifyWork = async (
   const config = await loadConfig(projectDir, workstream);
   const { phaseInfo } = await getPhaseInfoForVerifyWork(adapter, phase, projectDir, workstream);
 
-  const configExists = existsSync(join(projectDir, '.planning', 'config.json'));
-  const [plannerModel, checkerModel] = configExists
-    ? await Promise.all([
-        getModelAlias('gsd-planner', projectDir),
-        getModelAlias('gsd-plan-checker', projectDir),
-      ])
-    : ['', ''];
+  const [plannerModel, checkerModel] = await Promise.all([
+    getModelAlias('gsd-planner', projectDir),
+    getModelAlias('gsd-plan-checker', projectDir),
+  ]);
 
   const result: Record<string, unknown> = {
     planner_model: plannerModel,
