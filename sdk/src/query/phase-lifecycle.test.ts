@@ -1350,7 +1350,7 @@ describe('phasesArchive', () => {
       phases: ['09-foundation', '10-read-only-queries'],
     });
 
-    const result = await phasesArchive(['v3.0'], tmpDir);
+    const result = await phasesArchive(new MarkdownAdapter(tmpDir), ['v3.0'], tmpDir);
     const data = result.data as Record<string, unknown>;
 
     expect(data.version).toBe('v3.0');

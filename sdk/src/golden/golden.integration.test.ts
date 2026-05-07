@@ -207,7 +207,7 @@ describe('Golden file tests', () => {
       const { gsdDir, sdkDir } = await withFreshRoadmapProjects();
       try {
         const gsdOutput = await captureGsdToolsOutput('roadmap', ['get-phase', '10'], gsdDir);
-        const registry = makeRegistry(REPO_ROOT);
+        const registry = makeRegistry(sdkDir);
         const sdkResult = await registry.dispatch('roadmap.get-phase', ['10'], sdkDir);
         expect(sdkResult.data).toEqual(gsdOutput);
       } finally {
@@ -220,7 +220,7 @@ describe('Golden file tests', () => {
       const { gsdDir, sdkDir } = await withFreshRoadmapProjects();
       try {
         const gsdOutput = await captureGsdToolsOutput('roadmap', ['update-plan-progress', '10'], gsdDir);
-        const registry = makeRegistry(REPO_ROOT);
+        const registry = makeRegistry(sdkDir);
         const sdkResult = await registry.dispatch('roadmap.update-plan-progress', ['10'], sdkDir);
         expect(sdkResult.data).toEqual(gsdOutput);
       } finally {

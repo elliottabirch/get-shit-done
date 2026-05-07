@@ -102,13 +102,11 @@ export const stateProjectLoad = async (
   const stateRel = planningRelativePath(workstream, 'STATE.md');
   const roadmapRel = planningRelativePath(workstream, 'ROADMAP.md');
   const configRel = planningRelativePath(workstream, 'config.json');
-  const projectRel = planningRelativePath(workstream, 'PROJECT.md');
 
   const stateRaw = (await adapter.getRecord(stateRel)) ?? '';
   const stateExists = stateRaw.length > 0;
   const roadmapExists = await adapter.exists(roadmapRel);
   const configExists = await adapter.exists(configRel);
-  const projectExists = await adapter.exists(projectRel);
 
   return {
     data: {
@@ -117,7 +115,6 @@ export const stateProjectLoad = async (
       state_exists: stateExists,
       roadmap_exists: roadmapExists,
       config_exists: configExists,
-      project_exists: projectExists,
     },
   };
 };

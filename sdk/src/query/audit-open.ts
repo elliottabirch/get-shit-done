@@ -12,7 +12,7 @@
 
 import { basename } from 'node:path';
 
-import { extractFrontmatter } from './frontmatter.js';
+import { extractFrontmatterLeading } from './frontmatter.js';
 import { planningRelativePath, sanitizeForDisplay } from './helpers.js';
 import type { QueryResult } from './utils.js';
 import type { StorageAdapter, RecordRef } from '../../../adapters/types.js';
@@ -51,7 +51,7 @@ async function scanDebugSessions(
       continue;
     }
 
-    const fm = extractFrontmatter(content);
+    const fm = extractFrontmatterLeading(content);
     const status = (fm.status || 'unknown').toString().toLowerCase();
     if (status === 'resolved' || status === 'complete') continue;
 
@@ -112,7 +112,7 @@ async function scanQuickTasks(
     const description = '';
 
     if (summary !== null) {
-      const fm = extractFrontmatter(summary);
+      const fm = extractFrontmatterLeading(summary);
       status = (fm.status || 'unknown').toString().toLowerCase();
     }
 
@@ -172,7 +172,7 @@ async function scanThreads(
       continue;
     }
 
-    const fm = extractFrontmatter(content);
+    const fm = extractFrontmatterLeading(content);
     let status = (fm.status || '').toString().toLowerCase().trim();
 
     if (!status) {
@@ -231,7 +231,7 @@ async function scanTodos(
   for (const { ref, content } of reads) {
     if (content === null) continue;
 
-    const fm = extractFrontmatter(content);
+    const fm = extractFrontmatterLeading(content);
     const bodyMatch = content.replace(/^---[\s\S]*?---\n?/, '');
     const firstLine = bodyMatch.trim().split('\n')[0] || '';
     const summary = sanitizeForDisplay(firstLine.slice(0, 100));
@@ -278,7 +278,7 @@ async function scanSeeds(
   for (const { ref, content } of reads) {
     if (content === null) continue;
 
-    const fm = extractFrontmatter(content);
+    const fm = extractFrontmatterLeading(content);
     const status = (fm.status || 'dormant').toString().toLowerCase();
 
     if (!unimplementedStatuses.has(status)) continue;
@@ -363,7 +363,7 @@ async function scanPhaseFiles(
       const phaseResults: Array<Record<string, unknown>> = [];
       for (const { fileRef, content } of reads) {
         if (content === null) continue;
-        const fm = extractFrontmatter(content);
+        const fm = extractFrontmatterLeading(content);
         const row = processFile({
           phaseNum,
           file: fileRef.name,

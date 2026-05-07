@@ -175,8 +175,6 @@ export const resolveModel: QueryHandler = async (args, projectDir, workstream) =
     throw new GSDError('agent-type required', ErrorClassification.Validation);
   }
 
-  const configFilePath = planningPaths(projectDir, workstream).config;
-  const configExists = existsSync(configFilePath);
   const config = await loadConfig(projectDir, workstream);
   const profile = String(config.model_profile || 'balanced').toLowerCase();
 
@@ -191,9 +189,9 @@ export const resolveModel: QueryHandler = async (args, projectDir, workstream) =
     return { data: result };
   }
 
-  // No project config (or explicit omit policy) -> return empty model id (CJS parity)
+  // Explicit omit policy -> return empty model id so runtime uses its default
   const resolveModelIds = (config as Record<string, unknown>).resolve_model_ids;
-  if (!configExists || resolveModelIds === 'omit') {
+  if (resolveModelIds === 'omit') {
     const agentModels = MODEL_PROFILES[agentType];
     const result = agentModels
       ? { model: '', profile }
