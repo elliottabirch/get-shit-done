@@ -1,6 +1,6 @@
 # `<context>`-block @.planning/ Reference Register
 
-**Last audited:** 2026-05-01
+**Last audited:** 2026-05-06
 **Total references:** 30
 **By disposition:** REWRITE-CANDIDATE: 5 | INTERCEPT-CANDIDATE: 0 | EXCEPTION: 25
 
