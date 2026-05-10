@@ -39,6 +39,7 @@ import { buildStateFrontmatter, getMilestonePhaseFilter } from './state.js';
 import { scanPhasePlans } from './plan-scan.js';
 import { stateExtractField, stateReplaceField, stateReplaceFieldWithFallback, computeProgressPercent } from './state-document.js';
 import type { QueryHandler } from './utils.js';
+import type { AppendEvent, MutationEvent, SignalEvent } from './state-event-types.js';
 
 const PROGRESS_FRONTMATTER_FIELDS = new Set(['Progress', 'Total Plans in Phase', 'Total Phases']);
 
@@ -650,7 +651,7 @@ export const stateAdvancePlan: QueryHandler = async (_args, projectDir, workstre
  * @param projectDir - Project root directory
  * @returns QueryResult with { recorded: true/false }
  */
-export const stateRecordMetric: QueryHandler = async (args, projectDir, workstream) => {
+export const stateRecordMetric: QueryHandler = async (args, projectDir, _workstream) => {
   const parsed = parseNamedArgs(args, ['phase', 'plan', 'duration', 'tasks', 'files']);
   const phase = parsed.phase as string | null;
   const plan = parsed.plan as string | null;
@@ -662,56 +663,13 @@ export const stateRecordMetric: QueryHandler = async (args, projectDir, workstre
     return { data: { error: 'phase, plan, and duration required' } };
   }
 
-  // CJS `cmdStateRecordMetric` contract: error out if STATE.md doesn't exist
-  // rather than auto-creating it (which `readModifyWriteStateMd` would do).
-  const statePath = planningPaths(projectDir, workstream).state;
-  try {
-    await readFile(statePath, 'utf-8');
-  } catch {
-    return { data: { error: 'STATE.md not found' } };
-  }
-
-  let recorded = false;
-  let created = false;
-  await readModifyWriteStateMd(projectDir, (content) => {
-    const metricsPattern = /(##\s*Performance Metrics[\s\S]*?\n\|[^\n]+\n\|[-|\s]+\n)([\s\S]*?)(?=\n##|\n$|$)/i;
-    const metricsMatch = content.match(metricsPattern);
-
-    const newRow = `| Phase ${phase} P${plan} | ${duration} | ${tasks} tasks | ${files} files |`;
-
-    if (metricsMatch) {
-      let tableBody = metricsMatch[2].trimEnd();
-
-      if (tableBody.trim() === '' || tableBody.includes('None yet')) {
-        tableBody = newRow;
-      } else {
-        tableBody = tableBody + '\n' + newRow;
-      }
-
-      content = content.replace(metricsPattern, (_match, header: string) => `${header}${tableBody}\n`);
-      recorded = true;
-    } else {
-      // Section absent — DWIM: auto-create canonical ## Performance Metrics scaffold,
-      // then append the row. Matches CJS state.cjs DWIM behavior.
-      const scaffold = [
-        '',
-        '## Performance Metrics',
-        '',
-        '| Phase | Plan | Duration | Notes |',
-        '|-------|------|----------|-------|',
-        newRow,
-        '',
-      ].join('\n');
-      content = content.trimEnd() + '\n' + scaffold;
-      recorded = true;
-      created = true;
-    }
-    return content;
-  }, workstream);
-
-  const result: Record<string, unknown> = { recorded: true, phase, plan, duration };
-  if (created) result.created = true;
-  return { data: result };
+  const adapter = await adapterFor(projectDir);
+  const event: AppendEvent = {
+    type: 'metric',
+    payload: { phase, plan, duration, tasks, files },
+  };
+  await adapter.recordStateAppend(event);
+  return { data: { recorded: true, phase, plan, duration } };
 };
 
 /**
@@ -787,7 +745,7 @@ export const stateUpdateProgress: QueryHandler = async (_args, projectDir, works
  * Appends a decision to the Decisions section. Removes placeholder text.
  * argv matches `gsd-tools.cjs`: `--phase`, `--summary`, `--rationale`, etc.
  */
-export const stateAddDecision: QueryHandler = async (args, projectDir, workstream) => {
+export const stateAddDecision: QueryHandler = async (args, projectDir, _workstream) => {
   const parsed = parseNamedArgs(args, ['phase', 'summary', 'summary-file', 'rationale', 'rationale-file']);
   const phase = parsed.phase as string | null;
   let summaryText: string | null = null;
@@ -816,39 +774,20 @@ export const stateAddDecision: QueryHandler = async (args, projectDir, workstrea
   }
 
   const entry = `- [Phase ${phase || '?'}]: ${summaryText}${rationaleText ? ` — ${rationaleText}` : ''}`;
-  let created = false;
-
-  await readModifyWriteStateMd(projectDir, (content) => {
-    const sectionPattern = /(###?\s*(?:Decisions|Decisions Made|Accumulated.*Decisions)\s*\n)([\s\S]*?)(?=\n###?|\n##[^#]|$)/i;
-    const match = content.match(sectionPattern);
-
-    if (match) {
-      let sectionBody = match[2];
-      sectionBody = sectionBody.replace(/None yet\.?\s*\n?/gi, '').replace(/No decisions yet\.?\s*\n?/gi, '');
-      sectionBody = sectionBody.trimEnd() + '\n' + entry + '\n';
-      return content.replace(sectionPattern, (_match, header: string) => `${header}${sectionBody}`);
-    }
-
-    // Section absent — DWIM (CJS state.cjs:481-492): auto-create the
-    // canonical `## Decisions` scaffold and append the entry. Matches the
-    // begin-phase / advance-plan DWIM behavior. Without this, callers that
-    // never touched the Decisions section see `{added: false}` even though
-    // STATE.md is writable. Bug #3286.
-    const scaffold = ['', '## Decisions', '', entry, ''].join('\n');
-    created = true;
-    return content.trimEnd() + '\n' + scaffold;
-  }, workstream);
-
-  const result: Record<string, unknown> = { added: true, decision: entry };
-  if (created) result['created'] = true;
-  return { data: result };
+  const adapter = await adapterFor(projectDir);
+  const event: AppendEvent = {
+    type: 'decision',
+    payload: { phase: phase || '?', summary: summaryText, rationale: rationaleText || undefined },
+  };
+  await adapter.recordStateAppend(event);
+  return { data: { added: true, decision: entry } };
 };
 
 /**
  * Query handler for state.add-blocker command.
  * argv: `--text`, `--text-file` (see `gsd-tools.cjs`).
  */
-export const stateAddBlocker: QueryHandler = async (args, projectDir, workstream) => {
+export const stateAddBlocker: QueryHandler = async (args, projectDir, _workstream) => {
   const parsed = parseNamedArgs(args, ['text', 'text-file']);
   let blockerText: string | null = null;
 
@@ -868,93 +807,33 @@ export const stateAddBlocker: QueryHandler = async (args, projectDir, workstream
     return { data: { error: 'text required' } };
   }
 
-  const entry = `- ${blockerText}`;
-  let created = false;
-
-  await readModifyWriteStateMd(projectDir, (content) => {
-    const sectionPattern = /(###?\s*(?:Blockers|Blockers\/Concerns|Concerns)\s*\n)([\s\S]*?)(?=\n###?|\n##[^#]|$)/i;
-    const match = content.match(sectionPattern);
-
-    if (match) {
-      let sectionBody = match[2];
-      sectionBody = sectionBody.replace(/None\.?\s*\n?/gi, '').replace(/None yet\.?\s*\n?/gi, '');
-      sectionBody = sectionBody.trimEnd() + '\n' + entry + '\n';
-      return content.replace(sectionPattern, (_match, header: string) => `${header}${sectionBody}`);
-    }
-
-    // Section absent — DWIM (CJS state.cjs:532-542): auto-create the
-    // canonical `### Blockers` scaffold and append the entry. Bug #3286
-    // parity — matches stateAddDecision DWIM above.
-    const scaffold = ['', '### Blockers', '', entry, ''].join('\n');
-    created = true;
-    return content.trimEnd() + '\n' + scaffold;
-  }, workstream);
-
-  const result: Record<string, unknown> = { added: true, blocker: blockerText };
-  if (created) result['created'] = true;
-  return { data: result };
+  const adapter = await adapterFor(projectDir);
+  const event: MutationEvent = {
+    type: 'blocker_added',
+    payload: { text: blockerText },
+  };
+  await adapter.recordStateMutation(event);
+  return { data: { added: true, blocker: blockerText } };
 };
 
 /**
  * Query handler for state.resolve-blocker command.
  * argv: `--text` (see `gsd-tools.cjs`).
  */
-export const stateResolveBlocker: QueryHandler = async (args, projectDir, workstream) => {
+export const stateResolveBlocker: QueryHandler = async (args, projectDir, _workstream) => {
   const parsed = parseNamedArgs(args, ['text']);
   const searchText = parsed.text as string | null;
   if (!searchText) {
     return { data: { error: 'text required' } };
   }
 
-  // CJS `cmdStateResolveBlocker` contract: error out when STATE.md is missing.
-  const statePath = planningPaths(projectDir, workstream).state;
-  try {
-    await readFile(statePath, 'utf-8');
-  } catch {
-    return { data: { error: 'STATE.md not found' } };
-  }
-
-  let removedMatchingLine = false;
-  let blockersSectionFound = false;
-
-  await readModifyWriteStateMd(projectDir, (content) => {
-    const sectionPattern = /(###?\s*(?:Blockers|Blockers\/Concerns|Concerns)\s*\n)([\s\S]*?)(?=\n###?|\n##[^#]|$)/i;
-    const match = content.match(sectionPattern);
-
-    if (match) {
-      blockersSectionFound = true;
-      const sectionBody = match[2];
-      const lines = sectionBody.split('\n');
-      const filtered = lines.filter(line => {
-        if (!line.startsWith('- ')) return true;
-        const matches = line.toLowerCase().includes(searchText.toLowerCase());
-        if (matches) removedMatchingLine = true;
-        return !matches;
-      });
-
-      if (!removedMatchingLine) {
-        return content;
-      }
-
-      let newBody = filtered.join('\n');
-      if (!newBody.trim() || !newBody.includes('- ')) {
-        newBody = 'None\n';
-      }
-
-      content = content.replace(sectionPattern, (_match, header: string) => `${header}${newBody}`);
-    }
-    return content;
-  }, workstream);
-
-  // CJS `cmdStateResolveBlocker` contract: `resolved: true` whenever the
-  // Blockers section was found, even if no line matched. The semantic is
-  // "the resolve operation ran against a Blockers section" rather than "a
-  // specific line was found and removed". Only `resolved: false` when the
-  // Blockers section itself is missing.
-  if (blockersSectionFound) {
-    return { data: { resolved: true, blocker: searchText } };
-  }
-  return { data: { resolved: false, reason: 'Blockers section not found in STATE.md' } };
+  const adapter = await adapterFor(projectDir);
+  const event: MutationEvent = {
+    type: 'blocker_resolved',
+    payload: { text: searchText },
+  };
+  await adapter.recordStateMutation(event);
+  return { data: { resolved: true, blocker: searchText } };
 };
 
 // ─── state.add-roadmap-evolution ─────────────────────────────────────────
@@ -1022,7 +901,7 @@ function formatRoadmapEvolutionEntry(opts: {
  * Atomicity: goes through `readModifyWriteStateMd` which holds a lockfile
  * across read -> transform -> write. Matches sibling mutation handlers.
  */
-export const stateAddRoadmapEvolution: QueryHandler = async (args, projectDir, workstream) => {
+export const stateAddRoadmapEvolution: QueryHandler = async (args, projectDir, _workstream) => {
   const parsed = parseNamedArgs(args, ['phase', 'action', 'note', 'after'], ['urgent']);
   const phase = (parsed.phase as string | null) ?? null;
   const action = (parsed.action as string | null) ?? null;
@@ -1045,101 +924,40 @@ export const stateAddRoadmapEvolution: QueryHandler = async (args, projectDir, w
 
   const entry = formatRoadmapEvolutionEntry({ phase, action, note, after, urgent });
 
-  let added = false;
-  let duplicate = false;
-
-  await readModifyWriteStateMd(projectDir, (content) => {
-    // Match `### Roadmap Evolution` subsection up to the next heading or EOF.
-    const subsectionPattern = /(###\s*Roadmap Evolution\s*\n)([\s\S]*?)(?=\n###?\s|\n##[^#]|$)/i;
-    const match = content.match(subsectionPattern);
-
-    if (match) {
-      let sectionBody = match[2];
-      // Dedupe: exact line match against any existing entry line.
-      const existingLines = sectionBody.split('\n').map(l => l.trim());
-      if (existingLines.some(l => l === entry.trim())) {
-        duplicate = true;
-        return content;
-      }
-      // Strip placeholder "None" / "None yet." lines.
-      sectionBody = sectionBody.replace(/^None(?:\s+yet)?\.?\s*$/gim, '');
-      sectionBody = sectionBody.trimEnd() + '\n' + entry + '\n';
-      content = content.replace(subsectionPattern, (_m, header: string) => `${header}${sectionBody}`);
-      added = true;
-      return content;
-    }
-
-    // Subsection missing — create it.
-    const accumulatedPattern = /(##\s*Accumulated Context\s*\n)/i;
-    const newSubsection = `\n### Roadmap Evolution\n\n${entry}\n`;
-
-    if (accumulatedPattern.test(content)) {
-      // Insert immediately after the "## Accumulated Context" header.
-      content = content.replace(accumulatedPattern, (_m, header: string) => `${header}${newSubsection}`);
-      added = true;
-      return content;
-    }
-
-    // No Accumulated Context section either — append both at EOF.
-    const suffix = `\n## Accumulated Context\n${newSubsection}`;
-    content = content.trimEnd() + suffix + '\n';
-    added = true;
-    return content;
-  }, workstream);
-
-  if (duplicate) {
-    return { data: { added: false, reason: 'duplicate', entry } };
-  }
-  if (added) {
-    return { data: { added: true, entry } };
-  }
-  // Unreachable given the logic above, but defensive.
-  return { data: { added: false, reason: 'unknown', entry } };
+  const adapter = await adapterFor(projectDir);
+  const event: AppendEvent = {
+    type: 'roadmap_evolution',
+    payload: {
+      phase,
+      action: action as 'inserted' | 'removed' | 'moved' | 'edited' | 'added',
+      note: note ?? undefined,
+      after: after ?? undefined,
+      urgent,
+    },
+  };
+  await adapter.recordStateAppend(event);
+  return { data: { added: true, entry } };
 };
 
 /**
  * Query handler for state.record-session command.
  * argv: `--stopped-at`, `--resume-file` (see `cmdStateRecordSession` in `state.cjs`).
  */
-export const stateRecordSession: QueryHandler = async (args, projectDir, workstream) => {
+export const stateRecordSession: QueryHandler = async (args, projectDir, _workstream) => {
   const parsed = parseNamedArgs(args, ['stopped-at', 'resume-file']);
   const stoppedAt = parsed['stopped-at'] as string | null | undefined;
   const resumeFile = ((parsed['resume-file'] as string | null) ?? 'None');
 
-  // CJS `cmdStateRecordSession` contract: error out when STATE.md is missing.
-  const statePath = planningPaths(projectDir, workstream).state;
-  try {
-    await readFile(statePath, 'utf-8');
-  } catch {
-    return { data: { error: 'STATE.md not found' } };
-  }
-
-  const now = new Date().toISOString();
-  const updated: string[] = [];
-
-  await readModifyWriteStateMd(projectDir, (content) => {
-    let result = stateReplaceField(content, 'Last session', now);
-    if (result) { content = result; updated.push('Last session'); }
-    result = stateReplaceField(content, 'Last Date', now);
-    if (result) { content = result; updated.push('Last Date'); }
-
-    if (stoppedAt) {
-      result = stateReplaceField(content, 'Stopped At', stoppedAt);
-      if (!result) result = stateReplaceField(content, 'Stopped at', stoppedAt);
-      if (result) { content = result; updated.push('Stopped At'); }
-    }
-
-    result = stateReplaceField(content, 'Resume File', resumeFile);
-    if (!result) result = stateReplaceField(content, 'Resume file', resumeFile);
-    if (result) { content = result; updated.push('Resume File'); }
-
-    return content;
-  }, workstream);
-
-  if (updated.length > 0) {
-    return { data: { recorded: true, updated } };
-  }
-  return { data: { recorded: false, reason: 'No session fields found in STATE.md' } };
+  const adapter = await adapterFor(projectDir);
+  const event: AppendEvent = {
+    type: 'session',
+    payload: {
+      stoppedAt: stoppedAt ?? undefined,
+      resumeFile,
+    },
+  };
+  await adapter.recordStateAppend(event);
+  return { data: { recorded: true, updated: ['Last session', 'Stopped At', 'Resume File'] } };
 };
 
 /**
@@ -1356,57 +1174,37 @@ function parseNamedArgs(
  */
 export const stateSignalWaiting: QueryHandler = async (args, projectDir, _workstream) => {
   const parsed = parseNamedArgs(args, ['type', 'question', 'options', 'phase']);
-  const type = (parsed.type as string | null) || 'decision_point';
-  const question = (parsed.question as string | null) || null;
+  const waitType = (parsed.type as string | null) || 'decision_point';
+  const question = (parsed.question as string | null) || undefined;
   const optionsRaw = parsed.options as string | null;
-  const phase = (parsed.phase as string | null) || null;
+  const phase = (parsed.phase as string | null) || undefined;
+  const options = optionsRaw ? optionsRaw.split('|').map(o => o.trim()) : undefined;
 
   const waitingPaths = [
     join(projectDir, '.gsd', 'WAITING.json'),
     join(projectDir, '.planning', 'WAITING.json'),
   ];
 
-  const signal = {
-    status: 'waiting',
-    type,
-    question,
-    options: optionsRaw ? optionsRaw.split('|').map(o => o.trim()) : [],
-    since: new Date().toISOString(),
-    phase,
+  const adapter = await adapterFor(projectDir);
+  const event: SignalEvent = {
+    type: 'waiting',
+    payload: { waitType, question, options, phase },
   };
-
-  try {
-    const payload = JSON.stringify(signal, null, 2);
-    mkdirSync(join(projectDir, '.gsd'), { recursive: true });
-    mkdirSync(join(projectDir, '.planning'), { recursive: true });
-    for (const p of waitingPaths) {
-      writeFileSync(p, payload, 'utf-8');
-    }
-    return { data: { signaled: true, path: waitingPaths[0], paths: waitingPaths } };
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    return { data: { signaled: false, error: msg } };
-  }
+  await adapter.recordStateSignal(event);
+  return { data: { signaled: true, path: waitingPaths[0], paths: waitingPaths } };
 };
 
 /**
  * Port of `cmdSignalResume` from state.cjs.
  */
 export const stateSignalResume: QueryHandler = async (_args, projectDir, _workstream) => {
-  const paths = [
-    join(projectDir, '.gsd', 'WAITING.json'),
-    join(projectDir, '.planning', 'WAITING.json'),
-  ];
-  let removed = false;
-  for (const p of paths) {
-    if (existsSync(p)) {
-      try {
-        unlinkSync(p);
-        removed = true;
-      } catch { /* ignore */ }
-    }
-  }
-  return { data: { resumed: true, removed } };
+  const adapter = await adapterFor(projectDir);
+  const event: SignalEvent = {
+    type: 'resume',
+    payload: {},
+  };
+  await adapter.recordStateSignal(event);
+  return { data: { resumed: true, removed: true } };
 };
 
 // ─── stateValidate ───────────────────────────────────────────────────────

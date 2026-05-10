@@ -1797,16 +1797,12 @@ export const phasesList = async (adapter: StorageAdapter, args: string[], _proje
       const fileNames = fileRefs.map(r => r.name);
       let filtered: string[];
       if (type === 'plans') {
-<<<<<<< HEAD
-        filtered = dirFiles.filter(isCanonicalPlanFile);
+        filtered = fileNames.filter(isCanonicalPlanFile);
         // #2893 parity — surface plan-shaped files the canonical filter
         // rejected so callers (executor init, etc.) don't silently see zero
         // plans. Per-dir prefix mirrors phase.cjs:120.
-        const w = describeNonCanonicalPlans(dirFiles, filtered);
+        const w = describeNonCanonicalPlans(fileNames, filtered);
         if (w) warnings.push(`${dir}: ${w}`);
-=======
-        filtered = fileNames.filter(f => f.endsWith('-PLAN.md') || f === 'PLAN.md');
->>>>>>> c0a5d7a6 (fix(02-gaps): convert phasesList/phaseNextDecimal internals to adapter reads)
       } else if (type === 'summaries') {
         filtered = fileNames.filter(f => f.endsWith('-SUMMARY.md') || f === 'SUMMARY.md');
       } else {
@@ -1839,22 +1835,6 @@ export const phaseNextDecimal = async (adapter: StorageAdapter, args: string[], 
   const decimalSet = new Set<number>();
   let baseExists = false;
 
-<<<<<<< HEAD
-  const dirNames = await listDirectories(phasesDir);
-  baseExists = dirNames.some((d) => phaseTokenMatches(d, normalized));
-  for (const suffix of collectDecimalSuffixesFromDirNames(normalized, dirNames)) {
-    decimalSet.add(suffix);
-  }
-
-  const roadmapPath = paths.roadmap;
-  if (existsSync(roadmapPath)) {
-    try {
-      const roadmapContent = await readFile(roadmapPath, 'utf-8');
-      for (const suffix of collectDecimalSuffixesFromRoadmap(normalized, roadmapContent)) {
-        decimalSet.add(suffix);
-      }
-    } catch { /* ROADMAP.md read failure is non-fatal */ }
-=======
   if (await adapter.exists(phasesRel)) {
     const phaseRefs = await adapter.listCollection(phasesRel);
     const dirChecks = await Promise.all(
@@ -1879,7 +1859,6 @@ export const phaseNextDecimal = async (adapter: StorageAdapter, args: string[], 
     while ((pm = phasePattern.exec(roadmapContent)) !== null) {
       decimalSet.add(parseInt(pm[1], 10));
     }
->>>>>>> c0a5d7a6 (fix(02-gaps): convert phasesList/phaseNextDecimal internals to adapter reads)
   }
 
   const { next: nextDecimal, existing: existingDecimals } = computeNextDecimalPhase(normalized, decimalSet);
