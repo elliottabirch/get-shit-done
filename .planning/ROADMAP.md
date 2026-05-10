@@ -95,8 +95,8 @@ Plans:
 - [x] 03-02-PLAN.md — State-mutation event handlers (10 handlers -> 3 adapter event families)
 
 **Wave 3** *(blocked on Wave 2 completion)*
-- [ ] 03-03-PLAN.md — State-mutation non-event handlers (8 field-update/maintenance handlers)
-- [ ] 03-04-PLAN.md — Phase-lifecycle handlers (13 handlers -> shared SDK helpers)
+- [x] 03-03-PLAN.md — State-mutation non-event handlers (8 field-update/maintenance handlers)
+- [x] 03-04-PLAN.md — Phase-lifecycle handlers (13 handlers -> shared SDK helpers)
 
 **Wave 4** *(blocked on Wave 3 completion)*
 - [x] 03-05-PLAN.md — Conformance tests + OQ-01 ADR + leak-grep verification
@@ -119,7 +119,7 @@ Plans:
 - [x] 03-02-PLAN.md — State-mutation event handlers (10 handlers -> 3 adapter event families)
 - [ ] 03-03-PLAN.md — State-mutation non-event handlers (8 field-update/maintenance handlers)
 - [ ] 03-04-PLAN.md — Phase-lifecycle handlers (13 handlers -> shared SDK helpers)
-- [ ] 03-05-PLAN.md — Conformance tests + OQ-01 ADR + leak-grep verification
+- [x] 03-05-PLAN.md — Conformance tests + OQ-01 ADR + leak-grep verification
 
 ### Phase 5: Foundational primitive lift
 **Repo:** this repo (`feat/storage-adapter`)
@@ -175,7 +175,7 @@ Plans:
 **Plans:** 5 plans
 Plans:
 - [x] 03-01-PLAN.md — Foundation: withTransaction impl + event types + phase-helpers scaffold + leak-grep write patterns
-- [ ] 03-02-PLAN.md — State-mutation event handlers (10 handlers -> 3 adapter event families)
+- [x] 03-02-PLAN.md — State-mutation event handlers (10 handlers -> 3 adapter event families)
 - [ ] 03-03-PLAN.md — State-mutation non-event handlers (8 field-update/maintenance handlers)
 - [ ] 03-04-PLAN.md — Phase-lifecycle handlers (13 handlers -> shared SDK helpers)
 - [ ] 03-05-PLAN.md — Conformance tests + OQ-01 ADR + leak-grep verification
@@ -193,7 +193,7 @@ Plans:
   5. DIST-05 is resolved: the distribution decision (submit upstream as PR vs maintain long-lived fork) is recorded in DECISIONS.md with the rationale referencing upstream's reception of #2898 / #2901 / #2908; the recorded decision drives the actual repo state at milestone close (PR opened, or fork-maintenance playbook published).
 **Plans:** 5 plans
 Plans:
-- [ ] 03-01-PLAN.md — Foundation: withTransaction impl + event types + phase-helpers scaffold + leak-grep write patterns
+- [x] 03-01-PLAN.md — Foundation: withTransaction impl + event types + phase-helpers scaffold + leak-grep write patterns
 - [ ] 03-02-PLAN.md — State-mutation event handlers (10 handlers -> 3 adapter event families)
 - [ ] 03-03-PLAN.md — State-mutation non-event handlers (8 field-update/maintenance handlers)
 - [ ] 03-04-PLAN.md — Phase-lifecycle handlers (13 handlers -> shared SDK helpers)
