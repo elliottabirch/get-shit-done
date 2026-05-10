@@ -810,6 +810,38 @@ export function createRegistry(opts?: {
   registry.register('thread.list', stubHandler);
   registry.register('tmp.ensure-dir', stubHandler);
   registry.register('todo.ensure-dirs', stubHandler);
+  registry.register('agent-tracking.check-interrupted', stubHandler);
+  registry.register('agent-tracking.complete', stubHandler);
+  registry.register('agent-tracking.init', stubHandler);
+  registry.register('agent-tracking.spawn', stubHandler);
+  registry.register('codebase-docs.list', stubHandler);
+  registry.register('debug-session.list', stubHandler);
+  registry.register('milestone-ops.archive-phases', stubHandler);
+  registry.register('milestone-ops.check-roadmap', stubHandler);
+  registry.register('milestone-ops.latest-audit', stubHandler);
+  registry.register('named-doc.get', stubHandler);
+  registry.register('phase.count-plans', stubHandler);
+  registry.register('phase.count-summaries', stubHandler);
+  registry.register('phase.create-dir', stubHandler);
+  registry.register('phase.get-plan', stubHandler);
+  registry.register('phase.get-plans', stubHandler);
+  registry.register('phase.list-backlog', stubHandler);
+  registry.register('state-project-load', stubHandler);
+  registry.register('thread-seed.list-seeds', stubHandler);
+  registry.register('todo.list-pending', stubHandler);
+  registry.register('workspace.ensure-dir', stubHandler);
+  registry.register('workspace.file-exists', stubHandler);
+  registry.register('workspace.find-dir', stubHandler);
+  registry.register('workspace.list-dir', stubHandler);
+  registry.register('workspace.list-handoffs', stubHandler);
+  registry.register('debug-session.count-active', stubHandler);
+  registry.register('phase.count-uats', stubHandler);
+  registry.register('named-doc.list', stubHandler);
+  registry.register('workspace.get-handoff', stubHandler);
+  registry.register('workspace.list-continue-here', stubHandler);
+  registry.register('codebase-docs.exists', stubHandler);
+  registry.register('config-query', stubHandler);
+  registry.register('phase.get-summaries', stubHandler);
 
   return registry;
 }
