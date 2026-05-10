@@ -151,7 +151,7 @@ Plans:
 - [x] 05-02-PLAN.md — Heading-depth walker (L2/L3/L4) + fenced-code/HTML-comment skip + setext warning + section-depth tests
 
 **Wave 3** *(blocked on Wave 2 completion)*
-- [ ] 05-03-PLAN.md — Shadow-dir journal withTransaction + snapshot/restore + reentrant-lock + updateSection D-09 wrap + capabilities.snapshot flip + dryRun guard
+- [x] 05-03-PLAN.md — Shadow-dir journal withTransaction + snapshot/restore + reentrant-lock + updateSection D-09 wrap + capabilities.snapshot flip + dryRun guard
 
 **Wave 4** *(blocked on Wave 3 completion)*
 - [ ] 05-04-PLAN.md — putNamedDoc/getNamedDoc/writeBinaryAsset real bodies + capabilities.namedDoc/binaryAsset flips + named-doc/binary-asset live tests
