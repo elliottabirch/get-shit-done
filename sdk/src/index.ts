@@ -19,7 +19,6 @@
  * ```
  */
 
-import { readFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { homedir } from 'node:os';
 
@@ -288,9 +287,11 @@ export class GSD {
       join(this.projectDir, 'agents', 'gsd-executor.md'),
     ];
 
+    // C2 scope read (agent definition files — NOT .planning/)
+    const { readFile: fsRead } = await import('node:fs/promises');
     for (const p of paths) {
       try {
-        return await readFile(p, 'utf-8');
+        return await fsRead(p, 'utf-8');
       } catch {
         // Not found at this path, try next
       }
