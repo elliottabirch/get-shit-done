@@ -126,13 +126,13 @@ If `$VALIDATE_MODE` only:
 
 ```bash
 if ! command -v gsd-sdk &>/dev/null; then
-  echo "⚠ gsd-sdk not found in PATH — /gsd:quick requires it."
+  echo "⚠ gsd-sdk not found in PATH — /gsd-quick requires it."
   echo ""
   echo "Install the query-capable GSD SDK CLI:"
   echo "  npm install -g get-shit-done-cc"
   echo ""
   echo "Or update GSD to get the latest packages:"
-  echo "  /gsd:update"
+  echo "  /gsd-update"
   exit 1
 fi
 ```
@@ -170,7 +170,7 @@ fi
 
 Quick mode does not have a pre-declared `files_modified` list (the task is freeform), so use a fail-loud guard at commit time: when the executor stages files for the quick-task commit, if any staged path falls inside a `SUBMODULE_PATHS` entry, abort with a clear error explaining that worktree-isolated commits cannot safely span submodule boundaries — the user can re-run with `workflow.use_worktrees=false` to fall back to sequential execution on the main tree. If `SUBMODULE_PATHS` is empty (no `.gitmodules` in the repo), worktree isolation proceeds normally.
 
-**If `roadmap_exists` is false:** Error — Quick mode requires an active project with ROADMAP.md. Run `/gsd:new-project` first.
+**If `roadmap_exists` is false:** Error — Quick mode requires an active project with ROADMAP.md. Run `/gsd-new-project` first.
 
 Quick tasks can run mid-phase - validation only checks ROADMAP.md exists, not phase status.
 
@@ -402,7 +402,7 @@ Display banner:
 Spawn a single focused researcher (not 4 parallel researchers like full phases — quick tasks need targeted research, not broad domain surveys):
 
 ```
-Agent(
+Task(
   prompt="
 <research_context>
 
@@ -443,7 +443,7 @@ Return: ## RESEARCH COMPLETE with file path
 )
 ```
 
-> **ORCHESTRATOR RULE — CODEX RUNTIME**: After calling Agent() above, stop working on this task immediately. Do not read more files, edit code, or run tests related to this task while the subagent is active. Wait for the subagent to return its result. This prevents duplicate work, conflicting edits, and wasted context. Only resume when the subagent result is available.
+> **ORCHESTRATOR RULE — CODEX RUNTIME**: After calling Task() above, stop working on this task immediately. Do not read more files, edit code, or run tests related to this task while the subagent is active. Wait for the subagent to return its result. This prevents duplicate work, conflicting edits, and wasted context. Only resume when the subagent result is available.
 
 After researcher returns:
 1. Verify research exists at `${QUICK_DIR}/${quick_id}-RESEARCH.md`
@@ -460,7 +460,7 @@ If research file not found, warn but continue: "Research agent did not produce o
 **If NOT `$VALIDATE_MODE`:** Use standard `quick` mode.
 
 ```
-Agent(
+Task(
   prompt="
 <planning_context>
 
@@ -501,7 +501,7 @@ Return: ## PLANNING COMPLETE with plan path
 )
 ```
 
-> **ORCHESTRATOR RULE — CODEX RUNTIME**: After calling Agent() above, stop working on this task immediately. Do not read more files, edit code, or run tests related to this task while the subagent is active. Wait for the subagent to return its result. This prevents duplicate work, conflicting edits, and wasted context. Only resume when the subagent result is available.
+> **ORCHESTRATOR RULE — CODEX RUNTIME**: After calling Task() above, stop working on this task immediately. Do not read more files, edit code, or run tests related to this task while the subagent is active. Wait for the subagent to return its result. This prevents duplicate work, conflicting edits, and wasted context. Only resume when the subagent result is available.
 
 After planner returns:
 1. Verify plan exists at `${QUICK_DIR}/${quick_id}-PLAN.md`
@@ -559,7 +559,7 @@ ${DISCUSS_MODE ? '- Context compliance: Does the plan honor locked decisions fro
 ```
 
 ```
-Agent(
+Task(
   prompt=checker_prompt,
   subagent_type="gsd-plan-checker",
   model="{checker_model}",
@@ -567,7 +567,7 @@ Agent(
 )
 ```
 
-> **ORCHESTRATOR RULE — CODEX RUNTIME**: After calling Agent() above, stop working on this task immediately. Do not read more files, edit code, or run tests related to this task while the subagent is active. Wait for the subagent to return its result. This prevents duplicate work, conflicting edits, and wasted context. Only resume when the subagent result is available.
+> **ORCHESTRATOR RULE — CODEX RUNTIME**: After calling Task() above, stop working on this task immediately. Do not read more files, edit code, or run tests related to this task while the subagent is active. Wait for the subagent to return its result. This prevents duplicate work, conflicting edits, and wasted context. Only resume when the subagent result is available.
 
 **Handle checker return:**
 
@@ -606,7 +606,7 @@ Return what changed.
 ```
 
 ```
-Agent(
+Task(
   prompt=revision_prompt,
   subagent_type="gsd-planner",
   model="{planner_model}",
@@ -614,7 +614,7 @@ Agent(
 )
 ```
 
-> **ORCHESTRATOR RULE — CODEX RUNTIME**: After calling Agent() above, stop working on this task immediately. Do not read more files, edit code, or run tests related to this task while the subagent is active. Wait for the subagent to return its result. This prevents duplicate work, conflicting edits, and wasted context. Only resume when the subagent result is available.
+> **ORCHESTRATOR RULE — CODEX RUNTIME**: After calling Task() above, stop working on this task immediately. Do not read more files, edit code, or run tests related to this task while the subagent is active. Wait for the subagent to return its result. This prevents duplicate work, conflicting edits, and wasted context. Only resume when the subagent result is available.
 
 After planner returns → spawn checker again, increment iteration_count.
 
@@ -663,17 +663,12 @@ fi
 Capture current HEAD before spawning (used for worktree branch check):
 ```bash
 EXPECTED_BASE=$(git rev-parse HEAD)
-if [ "${USE_WORKTREES:-true}" != "false" ]; then
-  QUICK_WORKTREE_MANIFEST=$(mktemp "${TMPDIR:-/tmp}/gsd-quick-worktree-XXXXXX.json")
-  printf '{"worktrees":[]}\n' > "$QUICK_WORKTREE_MANIFEST"
-  export QUICK_WORKTREE_MANIFEST
-fi
 ```
 
 Spawn gsd-executor with plan reference:
 
 ```
-Agent(
+Task(
   prompt="
 Execute quick task ${quick_id}.
 
@@ -766,28 +761,12 @@ SUMMARY.md and stop — the user must rerun with worktrees disabled.
 )
 ```
 
-> **ORCHESTRATOR RULE — CODEX RUNTIME**: After calling Agent() above, stop working on this task immediately. Do not read more files, edit code, or run tests related to this task while the subagent is active. Wait for the subagent to return its result. This prevents duplicate work, conflicting edits, and wasted context. Only resume when the subagent result is available.
-
-If the executor ran with `isolation="worktree"`, append its returned `{agent_id, worktree_path, branch, expected_base}` metadata to `QUICK_WORKTREE_MANIFEST` before cleanup. If any field is unavailable, stop and ask for recovery; do not discover global worktrees.
+> **ORCHESTRATOR RULE — CODEX RUNTIME**: After calling Task() above, stop working on this task immediately. Do not read more files, edit code, or run tests related to this task while the subagent is active. Wait for the subagent to return its result. This prevents duplicate work, conflicting edits, and wasted context. Only resume when the subagent result is available.
 
 After executor returns:
 1. **Worktree cleanup:** If the executor ran with `isolation="worktree"`, merge the worktree branch back and clean up:
    ```bash
-   QUICK_WORKTREE_MANIFEST=${QUICK_WORKTREE_MANIFEST:-$WAVE_WORKTREE_MANIFEST}
-   [ -n "${QUICK_WORKTREE_MANIFEST:-}" ] && [ -f "$QUICK_WORKTREE_MANIFEST" ] || {
-     echo "BLOCKED: missing QUICK_WORKTREE_MANIFEST; refusing broad worktree cleanup (#3384)." >&2
-     exit 1
-   }
-
-   # Prefer the bounded cleanup helper. It verifies branch identity, expected
-   # base, deletion diffs, merge result, and worktree removal before branch
-   # deletion. If it blocks, resolve the reported manifest entry and rerun.
-   if command -v gsd-sdk >/dev/null 2>&1; then
-     gsd-sdk query worktree.cleanup-wave --manifest "$QUICK_WORKTREE_MANIFEST" || exit 1
-   else
-     echo "WARN: gsd-sdk unavailable; using manifest-scoped shell fallback (#3384)." >&2
-
-   # Find worktrees recorded by the executor manifest only.
+   # Find worktrees created by the executor.
    # Inclusion-based filter (#2774): match ONLY agent-spawned worktrees under
    # `.claude/worktrees/agent-` (the namespace Claude Code's `isolation="worktree"`
    # uses). The previous exclusion filter (`grep -v "$(pwd)$"`) destroyed the parent
@@ -795,31 +774,19 @@ After executor returns:
    # setups, and the cross-drive Windows case where `git worktree list` reports the
    # registry path on a different drive than `$(pwd)`).
    # Read line-by-line so worktree paths containing whitespace are preserved (#2774).
-   WT_PATHS_FILE=$(mktemp "${TMPDIR:-/tmp}/gsd-worktree-paths-XXXXXX")
-   node -e 'const fs=require("fs");const p=process.env.QUICK_WORKTREE_MANIFEST||process.env.WAVE_WORKTREE_MANIFEST;try{if(!p)throw new Error("QUICK_WORKTREE_MANIFEST is unset");if(!fs.existsSync(p))throw new Error("manifest does not exist");const s=fs.readFileSync(p,"utf8");if(!s.trim())throw new Error("manifest is empty");const j=JSON.parse(s);for(const w of j.worktrees||[])if(w.worktree_path)console.log(w.worktree_path)}catch(e){console.error(`ERROR: cannot read worktree manifest ${p||"(unset)"}: ${e.message}`);process.exit(1)}' > "$WT_PATHS_FILE" || { echo "BLOCKED: cannot read QUICK_WORKTREE_MANIFEST; refusing cleanup (#3384)." >&2; exit 1; }
    while IFS= read -r WT; do
      [ -z "$WT" ] && continue
-     # Pin CWD to project root before any bare git command (#3521).
-     # An LLM orchestrator may leak CWD into a worktree across tool calls; without
-     # this pin the merge command resolves against the worktree branch itself and
-     # silently no-ops the main-branch merge.
-     PROJECT_ROOT=$(git -C "$WT" rev-parse --git-common-dir 2>/dev/null)
-     # git rev-parse --git-common-dir returns the .git dir, not the working tree root.
-     # Strip the trailing /.git (or bare .git) to get the working tree root.
-     PROJECT_ROOT=$(echo "$PROJECT_ROOT" | sed 's|/\.git$||; s|/\.git/.*||')
-     if [ -z "$PROJECT_ROOT" ] || [ ! -d "$PROJECT_ROOT" ]; then
-       echo "WARN: cannot resolve project root from worktree $WT — skipping cleanup for this entry (#3521)" >&2
-       continue
-     fi
-     cd "$PROJECT_ROOT" || { echo "WARN: cannot cd to project root $PROJECT_ROOT — skipping cleanup for worktree $WT (#3521)" >&2; continue; }
      WT_BRANCH=$(git -C "$WT" rev-parse --abbrev-ref HEAD 2>/dev/null)
      if [ -n "$WT_BRANCH" ] && [ "$WT_BRANCH" != "HEAD" ]; then
        # --- Orchestrator file protection (#1756) ---
        # Backup STATE.md and ROADMAP.md before merge (main always wins)
        STATE_BACKUP=$(mktemp)
        ROADMAP_BACKUP=$(mktemp)
-       [ -f .planning/STATE.md ] && cp .planning/STATE.md "$STATE_BACKUP" || true
-       [ -f .planning/ROADMAP.md ] && cp .planning/ROADMAP.md "$ROADMAP_BACKUP" || true
+       gsd-sdk query state.load > "$STATE_BACKUP" 2>/dev/null || true
+       gsd-sdk query roadmap > "$ROADMAP_BACKUP" 2>/dev/null || true
+
+       # Snapshot files on main to detect resurrections
+       PRE_MERGE_FILES=$(gsd-sdk query state.list-files 2>/dev/null || git ls-tree --name-only -r HEAD -- .planning/)
 
        # Pre-merge deletion guard: block merges that delete tracked .planning/ files
        DELETIONS=$(git diff --diff-filter=D --name-only HEAD..."$WT_BRANCH" 2>/dev/null || true)
@@ -834,26 +801,19 @@ After executor returns:
          echo "⚠ Merge conflict from worktree $WT_BRANCH — resolve manually"
          echo "  STATE.md backup:   $STATE_BACKUP"
          echo "  ROADMAP.md backup: $ROADMAP_BACKUP"
-         echo "  Restore with: cp \$STATE_BACKUP .planning/STATE.md && cp \$ROADMAP_BACKUP .planning/ROADMAP.md"
+         echo "  Restore with: gsd-sdk query state.restore-snapshot \$STATE_BACKUP && gsd-sdk query roadmap.restore-snapshot \$ROADMAP_BACKUP"
          break
        }
 
        # Restore orchestrator-owned files
-       if [ -s "$STATE_BACKUP" ]; then cp "$STATE_BACKUP" .planning/STATE.md; fi
-       if [ -s "$ROADMAP_BACKUP" ]; then cp "$ROADMAP_BACKUP" .planning/ROADMAP.md; fi
+       if [ -s "$STATE_BACKUP" ]; then gsd-sdk query state.restore-snapshot "$STATE_BACKUP" 2>/dev/null || true; fi
+       if [ -s "$ROADMAP_BACKUP" ]; then gsd-sdk query roadmap.restore-snapshot "$ROADMAP_BACKUP" 2>/dev/null || true; fi
        rm -f "$STATE_BACKUP" "$ROADMAP_BACKUP"
 
-       # Detect files deleted on main but re-added by worktree merge
-       # (e.g., archived phase directories that were intentionally removed)
-       # A "resurrected" file must have a deletion event in main's ancestry —
-       # brand-new files (e.g. SUMMARY.md just created by the agent) have no
-       # such history and must NOT be removed (#2501, #3195).
+       # Remove files deleted on main but re-added by worktree (--no-ff guarantees a merge commit so HEAD~1 is reliable)
        DELETED_FILES=$(git diff --diff-filter=A --name-only HEAD~1 -- .planning/ 2>/dev/null || true)
        for RESURRECTED in $DELETED_FILES; do
-         # Only delete if this file was previously tracked on main and then
-         # deliberately removed (has a deletion event in git history).
-         WAS_DELETED=$(git log --follow --diff-filter=D --name-only --format="" HEAD~1 -- "$RESURRECTED" 2>/dev/null | grep -c . || true)
-         if [ "${WAS_DELETED:-0}" -gt 0 ]; then
+         if ! echo "$PRE_MERGE_FILES" | grep -qxF "$RESURRECTED"; then
            git rm -f "$RESURRECTED" 2>/dev/null || true
          fi
        done
@@ -862,7 +822,7 @@ After executor returns:
           [ -n "$DELETED_FILES" ]; then
          COMMIT_DOCS=$(gsd-sdk query config-get commit_docs 2>/dev/null || echo "true")
          if [ "$COMMIT_DOCS" != "false" ]; then
-           git add .planning/STATE.md .planning/ROADMAP.md 2>/dev/null || true
+           gsd-sdk query commit --stage-only state.md roadmap.md 2>/dev/null || true
            git commit --amend --no-edit 2>/dev/null || true
          fi
        fi
@@ -882,19 +842,12 @@ After executor returns:
          fi
        done < <(find "$WT/.planning" -name "*SUMMARY.md" 2>/dev/null)
 
-       # Remove the worktree before deleting the branch. If removal fails,
-       # leave the branch in place so the worktree remains recoverable (#3384).
-       REMOVE_OK=false
-       if git worktree remove "$WT" --force; then
-         REMOVE_OK=true
-       else
+       if ! git worktree remove "$WT" --force; then
          WT_NAME=$(basename "$WT")
          if [ -f ".git/worktrees/${WT_NAME}/locked" ]; then
            echo "⚠ Worktree $WT is locked — attempting to unlock and retry"
            git worktree unlock "$WT" 2>/dev/null || true
-           if git worktree remove "$WT" --force; then
-             REMOVE_OK=true
-           else
+           if ! git worktree remove "$WT" --force; then
              echo "⚠ Residual worktree at $WT — manual cleanup required after session exits:"
              echo "    git worktree unlock \"$WT\" && git worktree remove \"$WT\" --force && git branch -D \"$WT_BRANCH\""
            fi
@@ -902,14 +855,9 @@ After executor returns:
            echo "⚠ Residual worktree at $WT (remove failed) — investigate manually"
          fi
        fi
-       if [ "$REMOVE_OK" = "true" ]; then
-         git branch -D "$WT_BRANCH" 2>/dev/null || true
-       else
-         echo "⚠ Keeping branch $WT_BRANCH because worktree removal failed (#3384)"
-       fi
+       git branch -D "$WT_BRANCH" 2>/dev/null || true
      fi
-   done < "$WT_PATHS_FILE"
-   fi
+   done < <(git worktree list --porcelain | grep "^worktree " | grep "\.claude/worktrees/agent-" | sed 's/^worktree //')
    ```
    If `workflow.use_worktrees` is `false`, skip this step.
 2. Verify summary exists at `${QUICK_DIR}/${quick_id}-SUMMARY.md`
@@ -959,7 +907,7 @@ If `CHANGED_FILES` is empty, skip with "No source files changed — skipping cod
 
 **Invoke review:**
 ```
-Agent(
+Task(
   prompt="Review these files for bugs, security issues, and code quality.
   Files: ${CHANGED_FILES}
   Output: ${QUICK_DIR}/${quick_id}-REVIEW.md
@@ -969,7 +917,7 @@ Agent(
 )
 ```
 
-> **ORCHESTRATOR RULE — CODEX RUNTIME**: After calling Agent() above, stop working on this task immediately. Do not read more files, edit code, or run tests related to this task while the subagent is active. Wait for the subagent to return its result. This prevents duplicate work, conflicting edits, and wasted context. Only resume when the subagent result is available.
+> **ORCHESTRATOR RULE — CODEX RUNTIME**: After calling Task() above, stop working on this task immediately. Do not read more files, edit code, or run tests related to this task while the subagent is active. Wait for the subagent to return its result. This prevents duplicate work, conflicting edits, and wasted context. Only resume when the subagent result is available.
 
 If review produces findings, display advisory message. **Error handling:** Failures are non-blocking — catch and proceed.
 
@@ -989,7 +937,7 @@ Display banner:
 ```
 
 ```
-Agent(
+Task(
   prompt="Verify quick task goal achievement.
 Task directory: ${QUICK_DIR}
 Task goal: ${DESCRIPTION}
@@ -1007,7 +955,7 @@ Check must_haves against actual codebase. Create VERIFICATION.md at ${QUICK_DIR}
 )
 ```
 
-> **ORCHESTRATOR RULE — CODEX RUNTIME**: After calling Agent() above, stop working on this task immediately. Do not read more files, edit code, or run tests related to this task while the subagent is active. Wait for the subagent to return its result. This prevents duplicate work, conflicting edits, and wasted context. Only resume when the subagent result is available.
+> **ORCHESTRATOR RULE — CODEX RUNTIME**: After calling Task() above, stop working on this task immediately. Do not read more files, edit code, or run tests related to this task while the subagent is active. Wait for the subagent to return its result. This prevents duplicate work, conflicting edits, and wasted context. Only resume when the subagent result is available.
 
 Read verification status:
 ```bash
@@ -1128,7 +1076,7 @@ Commit: ${commit_hash}
 
 ---
 
-Ready for next task: /gsd:quick ${GSD_WS}
+Ready for next task: /gsd-quick ${GSD_WS}
 ```
 
 **If NOT `$VALIDATE_MODE`:**
@@ -1145,7 +1093,7 @@ Commit: ${commit_hash}
 
 ---
 
-Ready for next task: /gsd:quick ${GSD_WS}
+Ready for next task: /gsd-quick ${GSD_WS}
 ```
 
 </process>
