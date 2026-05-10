@@ -142,9 +142,15 @@ Plans:
   3. Every `.planning/` mutation that previously used a kind-tagged getter/writer pair (`getResearch(kind)`, `putIntelDoc(name)`, `putCodebaseDoc(name)`, `getArchivedMilestoneDoc(milestone, kind)`) now routes through `putNamedDoc(category, key, body)` / `getNamedDoc(category, key)` with closed-enum categories — verified by SDK-surface grep for the old method names returning zero call-sites.
   4. UI-review screenshots and sketch HTML/CSS/PNG assets write through `writeBinaryAsset(path, bytes)` against the MarkdownAdapter, and the capabilities flag correctly reports `binaryAsset: true`; the same call against a hypothetical adapter declaring `binaryAsset: false` triggers documented graceful degradation (workflow logs warn + skip, no exception).
   5. OQ-02, OQ-05, OQ-07 are resolved: ROADMAP.md / STATE.md / PROJECT.md write atomicity unit is "section"; sidecar paths (`.next-call-count`, `tmp/*`) are named methods not generic kv; scratch artifacts (`*-DISCUSS-CHECKPOINT.json`, `*-QUESTIONS.json`, `*-QUESTIONS.html`, `tmp/*`) are first-class types in the noun catalog. Each resolution is recorded in `.planning/DECISIONS.md`.
-**Plans:** 0/TBD
+**Plans:** 7 plans
 Plans:
-- [ ] TBD
+- [ ] 05-01-PLAN.md — NamedDocCategory + RootNamedDocKey type exports + discriminated putNamedDoc overloads + 5 Wave-0 test scaffolds
+- [ ] 05-02-PLAN.md — Heading-depth walker (L2/L3/L4) + fenced-code/HTML-comment skip + setext warning + section-depth tests
+- [ ] 05-03-PLAN.md — Shadow-dir journal withTransaction + snapshot/restore + reentrant-lock + updateSection D-09 wrap + capabilities.snapshot flip + dryRun guard
+- [ ] 05-04-PLAN.md — putNamedDoc/getNamedDoc/writeBinaryAsset real bodies + capabilities.namedDoc/binaryAsset flips + named-doc/binary-asset live tests
+- [ ] 05-05-PLAN.md — pipeline.ts dry-run refactor + sidecar.ts + scratch.ts + 8 new SDK verbs + SC#1 byte-identity pipeline test
+- [ ] 05-06-PLAN.md — 8 SDK handler migrations to putNamedDoc/getNamedDoc + route-next-action.ts nextCallCountGet (D-21)
+- [ ] 05-07-PLAN.md — 5 ADRs for OQ-02/05/07/10 + shadow-dir journal + Phase 5 exit checkpoint
 
 ### Phase 6: BeadsAdapter implementation
 **Repo:** sibling `~/code/gsd-beads`
