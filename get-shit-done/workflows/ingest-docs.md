@@ -157,7 +157,7 @@ On Revise: exit with guidance to re-run with `--manifest` or a narrower path.
 Create staging directory:
 
 ```bash
-gsd-sdk query tmp.ensure-dir "intel/classifications"
+node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" tmp.ensure-dir "intel/classifications"
 ```
 
 For each discovered doc, spawn `gsd-doc-classifier` in parallel. In Claude Code, issue all Task calls in a single message with multiple tool uses so the harness runs them concurrently. For Copilot / sequential runtimes, fall back to sequential dispatch.

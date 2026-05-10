@@ -771,5 +771,43 @@ export function createRegistry(opts?: {
     }
   }
 
+  // Phase 4 stub registrations: verbs referenced by rewritten workflows/agents
+  const stubHandler = async () => ({ error: 'stub — implementation pending' });
+  registry.register('debug.append-knowledge', stubHandler);
+  registry.register('debug.create', stubHandler);
+  registry.register('debug.get-resolved', stubHandler);
+  registry.register('debug.list-active', stubHandler);
+  registry.register('graphify.exists', stubHandler);
+  registry.register('milestone.get-roadmap', stubHandler);
+  registry.register('milestone.list-archives', stubHandler);
+  registry.register('phase.get-summary', stubHandler);
+  registry.register('phase.has-context', stubHandler);
+  registry.register('phase.list-contexts', stubHandler);
+  registry.register('phase.list-dirs', stubHandler);
+  registry.register('phase.list-learnings', stubHandler);
+  registry.register('phase.list-summaries', stubHandler);
+  registry.register('phase.list-uat-sessions', stubHandler);
+  registry.register('phase.list-verifications', stubHandler);
+  registry.register('phase.put-doc', stubHandler);
+  registry.register('phase.put-uat', stubHandler);
+  registry.register('project.get', stubHandler);
+  registry.register('report.list', stubHandler);
+  registry.register('requirements.get', stubHandler);
+  registry.register('roadmap', stubHandler);
+  registry.register('roadmap.restore-snapshot', stubHandler);
+  registry.register('seed.ensure-dir', stubHandler);
+  registry.register('seed.next-id', stubHandler);
+  registry.register('sketch.ensure-dirs', stubHandler);
+  registry.register('sketch.last-id', stubHandler);
+  registry.register('spike.get-readme', stubHandler);
+  registry.register('state.add-graduation-backlog', stubHandler);
+  registry.register('state.detect-active-context', stubHandler);
+  registry.register('state.list-files', stubHandler);
+  registry.register('state.record-quick-task', stubHandler);
+  registry.register('state.restore-snapshot', stubHandler);
+  registry.register('thread.list', stubHandler);
+  registry.register('tmp.ensure-dir', stubHandler);
+  registry.register('todo.ensure-dirs', stubHandler);
+
   return registry;
 }
