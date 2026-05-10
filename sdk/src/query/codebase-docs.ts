@@ -24,6 +24,16 @@ function validateName(name: string): void {
   }
 }
 
+// ─── Display path helper (D-12 migration) ───────────────────────────────────
+
+/**
+ * Reconstruct the display path for a codebase doc (used to preserve the
+ * `written` field in handler return shapes after migrating to putNamedDoc).
+ */
+function codebaseDisplayPath(workstream: string | null | undefined, key: string): string {
+  return planningRelativePath(workstream ?? null, 'codebase/' + key + '.md');
+}
+
 // ─── codebasePut ────────────────────────────────────────────────────────────
 
 /**
@@ -42,9 +52,8 @@ export async function codebasePut(
 
   const adapter = await adapterFor(projectDir);
   const body = bodyParts.join(' ');
-  const docPath = planningRelativePath(workstream ?? null, `codebase/${name}.md`);
-
-  await adapter.putRecord(docPath, body);
+  await adapter.putNamedDoc('codebase', name, body, { workstream: workstream ?? undefined });
+  const docPath = codebaseDisplayPath(workstream, name);
   return { data: { written: docPath, name } };
 }
 
@@ -65,8 +74,7 @@ export async function codebaseGet(
   validateName(name);
 
   const adapter = await adapterFor(projectDir);
-  const docPath = planningRelativePath(workstream ?? null, `codebase/${name}.md`);
-  const content = await adapter.getRecord(docPath);
+  const content = await adapter.getNamedDoc('codebase', name, { workstream: workstream ?? undefined });
 
   if (content === null) {
     return { data: { found: false, name, content: null } };

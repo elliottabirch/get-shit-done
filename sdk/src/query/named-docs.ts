@@ -9,6 +9,7 @@
 import { GSDError, ErrorClassification } from '../errors.js';
 import { adapterFor, planningRelativePath } from './helpers.js';
 import type { QueryResult } from './utils.js';
+import type { NamedDocCategory } from '../../../adapters/types.js';
 
 // ─── Path validation (T-04-01) ──────────────────────────────────────────────
 
@@ -22,6 +23,21 @@ function validateName(name: string): void {
       ErrorClassification.Validation,
     );
   }
+}
+
+// ─── Display path helper (D-12 migration) ───────────────────────────────────
+
+/**
+ * Reconstruct the display path for a named doc (used to preserve the
+ * `written` field in handler return shapes after migrating to putNamedDoc).
+ */
+function namedDocDisplayPath(
+  workstream: string | null | undefined,
+  category: NamedDocCategory,
+  key: string,
+): string {
+  const base = category === 'root' ? key + '.md' : category + '/' + key + '.md';
+  return planningRelativePath(workstream ?? null, base);
 }
 
 // ─── reportPut ──────────────────────────────────────────────────────────────
@@ -42,9 +58,8 @@ export async function reportPut(
 
   const adapter = await adapterFor(projectDir);
   const body = bodyParts.join(' ');
-  const docPath = planningRelativePath(workstream ?? null, `reports/${name}.md`);
-
-  await adapter.putRecord(docPath, body);
+  await adapter.putNamedDoc('reports', name, body, { workstream: workstream ?? undefined });
+  const docPath = namedDocDisplayPath(workstream, 'reports', name);
   return { data: { written: docPath, name } };
 }
 
@@ -65,8 +80,7 @@ export async function reportGet(
   validateName(name);
 
   const adapter = await adapterFor(projectDir);
-  const docPath = planningRelativePath(workstream ?? null, `reports/${name}.md`);
-  const content = await adapter.getRecord(docPath);
+  const content = await adapter.getNamedDoc('reports', name, { workstream: workstream ?? undefined });
 
   if (content === null) {
     return { data: { found: false, name, content: null } };
@@ -89,9 +103,8 @@ export async function handoffPut(
 ): Promise<QueryResult> {
   const adapter = await adapterFor(projectDir);
   const body = args.join(' ');
-  const docPath = planningRelativePath(workstream ?? null, 'HANDOFF.md');
-
-  await adapter.putRecord(docPath, body);
+  await adapter.putNamedDoc('root', 'HANDOFF', body, { workstream: workstream ?? undefined });
+  const docPath = namedDocDisplayPath(workstream, 'root', 'HANDOFF');
   return { data: { written: docPath } };
 }
 
@@ -110,9 +123,8 @@ export async function continueHerePut(
 ): Promise<QueryResult> {
   const adapter = await adapterFor(projectDir);
   const body = args.join(' ');
-  const docPath = planningRelativePath(workstream ?? null, 'CONTINUE-HERE.md');
-
-  await adapter.putRecord(docPath, body);
+  await adapter.putNamedDoc('root', 'CONTINUE-HERE', body, { workstream: workstream ?? undefined });
+  const docPath = namedDocDisplayPath(workstream, 'root', 'CONTINUE-HERE');
   return { data: { written: docPath } };
 }
 
@@ -132,11 +144,10 @@ export async function forensicsPut(
   const adapter = await adapterFor(projectDir);
   const body = args.join(' ');
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-  const fileName = `FORENSICS-${timestamp}.md`;
-  const docPath = planningRelativePath(workstream ?? null, `reports/${fileName}`);
-
-  await adapter.putRecord(docPath, body);
-  return { data: { written: docPath, fileName } };
+  const fileNameStem = `FORENSICS-${timestamp}`;
+  await adapter.putNamedDoc('reports', fileNameStem, body, { workstream: workstream ?? undefined });
+  const docPath = namedDocDisplayPath(workstream, 'reports', fileNameStem);
+  return { data: { written: docPath, fileName: fileNameStem + '.md' } };
 }
 
 // ─── decisionsIndexGet ──────────────────────────────────────────────────────
@@ -154,18 +165,17 @@ export async function decisionsIndexGet(
 ): Promise<QueryResult> {
   const adapter = await adapterFor(projectDir);
 
-  // Try DECISIONS-INDEX.md first, fall back to DECISIONS.md
-  const indexPath = planningRelativePath(workstream ?? null, 'DECISIONS-INDEX.md');
-  let content = await adapter.getRecord(indexPath);
-
-  if (content === null) {
-    const fallbackPath = planningRelativePath(workstream ?? null, 'DECISIONS.md');
-    content = await adapter.getRecord(fallbackPath);
-    if (content === null) {
-      return { data: { found: false, content: null } };
-    }
-    return { data: { found: true, source: 'DECISIONS.md', content } };
+  // Try DECISIONS-INDEX.md first via getNamedDoc
+  const primary = await adapter.getNamedDoc('root', 'DECISIONS-INDEX', { workstream: workstream ?? undefined });
+  if (primary !== null) {
+    return { data: { found: true, source: 'DECISIONS-INDEX.md', content: primary } };
   }
 
-  return { data: { found: true, source: 'DECISIONS-INDEX.md', content } };
+  // Fall back to DECISIONS.md via getRecord (workflow-layer legacy support)
+  const fallbackPath = planningRelativePath(workstream ?? null, 'DECISIONS.md');
+  const fallback = await adapter.getRecord(fallbackPath);
+  if (fallback === null) {
+    return { data: { found: false, content: null } };
+  }
+  return { data: { found: true, source: 'DECISIONS.md', content: fallback } };
 }
