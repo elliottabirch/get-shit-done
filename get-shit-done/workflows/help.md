@@ -747,8 +747,8 @@ Example config:
 
 ## Getting Help
 
-- Read `.planning/PROJECT.md` for project vision
-- Read `.planning/STATE.md` for current context
+- Run `gsd-sdk query state.load` for project vision and current context
+- Run `gsd-sdk query roadmap` for phase status
 - Check `.planning/ROADMAP.md` for phase status
 - Run `/gsd-progress` to check where you're up to
 </reference>

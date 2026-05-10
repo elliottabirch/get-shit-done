@@ -64,7 +64,7 @@ Extract:
 For each phase directory in `.planning/phases/*/`:
 
 ```bash
-ls .planning/phases/*/
+gsd-sdk query phase.list-artifacts
 ```
 
 For each phase, check which artifacts exist:
@@ -78,7 +78,7 @@ Track: which phases have complete artifact sets vs gaps.
 
 ### 2d. Session Reports
 
-Read `.planning/reports/SESSION_REPORT.md` if it exists — extract last session outcomes,
+Load session report via `gsd-sdk query report.get "SESSION_REPORT"` if it exists — extract last session outcomes,
 work completed, token estimates.
 
 ### 2e. Git Worktree State
@@ -154,12 +154,12 @@ git log --oneline -20 | grep -iE "fix test|revert|broken|regression|fail"
 
 ## Step 4: Generate Report
 
-Create the forensics directory if needed:
+Write the forensics report via SDK:
 ```bash
-mkdir -p .planning/forensics
+gsd-sdk query forensics.put "report-$(date +%Y%m%d-%H%M%S)" --stdin
 ```
 
-Write to `.planning/forensics/report-$(date +%Y%m%d-%H%M%S).md`:
+Content to pass:
 
 ```markdown
 # Forensic Report

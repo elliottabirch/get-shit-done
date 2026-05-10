@@ -89,12 +89,12 @@ Present all consistency and frontier candidates, then ask which to run. When the
 Create `.planning/sketches/` and themes directory if they don't exist:
 
 ```bash
-mkdir -p .planning/sketches/themes
+gsd-sdk query sketch.ensure-dirs
 ```
 
 Check for existing sketches to determine numbering:
 ```bash
-ls -d .planning/sketches/[0-9][0-9][0-9]-* 2>/dev/null | sort | tail -1
+LAST_SKETCH=$(gsd-sdk query sketch.last-id --raw 2>/dev/null || echo "000")
 ```
 
 Check `commit_docs` config:
@@ -130,9 +130,9 @@ If spikes exist for this project, read them to ground the sketches in reality. M
 
 **a.** Glob for `./.claude/skills/spike-findings-*/SKILL.md` and read any that exist, plus their `references/*.md`. These contain validated patterns and requirements.
 
-**b.** Read `.planning/spikes/MANIFEST.md` if it exists — check the Requirements section for non-negotiable design constraints (e.g., "must support streaming", "must render markdown"). These requirements should be visible in the mockup even though the mockup doesn't implement them for real.
+**b.** Load spike manifest via `gsd-sdk query spike.get-manifest` if it exists — check the Requirements section for non-negotiable design constraints (e.g., "must support streaming", "must render markdown"). These requirements should be visible in the mockup even though the mockup doesn't implement them for real.
 
-**c.** Read `.planning/spikes/CONVENTIONS.md` if it exists — the established stack informs what's buildable and what interaction patterns are idiomatic.
+**c.** Load spike conventions via `gsd-sdk query spike.get-conventions` if it exists — the established stack informs what's buildable and what interaction patterns are idiomatic.
 
 **How spike context improves sketches:**
 - Use real field names and data shapes from spike findings instead of generic placeholders

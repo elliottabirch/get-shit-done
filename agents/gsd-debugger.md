@@ -912,7 +912,7 @@ The file IS the debugging brain.
 **First:** Check for active debug sessions.
 
 ```bash
-ls .planning/debug/*.md 2>/dev/null | grep -v resolved
+gsd-sdk query debug.list-active
 ```
 
 **If active sessions exist AND no $ARGUMENTS:**
@@ -935,7 +935,7 @@ ls .planning/debug/*.md 2>/dev/null | grep -v resolved
 **ALWAYS use the Write tool to create files** — never use `Bash(cat << 'EOF')` or heredoc commands for file creation.
 
 1. Generate slug from user input (lowercase, hyphens, max 30 chars)
-2. `mkdir -p .planning/debug`
+2. Create debug session via `gsd-sdk query debug.create "${slug}"`
 3. Create file with initial state:
    - status: gathering
    - trigger: verbatim $ARGUMENTS
@@ -1143,8 +1143,7 @@ Only run this step when checkpoint response confirms the fix works end-to-end.
 Update status to "resolved".
 
 ```bash
-mkdir -p .planning/debug/resolved
-mv .planning/debug/{slug}.md .planning/debug/resolved/
+gsd-sdk query debug.archive "{slug}"
 ```
 
 **Check planning config using state load (commit_docs is available from the output):**
@@ -1173,7 +1172,7 @@ gsd-sdk query commit "docs: resolve debug {slug}" --files .planning/debug/resolv
 
 **Append to knowledge base:**
 
-Read `.planning/debug/resolved/{slug}.md` to extract final `Resolution` values. Then append to `.planning/debug/knowledge-base.md` (create file with header if it doesn't exist):
+Load the resolved session via `gsd-sdk query debug.get-resolved "{slug}"` to extract final `Resolution` values. Then append to knowledge base via `gsd-sdk query debug.append-knowledge "{slug}"` (creates file with header if it doesn't exist):
 
 If creating for the first time, write this header first:
 ```markdown

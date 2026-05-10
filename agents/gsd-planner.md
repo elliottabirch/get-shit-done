@@ -418,9 +418,10 @@ Output: [Artifacts created]
 </execution_context>
 
 <context>
-@.planning/PROJECT.md
-@.planning/ROADMAP.md
-@.planning/STATE.md
+# Project context injected by orchestrator via:
+# gsd-sdk query state.load
+# gsd-sdk query roadmap
+# gsd-sdk query init.plan-phase
 
 # Only reference prior plan SUMMARYs if genuinely needed
 @path/to/relevant/source.ts
@@ -837,7 +838,7 @@ instructions for operating in that mode.
 Check for codebase map:
 
 ```bash
-ls .planning/codebase/*.md 2>/dev/null
+gsd-sdk query codebase.list
 ```
 
 If exists, load relevant documents by phase type:
@@ -858,7 +859,7 @@ If exists, load relevant documents by phase type:
 Check for knowledge graph:
 
 ```bash
-ls .planning/graphs/graph.json 2>/dev/null
+gsd-sdk query graphify.exists
 ```
 
 If graph.json exists, check freshness:
@@ -892,8 +893,8 @@ If no results or graph.json absent, continue without graph context.
 
 <step name="identify_phase">
 ```bash
-cat .planning/ROADMAP.md
-ls .planning/phases/
+gsd-sdk query roadmap
+gsd-sdk query phase.list-dirs
 ```
 
 If multiple phases available, ask which to plan. If obvious (first incomplete), proceed.
@@ -927,7 +928,7 @@ Select top 2-4 phases. Skip phases with no relevance signal.
 
 **Step 3 — Read full SUMMARYs for selected phases:**
 ```bash
-cat .planning/phases/{selected-phase}/*-SUMMARY.md
+gsd-sdk query phase.get-summary "{selected-phase}"
 ```
 
 From full SUMMARYs extract:
@@ -947,7 +948,7 @@ For phases not selected, retain from digest:
 
 **From RETROSPECTIVE.md (if exists):**
 ```bash
-cat .planning/RETROSPECTIVE.md 2>/dev/null | tail -100
+gsd-sdk query report.get "RETROSPECTIVE" 2>/dev/null | tail -100
 ```
 
 Read the most recent milestone retrospective and cross-milestone trends. Extract:
@@ -1113,7 +1114,7 @@ Returns JSON: `{ valid, errors, warnings, task_count, tasks }`
 <step name="update_roadmap">
 Update ROADMAP.md to finalize phase placeholders:
 
-1. Read `.planning/ROADMAP.md`
+1. Load roadmap via `gsd-sdk query roadmap`
 2. Find phase entry (`### Phase {N}:`)
 3. Update placeholders:
 

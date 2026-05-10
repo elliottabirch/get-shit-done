@@ -16,10 +16,10 @@ Archive accumulated phase directories from completed milestones into `.planning/
 
 <step name="identify_completed_milestones">
 
-Read `.planning/MILESTONES.md` to identify completed milestones and their versions.
+Load milestones data to identify completed milestones and their versions.
 
 ```bash
-cat .planning/MILESTONES.md
+gsd-sdk query roadmap
 ```
 
 Extract each milestone version (e.g., v1.0, v1.1, v2.0).
@@ -27,7 +27,7 @@ Extract each milestone version (e.g., v1.0, v1.1, v2.0).
 Check which milestone archive dirs already exist:
 
 ```bash
-ls -d .planning/milestones/v*-phases 2>/dev/null || true
+gsd-sdk query milestone.list-archives
 ```
 
 Filter to milestones that do NOT already have a `-phases` archive directory.
@@ -47,15 +47,15 @@ Stop here.
 For each completed milestone without a `-phases` archive, read the archived ROADMAP snapshot to determine which phases belong to it:
 
 ```bash
-cat .planning/milestones/v{X.Y}-ROADMAP.md
+gsd-sdk query milestone.get-roadmap "v{X.Y}"
 ```
 
 Extract phase numbers and names from the archived roadmap (e.g., Phase 1: Foundation, Phase 2: Auth).
 
-Check which of those phase directories still exist in `.planning/phases/`:
+Check which of those phase directories still exist:
 
 ```bash
-ls -d .planning/phases/*/ 2>/dev/null || true
+gsd-sdk query phase.list-dirs
 ```
 
 Match phase directories to milestone membership. Only include directories that still exist in `.planning/phases/`.
@@ -103,16 +103,10 @@ If "Cancel": Stop.
 
 <step name="archive_phases">
 
-For each milestone, move phase directories:
+For each milestone, archive phase directories via SDK:
 
 ```bash
-mkdir -p .planning/milestones/v{X.Y}-phases
-```
-
-For each phase directory belonging to this milestone:
-
-```bash
-mv .planning/phases/{dir} .planning/milestones/v{X.Y}-phases/
+gsd-sdk query milestone.archive-phases "v{X.Y}"
 ```
 
 Repeat for all milestones in the cleanup set.

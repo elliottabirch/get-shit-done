@@ -105,7 +105,7 @@ Extract (when available):
 
 ## Step 5: Generate Summary Document
 
-Write to `.planning/reports/MILESTONE_SUMMARY-v${VERSION}.md`:
+Write the milestone summary via `gsd-sdk query report.put "MILESTONE_SUMMARY-v${VERSION}"` with content:
 
 ```markdown
 # Milestone v{VERSION} — Project Summary
@@ -182,9 +182,9 @@ Present as a bulleted list of decisions with brief rationale:
 > "A milestone summary for v{VERSION} already exists. Overwrite it, or view the existing one?"
 If "view": display existing file and skip to Step 8 (interactive mode). If "overwrite": proceed.
 
-Create the reports directory if needed:
+Write the summary via SDK:
 ```bash
-mkdir -p .planning/reports
+gsd-sdk query report.put "MILESTONE_SUMMARY-v${VERSION}" --stdin
 ```
 
 Write the summary, then commit:

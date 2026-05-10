@@ -22,7 +22,7 @@ Read all files referenced by the invoking prompt's execution_context before star
 <step name="gather">
 ## Gather Sketch Inventory
 
-1. Read `.planning/sketches/MANIFEST.md` for the design direction and reference points
+1. Load sketch manifest via `gsd-sdk query sketch.get-manifest` for the design direction and reference points
 2. Glob `.planning/sketches/*/README.md` and parse YAML frontmatter from each
 3. Check if `./.claude/skills/sketch-findings-*/SKILL.md` exists for this project
    - If yes: read its `processed_sketches` list and filter those out
@@ -190,7 +190,7 @@ Original sketch HTML files are preserved in `sources/` for complete reference.
 <step name="write_summary">
 ## Write Planning Summary
 
-Write `.planning/sketches/WRAP-UP-SUMMARY.md` for project history:
+Write wrap-up summary via `gsd-sdk query sketch.put-wrap-up "WRAP-UP-SUMMARY"` for project history:
 
 ```markdown
 # Sketch Wrap-Up Summary

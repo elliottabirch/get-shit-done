@@ -43,7 +43,7 @@ Parse JSON for: `planner_model`, `checker_model`, `commit_docs`, `phase_found`, 
 **First: Check for active UAT sessions**
 
 ```bash
-(find .planning/phases -name "*-UAT.md" -type f 2>/dev/null || true)
+gsd-sdk query phase.list-uat-sessions
 ```
 
 **If active sessions exist AND no $ARGUMENTS provided:**
@@ -222,7 +222,7 @@ skipped: 0
 [none yet]
 ```
 
-Write to `.planning/phases/XX-name/{phase_num}-UAT.md`
+Write UAT file via `gsd-sdk query phase.put-uat "${phase_dir}" "${phase_num}"`
 
 Proceed to `present_test`.
 </step>

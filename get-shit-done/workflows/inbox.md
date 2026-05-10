@@ -290,7 +290,7 @@ STALE ITEMS (>30 days, no activity)
 ===================================================================
 ```
 
-Write this report to `.planning/INBOX-TRIAGE.md` if a `.planning/` directory exists,
+Write this report via `gsd-sdk query report.put "INBOX-TRIAGE"` if a project is initialized,
 otherwise print to console only.
 </step>
 

@@ -25,7 +25,7 @@ Store as `$IDEA`.
 
 <step name="create_seed_dir">
 ```bash
-mkdir -p .planning/seeds
+gsd-sdk query seed.ensure-dir
 ```
 </step>
 
@@ -89,16 +89,14 @@ Store relevant file paths as `$BREADCRUMBS`.
 <step name="generate_seed_id">
 ```bash
 # Find next seed number
-EXISTING=$( (ls .planning/seeds/SEED-*.md 2>/dev/null || true) | wc -l )
-NEXT=$((EXISTING + 1))
-PADDED=$(printf "%03d" $NEXT)
+PADDED=$(gsd-sdk query seed.next-id --raw)
 ```
 
 Generate slug from idea summary.
 </step>
 
 <step name="write_seed">
-Write `.planning/seeds/SEED-{PADDED}-{slug}.md`:
+Write the seed via `gsd-sdk query seed.add "SEED-${PADDED}-${slug}"` with content:
 
 ```markdown
 ---
