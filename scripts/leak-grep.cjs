@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// leak-grep-allow file — this script describes the patterns it detects;
+// the comments quoting `Read` / `Write` / `cp ... .planning/` etc. are
+// by design and must not trigger self-referential matches.
 /**
  * leak-grep.cjs
  *
@@ -106,8 +109,12 @@ const SDK_FS_EXTS = /\.ts$/;
 // File-level: first 5 lines contain `// leak-grep-allow file` → skip entire file
 const FILE_ALLOW_RE = /\/[/*]\s*leak-grep-allow\s+file\b/;
 
-// Line-level: line contains `// leak-grep-ignore` or `/* leak-grep-ignore */` → skip that line
-const LINE_IGNORE_RE = /\/[/*]\s*leak-grep-ignore\b/;
+// Line-level: line contains `// leak-grep-ignore`, `/* leak-grep-ignore */`,
+// or `<!-- leak-grep-ignore -->` (markdown HTML-comment form) → skip that line.
+// Markdown support lets .md prose that describes the leak patterns (phase
+// planning docs, success criteria, etc.) opt out without rendering a visible
+// comment marker.
+const LINE_IGNORE_RE = /(?:\/[/*]|<!--)\s*leak-grep-ignore\b/;
 
 // ---------------------------------------------------------------------------
 // Core scanner

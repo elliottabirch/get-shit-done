@@ -89,3 +89,9 @@ test('sdk-fs-patterns.ts exercises every SDK_FS category', () => {
     assert.match(stdout, new RegExp(cat), `category ${cat} missing`);
   }
 });
+
+test('md-ignore-html-comment.md: <!-- leak-grep-ignore --> suppresses markdown prose matches', () => {
+  const { exitCode, stdout } = runLeakGrep('md-ignore-html-comment.md');
+  assert.equal(exitCode, 0, `expected 0, got ${exitCode}; stdout: ${stdout}`);
+  assert.equal(stdout.trim(), '');
+});
