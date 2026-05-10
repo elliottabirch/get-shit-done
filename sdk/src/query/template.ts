@@ -17,11 +17,11 @@
  * ```
  */
 
-import { readdir, writeFile } from 'node:fs/promises';
+import { writeFile } from 'node:fs/promises';
 import { join, resolve, relative } from 'node:path';
 import { GSDError, ErrorClassification } from '../errors.js';
 import { reconstructFrontmatter, spliceFrontmatter } from './frontmatter-mutation.js';
-import { normalizeMd, planningPaths, normalizePhaseName, phaseTokenMatches } from './helpers.js';
+import { normalizeMd, planningPaths, normalizePhaseName, phaseTokenMatches, adapterFor, planningRelativePath } from './helpers.js';
 import type { QueryHandler } from './utils.js';
 
 // ─── templateSelect ─────────────────────────────────────────────────────────
@@ -46,14 +46,16 @@ export const templateSelect: QueryHandler = async (args, projectDir, workstream)
 
   const paths = planningPaths(projectDir, workstream);
   const normalized = normalizePhaseName(phaseNum);
+  const templateAdapter = await adapterFor(projectDir);
+  const phasesRelPath = planningRelativePath(workstream, 'phases');
 
   // Find the phase directory
-  let phaseDir: string | null = null;
+  let phaseDirRel: string | null = null;
   try {
-    const entries = await readdir(paths.phases);
-    for (const entry of entries) {
-      if (phaseTokenMatches(entry, normalized)) {
-        phaseDir = join(paths.phases, entry);
+    const phaseRefs = await templateAdapter.listCollection(phasesRelPath);
+    for (const ref of phaseRefs) {
+      if (phaseTokenMatches(ref.name, normalized)) {
+        phaseDirRel = ref.path;
         break;
       }
     }
@@ -61,13 +63,14 @@ export const templateSelect: QueryHandler = async (args, projectDir, workstream)
     return { data: { template: 'plan' } };
   }
 
-  if (!phaseDir) {
+  if (!phaseDirRel) {
     return { data: { template: 'plan' } };
   }
 
   // Read directory contents and check for plans/summaries
   try {
-    const files = await readdir(phaseDir);
+    const innerRefs = await templateAdapter.listCollection(phaseDirRel);
+    const files = innerRefs.map(r => r.name);
     const plans = files.filter(f => f.match(/-PLAN\.md$/i));
     const summaries = files.filter(f => f.match(/-SUMMARY\.md$/i));
 

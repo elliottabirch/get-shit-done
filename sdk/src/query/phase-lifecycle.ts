@@ -19,8 +19,6 @@
  * ```
  */
 
-import { readFile, writeFile, mkdir, readdir, rename, rm } from 'node:fs/promises';
-import { existsSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import type { StorageAdapter } from '../../../adapters/types.js';
 import { GSDError, ErrorClassification } from '../errors.js';
@@ -193,14 +191,11 @@ export async function readModifyWriteRoadmapMd(
   const roadmapPath = planningPaths(projectDir, workstream).roadmap;
   const lockPath = await acquireStateLock(roadmapPath);
   try {
-    let content: string;
-    try {
-      content = await readFile(roadmapPath, 'utf-8');
-    } catch {
-      content = '';
-    }
+    const adapter = await adapterFor(projectDir);
+    const roadmapRel = planningRelativePath(workstream, 'ROADMAP.md');
+    const content = (await adapter.getRecord(roadmapRel)) ?? '';
     const modified = await modifier(content);
-    await writeFile(roadmapPath, modified, 'utf-8');
+    await adapter.putRecord(roadmapRel, modified);
     return modified;
   } finally {
     await releaseStateLock(lockPath);
@@ -542,9 +537,9 @@ async function findPhaseDirAdapter(
 }
 
 /**
- * Internal helper: find phase directory matching a phase identifier (legacy fs version).
+ * Internal helper: find phase directory matching a phase identifier.
  *
- * @deprecated Use findPhaseDirAdapter for new code paths.
+ * Migrated to adapter in Phase 4, Plan 02.
  */
 async function findPhaseDir(
   projectDir: string,
@@ -555,9 +550,15 @@ async function findPhaseDir(
   const normalized = normalizePhaseName(phase);
 
   try {
-    const entries = await readdir(phasesDir, { withFileTypes: true });
-    const dirs = entries.filter(e => e.isDirectory()).map(e => e.name);
-    const match = dirs.find(d => phaseTokenMatches(d, normalized));
+    const adapter = await adapterFor(projectDir);
+    const phasesRel = planningRelativePath(workstream, 'phases');
+    const refs = await adapter.listCollection(phasesRel);
+    const dirNames: string[] = [];
+    for (const ref of refs) {
+      const st = await adapter.stat(ref.path);
+      if (st?.kind === 'dir') dirNames.push(ref.name);
+    }
+    const match = dirNames.find(d => phaseTokenMatches(d, normalized));
     if (!match) return null;
 
     // Extract phase name from directory
