@@ -17,7 +17,6 @@ import {
   hasSnapshot,
   hasTransaction,
   hasNamedDoc,
-  hasCommitPlanningState,
   hasMarkdownLockfile,
 } from './types.js';
 
@@ -26,10 +25,10 @@ import {
 // This is a compile-time-only check — the assignment below must produce a type error:
 // const _badCaps: Capabilities = { record: false, section: true, frontmatter: true,
 //   binaryAsset: false, snapshot: false, transaction: false, namedDoc: false,
-//   commitPlanningState: false, markdownLockfile: false };
+//   markdownLockfile: false };
 // ^ Intentionally commented out — if uncommented, TypeScript must error.
 
-// Test 3: Capabilities has exactly 9 keys
+// Test 3: Capabilities has exactly 8 keys (commitPlanningState promoted to required per D-12)
 const _caps: Capabilities = {
   record: true,
   section: true,
@@ -38,12 +37,11 @@ const _caps: Capabilities = {
   snapshot: false,
   transaction: false,
   namedDoc: false,
-  commitPlanningState: false,
   markdownLockfile: false,
 };
 const _capKeys: (keyof Capabilities)[] = [
   'record', 'section', 'frontmatter',
-  'binaryAsset', 'snapshot', 'transaction', 'namedDoc', 'commitPlanningState', 'markdownLockfile',
+  'binaryAsset', 'snapshot', 'transaction', 'namedDoc', 'markdownLockfile',
 ];
 // If Capabilities had more or fewer than 9 keys, the above would not be exhaustive.
 
@@ -64,9 +62,6 @@ function _testTypeGuards(a: StorageAdapter): void {
   }
   if (hasNamedDoc(a)) {
     const _nd: true = a.capabilities.namedDoc;
-  }
-  if (hasCommitPlanningState(a)) {
-    const _cps: true = a.capabilities.commitPlanningState;
   }
   if (hasMarkdownLockfile(a)) {
     const _ml: true = a.capabilities.markdownLockfile;
