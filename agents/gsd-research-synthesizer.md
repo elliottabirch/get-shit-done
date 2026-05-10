@@ -53,10 +53,10 @@ Your SUMMARY.md is consumed by the gsd-roadmapper agent which uses it to:
 Read all 4 research files:
 
 ```bash
-cat .planning/research/STACK.md
-cat .planning/research/FEATURES.md
-cat .planning/research/ARCHITECTURE.md
-cat .planning/research/PITFALLS.md
+gsd-sdk query report.get "research/STACK"
+gsd-sdk query report.get "research/FEATURES"
+gsd-sdk query report.get "research/ARCHITECTURE"
+gsd-sdk query report.get "research/PITFALLS"
 
 # Planning config loaded via gsd-sdk query (or gsd-tools.cjs) in commit step
 ```
@@ -132,7 +132,7 @@ Identify gaps that couldn't be resolved and need attention during planning.
 
 Use template: ~/.claude/get-shit-done/templates/research-project/SUMMARY.md
 
-Write to `.planning/research/SUMMARY.md`
+Write via `gsd-sdk query report.put "research/SUMMARY"`
 
 ## Step 7: Commit All Research
 
