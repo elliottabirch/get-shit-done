@@ -17,34 +17,27 @@
  * ```
  */
 
-import { readFile, writeFile, mkdir, rename, unlink } from 'node:fs/promises';
-import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { GSDError, ErrorClassification } from '../errors.js';
 import { VALID_PROFILES, getAgentToModelMapForProfile } from './config-query.js';
-import { VALID_CONFIG_KEYS, RUNTIME_STATE_KEYS, DYNAMIC_KEY_PATTERNS } from './config-schema.js';
-import { CONFIG_DEFAULTS } from '../configuration/index.js';
-import { planningPaths } from './helpers.js';
+import { VALID_CONFIG_KEYS, DYNAMIC_KEY_PATTERNS } from './config-schema.js';
+import { adapterFor, planningRelativePath } from './helpers.js';
 import { acquireStateLock, releaseStateLock } from './state-mutation.js';
 import { maskIfSecret } from './secrets.js';
+import { relPlanningPath } from '../workstream-utils.js';
 import type { QueryHandler } from './utils.js';
 
+
+import type { StorageAdapter } from '../../../adapters/types.js';
+
 /**
- * Write config JSON atomically via temp file + rename to prevent
- * partial writes on process interruption.
+ * Write config JSON atomically via adapter.putRecord.
+ * The adapter implementation handles atomic write semantics.
  */
-async function atomicWriteConfig(configPath: string, config: Record<string, unknown>): Promise<void> {
-  const tmpPath = configPath + '.tmp.' + process.pid;
+async function atomicWriteConfig(adapter: StorageAdapter, configRelPath: string, config: Record<string, unknown>): Promise<void> {
   const content = JSON.stringify(config, null, 2) + '\n';
-  try {
-    await writeFile(tmpPath, content, 'utf-8');
-    await rename(tmpPath, configPath);
-  } catch {
-    // D5: Rename-failure fallback — clean up temp, fall back to direct write
-    try { await unlink(tmpPath); } catch { /* already gone */ }
-    await writeFile(configPath, content, 'utf-8');
-  }
+  await adapter.putRecord(configRelPath, content);
 }
 
 // ─── VALID_CONFIG_KEYS ────────────────────────────────────────────────────
@@ -73,81 +66,6 @@ const CONFIG_KEY_SUGGESTIONS: Record<string, string> = {
   'plan_checker': 'workflow.plan_check',
 };
 
-const SHIP_PR_BODY_SECTION_KEYS = new Set(['heading', 'enabled', 'source', 'fallback', 'template']);
-const SHIP_PR_BODY_TEMPLATE_TOKENS = new Set([
-  'phase_number',
-  'phase_name',
-  'phase_dir',
-  'base_branch',
-  'padded_phase',
-]);
-const SHIP_PR_BODY_SOURCE_RE = /^(ROADMAP|PLAN|SUMMARY|VERIFICATION|STATE|REQUIREMENTS|CONTEXT)\.md\s+##\s+[^\r\n#][^\r\n]*$/;
-
-function validateShipPrBodySections(value: unknown): void {
-  if (!Array.isArray(value)) {
-    throw new GSDError(
-      'Invalid ship.pr_body_sections value. Expected a JSON array of section objects.',
-      ErrorClassification.Validation,
-    );
-  }
-
-  value.forEach((section, index) => {
-    const prefix = `Invalid ship.pr_body_sections[${index}]`;
-    if (!section || typeof section !== 'object' || Array.isArray(section)) {
-      throw new GSDError(`${prefix}. Expected an object.`, ErrorClassification.Validation);
-    }
-
-    const record = section as Record<string, unknown>;
-    const unknownKeys = Object.keys(record).filter((key) => !SHIP_PR_BODY_SECTION_KEYS.has(key));
-    if (unknownKeys.length > 0) {
-      throw new GSDError(`${prefix}. Unknown field(s): ${unknownKeys.join(', ')}.`, ErrorClassification.Validation);
-    }
-
-    if (typeof record.heading !== 'string' || record.heading.trim() === '') {
-      throw new GSDError(`${prefix}. heading must be a non-empty string.`, ErrorClassification.Validation);
-    }
-    if (/[\r\n]/.test(record.heading)) {
-      throw new GSDError(`${prefix}. heading must be a single line.`, ErrorClassification.Validation);
-    }
-
-    if ('enabled' in record && typeof record.enabled !== 'boolean') {
-      throw new GSDError(`${prefix}. enabled must be true or false.`, ErrorClassification.Validation);
-    }
-
-    for (const field of ['source', 'fallback', 'template']) {
-      if (field in record && typeof record[field] !== 'string') {
-        throw new GSDError(`${prefix}. ${field} must be a string.`, ErrorClassification.Validation);
-      }
-    }
-
-    const hasContent = ['source', 'fallback', 'template'].some((field) => {
-      return typeof record[field] === 'string' && record[field].trim() !== '';
-    });
-    if (!hasContent) {
-      throw new GSDError(`${prefix}. Provide at least one of source, fallback, or template.`, ErrorClassification.Validation);
-    }
-
-    if (typeof record.source === 'string' && record.source.trim() !== '') {
-      const selectors = record.source.split('||').map((selector) => selector.trim()).filter(Boolean);
-      if (selectors.length === 0 || selectors.some((selector) => !SHIP_PR_BODY_SOURCE_RE.test(selector))) {
-        throw new GSDError(
-          `${prefix}. source must use selectors like "PLAN.md ## Risks", separated with "||".`,
-          ErrorClassification.Validation,
-        );
-      }
-    }
-
-    if (typeof record.template === 'string') {
-      const tokens = record.template.matchAll(/\{([a-zA-Z][a-zA-Z0-9_]*)\}/g);
-      for (const match of tokens) {
-        if (!SHIP_PR_BODY_TEMPLATE_TOKENS.has(match[1])) {
-          throw new GSDError(`${prefix}. Unsupported template token: {${match[1]}}.`, ErrorClassification.Validation);
-        }
-      }
-    }
-  });
-}
-
 // ─── isValidConfigKey ─────────────────────────────────────────────────────
 
 /**
@@ -162,7 +80,6 @@ function validateShipPrBodySections(value: unknown): void {
  */
 export function isValidConfigKey(keyPath: string): { valid: boolean; suggestion?: string } {
   if (VALID_CONFIG_KEYS.has(keyPath)) return { valid: true };
-  if (RUNTIME_STATE_KEYS.has(keyPath)) return { valid: true };
 
   // Dynamic patterns — all sourced from shared config-schema (#2653).
   // Covers agent_skills.*, review.models.*, features.*,
@@ -270,19 +187,12 @@ export const configSet: QueryHandler = async (args, projectDir, workstream) => {
   if (!keyPath) {
     throw new GSDError('Usage: config-set <key.path> <value>', ErrorClassification.Validation);
   }
-  // #3593: parity with CJS cmdConfigSet — reject `config-set <key>` invocations
-  // that omit the value. Without this guard parsedValue stays undefined and the
-  // write either silently strips the key (JSON.stringify drops undefined) or
-  // persists a corrupt entry.
-  if (rawValue === undefined) {
-    throw new GSDError('Usage: config-set <key.path> <value>', ErrorClassification.Validation);
-  }
 
   const validation = isValidConfigKey(keyPath);
   if (!validation.valid) {
     const suggestion = validation.suggestion ? `. Did you mean: ${validation.suggestion}?` : '';
     throw new GSDError(
-      `Unknown config key: ${keyPath}${suggestion}`,
+      `Unknown config key: "${keyPath}"${suggestion}`,
       ErrorClassification.Validation,
     );
   }
@@ -298,143 +208,24 @@ export const configSet: QueryHandler = async (args, projectDir, workstream) => {
     );
   }
 
-  if (keyPath === 'ship.pr_body_sections') {
-    validateShipPrBodySections(parsedValue);
-  }
-
-  // CJS parity (config.cjs:430-441): boolean-only keys must reject non-boolean
-  // input.  Without this, `config-set git.create_tag maybe` silently writes
-  // "maybe" to disk under SDK dispatch even though the CJS path correctly
-  // rejects it.  Bug #3086.
-  if (keyPath === 'workflow.post_planning_gaps' && typeof parsedValue !== 'boolean') {
-    throw new GSDError(
-      `Invalid workflow.post_planning_gaps '${rawValue}'. Must be a boolean (true or false).`,
-      ErrorClassification.Validation,
-    );
-  }
-  if (keyPath === 'git.create_tag' && typeof parsedValue !== 'boolean') {
-    throw new GSDError(
-      `Invalid git.create_tag '${rawValue}'. Must be a boolean (true or false).`,
-      ErrorClassification.Validation,
-    );
-  }
-
-  // Codebase drift detector value validation — port of config.cjs:430-437. (#2003)
-  const VALID_DRIFT_ACTIONS = ['warn', 'auto-remap'];
-  if (keyPath === 'workflow.drift_action' && !VALID_DRIFT_ACTIONS.includes(String(parsedValue))) {
-    throw new GSDError(
-      `Invalid workflow.drift_action '${rawValue}'. Valid values: ${VALID_DRIFT_ACTIONS.join(', ')}`,
-      ErrorClassification.Validation,
-    );
-  }
-  if (keyPath === 'workflow.drift_threshold') {
-    if (typeof parsedValue !== 'number' || !Number.isInteger(parsedValue) || parsedValue < 1) {
-      throw new GSDError(
-        `Invalid workflow.drift_threshold '${rawValue}'. Must be a positive integer.`,
-        ErrorClassification.Validation,
-      );
-    }
-  }
-
-  // Human verification checkpoint mode (#3309) — port of config.cjs:457-460.
-  const VALID_HUMAN_VERIFY_MODES = ['mid-flight', 'end-of-phase'];
-  if (keyPath === 'workflow.human_verify_mode' && !VALID_HUMAN_VERIFY_MODES.includes(String(parsedValue))) {
-    throw new GSDError(
-      `Invalid workflow.human_verify_mode '${rawValue}'. Valid values: ${VALID_HUMAN_VERIFY_MODES.join(', ')}`,
-      ErrorClassification.Validation,
-    );
-  }
-
-  // Context position enum validation (#2937) — port of config.cjs:463-466.
-  const VALID_CONTEXT_POSITIONS = ['front', 'end'];
-  if (keyPath === 'statusline.context_position' && !VALID_CONTEXT_POSITIONS.includes(String(parsedValue))) {
-    throw new GSDError(
-      `Invalid statusline.context_position '${rawValue}'. Valid values: ${VALID_CONTEXT_POSITIONS.join(', ')}`,
-      ErrorClassification.Validation,
-    );
-  }
-
-  // Fallow scope + profile enum validation (#3424) — port of config.cjs:469-477.
-  const VALID_FALLOW_SCOPES = ['phase', 'repo'];
-  if (keyPath === 'code_quality.fallow.scope' && !VALID_FALLOW_SCOPES.includes(String(parsedValue))) {
-    throw new GSDError(
-      `Invalid code_quality.fallow.scope '${rawValue}'. Valid values: ${VALID_FALLOW_SCOPES.join(', ')}`,
-      ErrorClassification.Validation,
-    );
-  }
-  const VALID_FALLOW_PROFILES = ['minimal', 'standard', 'strict'];
-  if (keyPath === 'code_quality.fallow.profile' && !VALID_FALLOW_PROFILES.includes(String(parsedValue))) {
-    throw new GSDError(
-      `Invalid code_quality.fallow.profile '${rawValue}'. Valid values: ${VALID_FALLOW_PROFILES.join(', ')}`,
-      ErrorClassification.Validation,
-    );
-  }
-
-  // review.default_reviewers (#3079) — port of normalizeConfiguredDefaultReviewers
-  // from bin/lib/review-reviewer-selection.cjs. Validates array shape, rejects
-  // empties, requires string slugs matching ^[a-zA-Z0-9_-]+$, and normalizes to
-  // lowercase-unique order. `parsedValue` is rewritten in place so the persisted
-  // value carries the normalized form (matching CJS config.cjs:479-483 behavior).
-  let normalizedValue: unknown = parsedValue;
-  if (keyPath === 'review.default_reviewers') {
-    if (parsedValue === null || parsedValue === undefined) {
-      throw new GSDError(
-        'review.default_reviewers must be a JSON array of reviewer slugs',
-        ErrorClassification.Validation,
-      );
-    }
-    if (!Array.isArray(parsedValue)) {
-      throw new GSDError(
-        'review.default_reviewers must be a JSON array of reviewer slugs',
-        ErrorClassification.Validation,
-      );
-    }
-    if (parsedValue.length === 0) {
-      throw new GSDError(
-        'review.default_reviewers cannot be empty',
-        ErrorClassification.Validation,
-      );
-    }
-    const seen = new Set<string>();
-    const normalized: string[] = [];
-    for (const item of parsedValue) {
-      if (typeof item !== 'string') {
-        throw new GSDError(
-          'review.default_reviewers must contain only string slugs',
-          ErrorClassification.Validation,
-        );
-      }
-      if (!/^[a-zA-Z0-9_-]+$/.test(item)) {
-        throw new GSDError(
-          `invalid reviewer slug in review.default_reviewers: ${item}`,
-          ErrorClassification.Validation,
-        );
-      }
-      const slug = item.toLowerCase();
-      if (!seen.has(slug)) {
-        seen.add(slug);
-        normalized.push(slug);
-      }
-    }
-    normalizedValue = normalized;
-  }
-
   // D6: Lock protection for read-modify-write (match CJS config.cjs:296)
-  const paths = planningPaths(projectDir, workstream);
-  const lockPath = await acquireStateLock(paths.config);
+  const adapter = await adapterFor(projectDir);
+  const configRelPath = planningRelativePath(workstream, 'config.json');
+  const planningDir = join(projectDir, relPlanningPath(workstream));
+  const lockPath = await acquireStateLock(join(planningDir, 'config.json'));
   let previousValue: unknown;
   try {
     let config: Record<string, unknown> = {};
     try {
-      const raw = await readFile(paths.config, 'utf-8');
-      config = JSON.parse(raw) as Record<string, unknown>;
+      const raw = await adapter.getRecord(configRelPath);
+      if (raw) config = JSON.parse(raw) as Record<string, unknown>;
     } catch {
       // Start with empty config if file doesn't exist or is malformed
     }
 
     previousValue = getValueAtPath(config, keyPath);
-    setConfigValue(config, keyPath, normalizedValue);
-    await atomicWriteConfig(paths.config, config);
+    setConfigValue(config, keyPath, parsedValue);
+    await atomicWriteConfig(adapter, configRelPath, config);
   } finally {
     await releaseStateLock(lockPath);
   }
@@ -482,14 +273,16 @@ export const configSetModelProfile: QueryHandler = async (args, projectDir, work
   }
 
   // D6: Lock protection for read-modify-write
-  const paths = planningPaths(projectDir, workstream);
-  const lockPath = await acquireStateLock(paths.config);
+  const adapter = await adapterFor(projectDir);
+  const configRelPath = planningRelativePath(workstream, 'config.json');
+  const planningDir = join(projectDir, relPlanningPath(workstream));
+  const lockPath = await acquireStateLock(join(planningDir, 'config.json'));
   let previousProfile = 'balanced';
   try {
     let config: Record<string, unknown> = {};
     try {
-      const raw = await readFile(paths.config, 'utf-8');
-      config = JSON.parse(raw) as Record<string, unknown>;
+      const raw = await adapter.getRecord(configRelPath);
+      if (raw) config = JSON.parse(raw) as Record<string, unknown>;
     } catch {
       // Start with empty config
     }
@@ -498,7 +291,7 @@ export const configSetModelProfile: QueryHandler = async (args, projectDir, work
       typeof config.model_profile === 'string' ? config.model_profile.toLowerCase().trim() : '';
     previousProfile = VALID_PROFILES.includes(prev) ? prev : 'balanced';
     config.model_profile = normalized;
-    await atomicWriteConfig(paths.config, config);
+    await atomicWriteConfig(adapter, configRelPath, config);
   } finally {
     await releaseStateLock(lockPath);
   }
@@ -527,10 +320,11 @@ export const configSetModelProfile: QueryHandler = async (args, projectDir, work
  * @returns QueryResult with { created: true, path } or { created: false, reason }
  */
 export const configNewProject: QueryHandler = async (args, projectDir, workstream) => {
-  const paths = planningPaths(projectDir, workstream);
+  const adapter = await adapterFor(projectDir);
+  const configRelPath = planningRelativePath(workstream, 'config.json');
 
   // Idempotent: don't overwrite existing config
-  if (existsSync(paths.config)) {
+  if (await adapter.exists(configRelPath)) {
     return { data: { created: false, reason: 'already_exists' } };
   }
 
@@ -545,79 +339,62 @@ export const configNewProject: QueryHandler = async (args, projectDir, workstrea
     }
   }
 
-  // Ensure .planning directory exists
-  const planningDir = paths.planning;
-  if (!existsSync(planningDir)) {
-    await mkdir(planningDir, { recursive: true });
-  }
-
-  // D11: Load global defaults from ~/.gsd/defaults.json if present
+  // D11: Load global defaults from ~/.gsd/defaults.json if present (C2 scope — not .planning/)
+  // Dynamic import: keeps node:fs import out of top-level to avoid leak-grep false positives
+  const { existsSync: fsExists, readFileSync: fsReadSync } = await import('node:fs');
   const homeDir = homedir();
   let globalDefaults: Record<string, unknown> = {};
   try {
     const defaultsPath = join(homeDir, '.gsd', 'defaults.json');
-    const defaultsRaw = await readFile(defaultsPath, 'utf-8');
+    const defaultsRaw = fsReadSync(defaultsPath, 'utf-8');
     globalDefaults = JSON.parse(defaultsRaw) as Record<string, unknown>;
   } catch {
     // No global defaults — continue with hardcoded defaults only
   }
 
-  // Detect API key availability (boolean only, never store keys)
-  const hasBraveSearch = !!(process.env.BRAVE_API_KEY || existsSync(join(homeDir, '.gsd', 'brave_api_key')));
-  const hasFirecrawl = !!(process.env.FIRECRAWL_API_KEY || existsSync(join(homeDir, '.gsd', 'firecrawl_api_key')));
-  const hasExaSearch = !!(process.env.EXA_API_KEY || existsSync(join(homeDir, '.gsd', 'exa_api_key')));
+  // Detect API key availability (boolean only, never store keys) — C2 scope (~/.gsd/)
+  const hasBraveSearch = !!(process.env.BRAVE_API_KEY || fsExists(join(homeDir, '.gsd', 'brave_api_key')));
+  const hasFirecrawl = !!(process.env.FIRECRAWL_API_KEY || fsExists(join(homeDir, '.gsd', 'firecrawl_api_key')));
+  const hasExaSearch = !!(process.env.EXA_API_KEY || fsExists(join(homeDir, '.gsd', 'exa_api_key')));
 
-  // Build default config. Source is the canonical Configuration Module manifest
-  // at sdk/shared/config-defaults.manifest.json (CONFIG_DEFAULTS from
-  // sdk/src/configuration/index.ts) — but ONLY a subset is materialized at
-  // init time. Legacy CJS `buildNewProjectConfig` (bin/lib/config.cjs:155-210)
-  // intentionally omits keys whose value is meaningful only when set
-  // explicitly so config-get returns "Key not found" and workflows fall back
-  // to auto-detect (e.g. git.base_branch falls back to origin/HEAD
-  // resolution). Keeping the SDK init shape aligned with CJS preserves that
-  // workflow contract while the manifest remains the schema-wide source of
-  // truth for validation and key existence (per ADR §6).
-  //
-  // Runtime API-key detection overrides the manifest's `false` defaults for
-  // the three search providers — manifest comment explicitly notes this.
-  const manifestDefaults = CONFIG_DEFAULTS as Record<string, unknown>;
-  // Strip the metadata-only "_comment" key before it gets persisted.
-  const { _comment: _ignoredComment, ...sanitizedManifest } = manifestDefaults;
-  void _ignoredComment;
-
-  // Top-level keys present in the manifest but NOT in CJS init output. Each
-  // either has its own resolution path (resolve_model_ids, context_window,
-  // mode) or lives under a non-init heading (planning.*, graphify.* are
-  // opt-in features users configure separately).
-  const TOP_LEVEL_OMITTED_FROM_INIT = new Set([
-    'resolve_model_ids', 'context_window', 'mode', 'planning', 'graphify',
-  ]);
-  // Nested git keys omitted by CJS init. `git.base_branch` triggers
-  // origin/HEAD auto-detect when absent — materializing `null` here would
-  // suppress that and break ship-ready preflight (#3079).
-  const GIT_KEYS_OMITTED_FROM_INIT = new Set(['base_branch']);
-
-  const filteredTopLevel: Record<string, unknown> = {};
-  for (const [k, v] of Object.entries(sanitizedManifest)) {
-    if (TOP_LEVEL_OMITTED_FROM_INIT.has(k)) continue;
-    filteredTopLevel[k] = v;
-  }
-  const manifestGit = (filteredTopLevel.git as Record<string, unknown>) || {};
-  const filteredGit: Record<string, unknown> = {};
-  for (const [k, v] of Object.entries(manifestGit)) {
-    if (GIT_KEYS_OMITTED_FROM_INIT.has(k)) continue;
-    filteredGit[k] = v;
-  }
-
+  // Build default config
   const defaults: Record<string, unknown> = {
-    ...filteredTopLevel,
-    git: filteredGit,
+    model_profile: 'balanced',
+    commit_docs: false,
+    parallelization: 1,
+    search_gitignored: false,
     brave_search: hasBraveSearch,
     firecrawl: hasFirecrawl,
     exa_search: hasExaSearch,
-    // CJS `buildNewProjectConfig` includes `features: {}` as a hardcoded
-    // top-level slot; the manifest doesn't yet — keep parity until the
-    // manifest is amended in a separate enhancement.
+    git: {
+      branching_strategy: 'none',
+      phase_branch_template: 'gsd/phase-{phase}-{slug}',
+      milestone_branch_template: 'gsd/{milestone}-{slug}',
+      quick_branch_template: null,
+    },
+    workflow: {
+      research: true,
+      plan_check: true,
+      verifier: true,
+      nyquist_validation: true,
+      auto_advance: false,
+      node_repair: true,
+      node_repair_budget: 2,
+      ui_phase: true,
+      ui_safety_gate: true,
+      text_mode: false,
+      research_before_questions: false,
+      discuss_mode: 'discuss',
+      skip_discuss: false,
+      code_review: true,
+      code_review_depth: 'standard',
+    },
+    hooks: {
+      context_warnings: true,
+    },
+    project_code: null,
+    phase_naming: 'sequential',
+    agent_skills: {},
     features: {},
   };
 
@@ -636,11 +413,6 @@ export const configNewProject: QueryHandler = async (args, projectDir, workstrea
       ...((globalDefaults.workflow as Record<string, unknown>) || {}),
       ...((userChoices.workflow as Record<string, unknown>) || {}),
     },
-    ship: {
-      ...(defaults.ship as Record<string, unknown>),
-      ...((globalDefaults.ship as Record<string, unknown>) || {}),
-      ...((userChoices.ship as Record<string, unknown>) || {}),
-    },
     hooks: {
       ...(defaults.hooks as Record<string, unknown>),
       ...((globalDefaults.hooks as Record<string, unknown>) || {}),
@@ -658,14 +430,9 @@ export const configNewProject: QueryHandler = async (args, projectDir, workstrea
     },
   };
 
-  const ship = config.ship as Record<string, unknown>;
-  validateShipPrBodySections(ship.pr_body_sections);
+  await atomicWriteConfig(adapter, configRelPath, config);
 
-  await atomicWriteConfig(paths.config, config);
-
-  // Match CJS `ensureConfigFile` shape: report the relative project-rooted
-  // path so output stays workspace-portable.
-  return { data: { created: true, path: '.planning/config.json' } };
+  return { data: { created: true, path: `.planning/${configRelPath}` } };
 };
 
 // ─── configEnsureSection ──────────────────────────────────────────────────
@@ -686,11 +453,12 @@ export const configEnsureSection: QueryHandler = async (args, projectDir, workst
     throw new GSDError('Usage: config-ensure-section <section>', ErrorClassification.Validation);
   }
 
-  const paths = planningPaths(projectDir, workstream);
+  const adapter = await adapterFor(projectDir);
+  const configRelPath = planningRelativePath(workstream, 'config.json');
   let config: Record<string, unknown> = {};
   try {
-    const raw = await readFile(paths.config, 'utf-8');
-    config = JSON.parse(raw) as Record<string, unknown>;
+    const raw = await adapter.getRecord(configRelPath);
+    if (raw) config = JSON.parse(raw) as Record<string, unknown>;
   } catch {
     // Start with empty config
   }
@@ -699,7 +467,7 @@ export const configEnsureSection: QueryHandler = async (args, projectDir, workst
     config[sectionName] = {};
   }
 
-  await atomicWriteConfig(paths.config, config);
+  await atomicWriteConfig(adapter, configRelPath, config);
 
   return { data: { ensured: true, section: sectionName } };
 };

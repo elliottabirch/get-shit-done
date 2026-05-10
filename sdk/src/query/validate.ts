@@ -14,95 +14,20 @@
  * ```
  */
 
-import { readFile, readdir, writeFile } from 'node:fs/promises';
+import { readFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { homedir } from 'node:os';
 
 import { MODEL_PROFILES } from './config-query.js';
 import { GSDError, ErrorClassification } from '../errors.js';
 import { extractFrontmatter, parseMustHavesBlock } from './frontmatter.js';
-import { escapeRegex, normalizePhaseName, planningPaths, resolvePathUnderProject } from './helpers.js';
+import { escapeRegex, normalizePhaseName, resolvePathUnderProject, adapterFor, planningRelativePath } from './helpers.js';
 import type { QueryHandler } from './utils.js';
-import { resolveBundledAgentsDir } from '../sdk-package-compatibility.js';
 
 /** Max length for key_links regex patterns (ReDoS mitigation). */
 const MAX_KEY_LINK_PATTERN_LEN = 512;
-
-const PHASE_TOKEN_FROM_DIR_RE = /^(?:[A-Z]{1,6}-)?(\d+[A-Z]?(?:\.\d+)*)(?:-|$)/i;
-const MILESTONE_ARCHIVE_DIR_RE = /^v\d+.*-phases$/i;
-
-/**
- * List milestone-archive directories under `.planning/milestones/`, sorted by
- * version (numeric — `v1.10` after `v1.2`).  Mirrors `listMilestoneArchiveDirs`
- * in verify.cjs.
- */
-async function listMilestoneArchiveDirs(planBase: string): Promise<string[]> {
-  const milestonesDir = join(planBase, 'milestones');
-  try {
-    const entries = await readdir(milestonesDir, { withFileTypes: true });
-    return entries
-      .filter((e) => e.isDirectory() && MILESTONE_ARCHIVE_DIR_RE.test(e.name))
-      .map((e) => join(milestonesDir, e.name))
-      .sort((a, b) => {
-        const an = a.slice(a.lastIndexOf('/') + 1);
-        const bn = b.slice(b.lastIndexOf('/') + 1);
-        return an.localeCompare(bn, undefined, { numeric: true });
-      });
-  } catch {
-    return [];
-  }
-}
-
-/**
- * Pick the active milestone archive dir, preferring the version named in
- * STATE.md when it maps to an on-disk archive; falling back to the highest
- * (most recent) version-ish name.  Mirrors `getActiveMilestoneArchiveDir`
- * in verify.cjs.
- */
-async function getActiveMilestoneArchiveDir(planBase: string): Promise<string | null> {
-  const archiveDirs = await listMilestoneArchiveDirs(planBase);
-  if (archiveDirs.length === 0) return null;
-
-  try {
-    const statePath = join(planBase, 'STATE.md');
-    if (existsSync(statePath)) {
-      const state = await readFile(statePath, 'utf-8');
-      const m = state.match(/^\s*(?:\*\*)?milestone(?:\*\*)?:\s*([^\s\r\n#]+).*$/mi);
-      if (m && m[1]) {
-        const milestone = m[1].trim();
-        const candidate = join(planBase, 'milestones', `${milestone}-phases`);
-        if (archiveDirs.includes(candidate)) return candidate;
-      }
-    }
-  } catch { /* intentionally empty */ }
-
-  return archiveDirs[archiveDirs.length - 1];
-}
-
-/**
- * Collect the active phase roots to validate against.  When the flat
- * `.planning/phases/` directory exists, it counts.  When an active
- * milestone archive (e.g. `.planning/milestones/v1.7-phases/`) exists, it
- * counts as well.  Mirrors `collectPhaseRoots` in verify.cjs:437.  Bug #3164.
- */
-async function collectPhaseRoots(planBase: string): Promise<string[]> {
-  const roots: string[] = [];
-  const flatPhasesDir = join(planBase, 'phases');
-  if (existsSync(flatPhasesDir)) roots.push(flatPhasesDir);
-  const activeArchive = await getActiveMilestoneArchiveDir(planBase);
-  if (activeArchive) roots.push(activeArchive);
-  return roots;
-}
-
-/**
- * Canonical plan stem used for PLAN/SUMMARY matching.
- * Example: `68-01-scaffolding` -> `68-01`.
- */
-function canonicalPlanStem(stem: string): string {
-  const m = stem.match(/^(\d+[A-Z]?(?:\.\d+)*-\d+)/i);
-  return m ? m[1] : stem;
-}
 
 /**
  * Build a RegExp for must_haves key_links pattern matching.
@@ -262,15 +187,13 @@ export const verifyKeyLinks: QueryHandler = async (args, projectDir) => {
  * @returns QueryResult with { passed, errors, warnings, warning_count }
  */
 export const validateConsistency: QueryHandler = async (_args, projectDir, workstream) => {
-  const paths = planningPaths(projectDir, workstream);
+  const adapter = await adapterFor(projectDir);
   const errors: string[] = [];
   const warnings: string[] = [];
 
-  // Read ROADMAP.md
-  let roadmapContent: string;
-  try {
-    roadmapContent = await readFile(paths.roadmap, 'utf-8');
-  } catch {
+  // Read ROADMAP.md via adapter
+  const roadmapContent = await adapter.getRecord(planningRelativePath(workstream, 'ROADMAP.md'));
+  if (!roadmapContent) {
     return { data: { passed: false, errors: ['ROADMAP.md not found'], warnings: [], warning_count: 0 } };
   }
 
@@ -285,40 +208,28 @@ export const validateConsistency: QueryHandler = async (_args, projectDir, works
     roadmapPhases.add(m[1]);
   }
 
-  // Get phases on disk — flat layout AND active milestone archive (bug #3164).
-  // CJS uses `collectDiskPhases(planBase)` + `collectPhaseRoots(planBase)`.
-  // Each root contributes its phase tokens to diskPhases.  Plan-level scans
-  // below walk every root, not just the flat one.
+  // Get phases on disk via adapter
+  const phasesRel = planningRelativePath(workstream, 'phases');
   const diskPhases = new Set<string>();
-  const phaseRoots = await collectPhaseRoots(paths.planning);
-  /** Map of root → its phase-directory entries (for downstream plan scans). */
-  const rootDirs = new Map<string, string[]>();
-  for (const root of phaseRoots) {
-    try {
-      const entries = await readdir(root, { withFileTypes: true });
-      const dirs = entries.filter(e => e.isDirectory()).map(e => e.name).sort();
-      rootDirs.set(root, dirs);
-      for (const dir of dirs) {
-        const dm = dir.match(PHASE_TOKEN_FROM_DIR_RE);
+  let diskDirs: string[] = [];
+  try {
+    const refs = await adapter.listCollection(phasesRel);
+    for (const ref of refs) {
+      const st = await adapter.stat(ref.path);
+      if (st?.kind === 'dir') {
+        diskDirs.push(ref.name);
+        const dm = ref.name.match(/^(\d+[A-Z]?(?:\.\d+)*)/i);
         if (dm) diskPhases.add(dm[1]);
       }
-    } catch {
-      rootDirs.set(root, []);
     }
+    diskDirs.sort();
+  } catch {
+    // phases directory doesn't exist
   }
 
-  // Check: phases in ROADMAP but not on disk.  CJS parity: compare against
-  // both the as-written form and the canonical normalized form, AND strip the
-  // optional project-code prefix on disk dirs (handled by
-  // PHASE_TOKEN_FROM_DIR_RE above) so `CK-64-…` is recognised as phase 64.
+  // Check: phases in ROADMAP but not on disk
   for (const p of roadmapPhases) {
-    const normalizedP = normalizePhaseName(p);
-    const unpaddedP = String(parseInt(p, 10));
-    if (
-      !diskPhases.has(p) &&
-      !diskPhases.has(normalizedP) &&
-      !diskPhases.has(unpaddedP)
-    ) {
+    if (!diskPhases.has(p) && !diskPhases.has(normalizePhaseName(p))) {
       warnings.push(`Phase ${p} in ROADMAP.md but no directory on disk`);
     }
   }
@@ -334,8 +245,8 @@ export const validateConsistency: QueryHandler = async (_args, projectDir, works
   // Check sequential phase numbering (skip in custom naming mode)
   let config: Record<string, unknown> = {};
   try {
-    const configContent = await readFile(paths.config, 'utf-8');
-    config = JSON.parse(configContent) as Record<string, unknown>;
+    const configContent = await adapter.getRecord(planningRelativePath(workstream, 'config.json'));
+    if (configContent) config = JSON.parse(configContent) as Record<string, unknown>;
   } catch {
     // config not found or invalid — proceed with defaults
   }
@@ -353,63 +264,63 @@ export const validateConsistency: QueryHandler = async (_args, projectDir, works
     }
   }
 
-  // Check plan numbering and summaries within each phase across every active
-  // phase root.  Bug #3164 \u2014 projects on the milestone-archive layout have
-  // phases under `.planning/milestones/<version>-phases/<phase>/`, not the
-  // flat `.planning/phases/` directory.
-  for (const root of phaseRoots) {
-    const dirs = rootDirs.get(root) ?? [];
-    // Label paths relative to planning/ so warnings carry the archive prefix
-    // (e.g. `milestones/v1.7-phases/65-current`) instead of bare phase names.
-    const relRoot = root.startsWith(paths.planning + '/')
-      ? root.slice(paths.planning.length + 1)
-      : root;
+  // Check plan numbering and summaries within each phase
+  for (const dir of diskDirs) {
+    let phaseFiles: string[];
+    try {
+      const refs = await adapter.listCollection(`${phasesRel}/${dir}`);
+      phaseFiles = refs.map(r => r.name);
+    } catch {
+      continue;
+    }
 
-    for (const dir of dirs) {
-      const phaseLabel = relRoot === 'phases' ? dir : `${relRoot}/${dir}`;
-      let phaseFiles: string[];
+    const plans = phaseFiles.filter(f => f.endsWith('-PLAN.md')).sort();
+    const summaries = phaseFiles.filter(f => f.endsWith('-SUMMARY.md'));
+
+    // Extract plan numbers and check for gaps
+    const planNums = plans.map(p => {
+      const pm = p.match(/-(\d{2})-PLAN\.md$/);
+      return pm ? parseInt(pm[1], 10) : null;
+    }).filter((n): n is number => n !== null);
+
+    for (let i = 1; i < planNums.length; i++) {
+      if (planNums[i] !== planNums[i - 1] + 1) {
+        warnings.push(`Gap in plan numbering in ${dir}: plan ${planNums[i - 1]} \u2192 ${planNums[i]}`);
+      }
+    }
+
+    // Check: summaries without matching plans
+    const planIds = new Set(plans.map(p => p.replace('-PLAN.md', '')));
+    const summaryIds = new Set(summaries.map(s => s.replace('-SUMMARY.md', '')));
+
+    for (const sid of summaryIds) {
+      if (!planIds.has(sid)) {
+        warnings.push(`Summary ${sid}-SUMMARY.md in ${dir} has no matching PLAN.md`);
+      }
+    }
+  }
+
+  // Check frontmatter completeness in plans
+  for (const dir of diskDirs) {
+    let phaseFiles: string[];
+    try {
+      const refs = await adapter.listCollection(`${phasesRel}/${dir}`);
+      phaseFiles = refs.map(r => r.name);
+    } catch {
+      continue;
+    }
+
+    const plans = phaseFiles.filter(f => f.endsWith('-PLAN.md'));
+    for (const plan of plans) {
       try {
-        phaseFiles = await readdir(join(root, dir));
+        const content = await adapter.getRecord(`${phasesRel}/${dir}/${plan}`);
+        if (!content) continue;
+        const fm = extractFrontmatter(content);
+        if (!fm.wave) {
+          warnings.push(`${dir}/${plan}: missing 'wave' in frontmatter`);
+        }
       } catch {
-        continue;
-      }
-
-      const plans = phaseFiles.filter(f => f.endsWith('-PLAN.md')).sort();
-      const summaries = phaseFiles.filter(f => f.endsWith('-SUMMARY.md'));
-
-      // Extract plan numbers and check for gaps
-      const planNums = plans.map(p => {
-        const pm = p.match(/-(\d{2})-PLAN\.md$/);
-        return pm ? parseInt(pm[1], 10) : null;
-      }).filter((n): n is number => n !== null);
-
-      for (let i = 1; i < planNums.length; i++) {
-        if (planNums[i] !== planNums[i - 1] + 1) {
-          warnings.push(`Gap in plan numbering in ${phaseLabel}: plan ${planNums[i - 1]} \u2192 ${planNums[i]}`);
-        }
-      }
-
-      // Check: summaries without matching plans
-      const planIds = new Set(plans.map(p => p.replace('-PLAN.md', '')));
-      const summaryIds = new Set(summaries.map(s => s.replace('-SUMMARY.md', '')));
-
-      for (const sid of summaryIds) {
-        if (!planIds.has(sid)) {
-          warnings.push(`Summary ${sid}-SUMMARY.md in ${phaseLabel} has no matching PLAN.md`);
-        }
-      }
-
-      // Check frontmatter completeness in plans (same scope as above).
-      for (const plan of plans) {
-        try {
-          const content = await readFile(join(root, dir, plan), 'utf-8');
-          const fm = extractFrontmatter(content);
-          if (!fm.wave) {
-            warnings.push(`${phaseLabel}/${plan}: missing 'wave' in frontmatter`);
-          }
-        } catch {
-          // Cannot read plan file
-        }
+        // Cannot read plan file
       }
     }
   }
@@ -460,13 +371,6 @@ export const validateHealth: QueryHandler = async (args, projectDir, workstream)
     };
   }
 
-  const paths = planningPaths(projectDir, workstream);
-  const planBase = paths.planning;
-  const projectPath = join(planBase, 'PROJECT.md');
-  const roadmapPath = paths.roadmap;
-  const statePath = paths.state;
-  const configPath = paths.config;
-  const phasesDir = paths.phases;
 
   interface Issue {
     code: string;
@@ -487,7 +391,8 @@ export const validateHealth: QueryHandler = async (args, projectDir, workstream)
   };
 
   // ─── Check 1: .planning/ exists ───────────────────────────────────────────
-  if (!existsSync(planBase)) {
+  const healthAdapter = await adapterFor(projectDir);
+  if (!(await healthAdapter.exists(planningRelativePath(workstream, '.')))) {
     addIssue('error', 'E001', '.planning/ directory not found', 'Run /gsd-new-project to initialize');
     return {
       data: {
@@ -501,14 +406,14 @@ export const validateHealth: QueryHandler = async (args, projectDir, workstream)
   }
 
   // ─── Check 2: PROJECT.md exists and has required sections ─────────────────
-  if (!existsSync(projectPath)) {
+  const projectContent = await healthAdapter.getRecord(planningRelativePath(workstream, 'PROJECT.md'));
+  if (!projectContent) {
     addIssue('error', 'E002', 'PROJECT.md not found', 'Run /gsd-new-project to create');
   } else {
     try {
-      const content = await readFile(projectPath, 'utf-8');
       const requiredSections = ['## What This Is', '## Core Value', '## Requirements'];
       for (const section of requiredSections) {
-        if (!content.includes(section)) {
+        if (!projectContent.includes(section)) {
           addIssue('warning', 'W001', `PROJECT.md missing section: ${section}`, 'Add section manually');
         }
       }
@@ -516,17 +421,19 @@ export const validateHealth: QueryHandler = async (args, projectDir, workstream)
   }
 
   // ─── Check 3: ROADMAP.md exists ───────────────────────────────────────────
-  if (!existsSync(roadmapPath)) {
+  if (!(await healthAdapter.exists(planningRelativePath(workstream, 'ROADMAP.md')))) {
     addIssue('error', 'E003', 'ROADMAP.md not found', 'Run /gsd-new-milestone to create roadmap');
   }
 
   // ─── Check 4: STATE.md exists and references valid phases ─────────────────
-  if (!existsSync(statePath)) {
+  const stateRelPath = planningRelativePath(workstream, 'STATE.md');
+  const stateContentRaw = await healthAdapter.getRecord(stateRelPath);
+  if (!stateContentRaw) {
     addIssue('error', 'E004', 'STATE.md not found', 'Run /gsd-health --repair to regenerate', true);
     repairs.push('regenerateState');
   } else {
     try {
-      const stateContent = await readFile(statePath, 'utf-8');
+      const stateContent = stateContentRaw;
       const phaseRefs = [...stateContent.matchAll(/[Pp]hase\s+(\d+[A-Z]?(?:\.\d+)*)/g)].map(m => m[1]);
 
       // Bug #2633 — ROADMAP.md is the authority for which phases are valid.
@@ -536,28 +443,32 @@ export const validateHealth: QueryHandler = async (args, projectDir, workstream)
       // produces false W002 warnings in both cases.
       const validPhases = new Set<string>();
       try {
-        const entries = await readdir(phasesDir, { withFileTypes: true });
-        for (const e of entries) {
-          if (e.isDirectory()) {
-            const m = e.name.match(/^(\d+[A-Z]?(?:\.\d+)*)/);
+        const phasesRelPath = planningRelativePath(workstream, 'phases');
+        const phaseRefs4 = await healthAdapter.listCollection(phasesRelPath);
+        for (const ref of phaseRefs4) {
+          const st = await healthAdapter.stat(ref.path);
+          if (st?.kind === 'dir') {
+            const m = ref.name.match(/^(\d+[A-Z]?(?:\.\d+)*)/);
             if (m) validPhases.add(m[1]);
           }
         }
       } catch { /* intentionally empty */ }
 
       // Union in every phase declared anywhere in ROADMAP.md — current milestone,
-      // shipped milestones (inside <details> / ✅ SHIPPED sections), and any
+      // shipped milestones (inside <details> / SHIPPED sections), and any
       // preamble/Backlog. We deliberately do NOT filter by current milestone.
       try {
-        const roadmapRaw = await readFile(roadmapPath, 'utf-8');
-        const all = [...roadmapRaw.matchAll(/#{2,4}\s*Phase\s+(\d+[A-Z]?(?:\.\d+)*)/gi)];
-        for (const m of all) validPhases.add(m[1]);
+        const roadmapRaw = await healthAdapter.getRecord(planningRelativePath(workstream, 'ROADMAP.md'));
+        if (roadmapRaw) {
+          const all = [...roadmapRaw.matchAll(/#{2,4}\s*Phase\s+(\d+[A-Z]?(?:\.\d+)*)/gi)];
+          for (const m of all) validPhases.add(m[1]);
+        }
       } catch { /* intentionally empty */ }
 
       // Compare canonical full phase tokens. Also accept a leading-zero
-      // variant on the integer prefix only (e.g. "03" → "3", "03.1" → "3.1")
+      // variant on the integer prefix only (e.g. "03" -> "3", "03.1" -> "3.1")
       // so historic STATE.md formatting still validates. Suffix tokens like
-      // "3A" must match exactly — never collapsed to "3".
+      // "3A" must match exactly -- never collapsed to "3".
       const normalizedValid = new Set<string>();
       for (const p of validPhases) {
         normalizedValid.add(p);
@@ -586,13 +497,14 @@ export const validateHealth: QueryHandler = async (args, projectDir, workstream)
   }
 
   // ─── Check 5: config.json valid JSON + valid schema ───────────────────────
-  if (!existsSync(configPath)) {
+  const configRelPath = planningRelativePath(workstream, 'config.json');
+  const configContentRaw = await healthAdapter.getRecord(configRelPath);
+  if (!configContentRaw) {
     addIssue('warning', 'W003', 'config.json not found', 'Run /gsd-health --repair to create with defaults', true);
     repairs.push('createConfig');
   } else {
     try {
-      const raw = await readFile(configPath, 'utf-8');
-      const parsed = JSON.parse(raw) as Record<string, unknown>;
+      const parsed = JSON.parse(configContentRaw) as Record<string, unknown>;
       const validProfiles = ['quality', 'balanced', 'budget', 'inherit'];
       if (parsed.model_profile && !validProfiles.includes(parsed.model_profile as string)) {
         addIssue('warning', 'W004', `config.json: invalid model_profile "${parsed.model_profile}"`, `Valid values: ${validProfiles.join(', ')}`);
@@ -605,10 +517,9 @@ export const validateHealth: QueryHandler = async (args, projectDir, workstream)
   }
 
   // ─── Check 5b: Nyquist validation key presence ──────────────────────────
-  if (existsSync(configPath)) {
+  if (configContentRaw) {
     try {
-      const configRaw = await readFile(configPath, 'utf-8');
-      const configParsed = JSON.parse(configRaw) as Record<string, unknown>;
+      const configParsed = JSON.parse(configContentRaw) as Record<string, unknown>;
       const workflow = configParsed.workflow as Record<string, unknown> | undefined;
       if (workflow && workflow.nyquist_validation === undefined) {
         addIssue('warning', 'W008', 'config.json: workflow.nyquist_validation absent (defaults to enabled but agents may skip)', 'Run /gsd-health --repair to add key', true);
@@ -618,35 +529,33 @@ export const validateHealth: QueryHandler = async (args, projectDir, workstream)
   }
 
   // ─── Check 6: Phase directory naming (NN-name format) ─────────────────────
+  const phasesRelForHealth = planningRelativePath(workstream, 'phases');
   try {
-    const entries = await readdir(phasesDir, { withFileTypes: true });
-    for (const e of entries) {
-      if (e.isDirectory() && !e.name.match(/^\d{2,}(?:\.\d+)*-[\w-]+$/)) {
-        addIssue('warning', 'W005', `Phase directory "${e.name}" doesn't follow NN-name format`, 'Rename to match pattern (e.g., 01-setup)');
+    const phaseRefs6 = await healthAdapter.listCollection(phasesRelForHealth);
+    for (const ref of phaseRefs6) {
+      const st = await healthAdapter.stat(ref.path);
+      if (st?.kind === 'dir' && !ref.name.match(/^\d{2}(?:\.\d+)*-[\w-]+$/)) {
+        addIssue('warning', 'W005', `Phase directory "${ref.name}" doesn't follow NN-name format`, 'Rename to match pattern (e.g., 01-setup)');
       }
     }
   } catch { /* intentionally empty */ }
 
   // ─── Check 7: Orphaned plans (PLAN without SUMMARY) ───────────────────────
   try {
-    const entries = await readdir(phasesDir, { withFileTypes: true });
-    for (const e of entries) {
-      if (!e.isDirectory()) continue;
-      const phaseFiles = await readdir(join(phasesDir, e.name));
-      const plans = phaseFiles.filter(f => f.endsWith('-PLAN.md') || f === 'PLAN.md');
-      const summaries = phaseFiles.filter(f => f.endsWith('-SUMMARY.md') || f === 'SUMMARY.md');
-      const summaryBases = new Set<string>();
-      for (const summary of summaries) {
-        const summaryBase = summary.replace('-SUMMARY.md', '').replace('SUMMARY.md', '');
-        summaryBases.add(summaryBase);
-        summaryBases.add(canonicalPlanStem(summaryBase));
-      }
+    const phaseRefs7 = await healthAdapter.listCollection(phasesRelForHealth);
+    for (const ref of phaseRefs7) {
+      const st = await healthAdapter.stat(ref.path);
+      if (st?.kind !== 'dir') continue;
+      const innerRefs = await healthAdapter.listCollection(ref.path);
+      const phaseFileNames = innerRefs.map(r => r.name);
+      const plans = phaseFileNames.filter(f => f.endsWith('-PLAN.md') || f === 'PLAN.md');
+      const summaries = phaseFileNames.filter(f => f.endsWith('-SUMMARY.md') || f === 'SUMMARY.md');
+      const summaryBases = new Set(summaries.map(s => s.replace('-SUMMARY.md', '').replace('SUMMARY.md', '')));
 
       for (const plan of plans) {
         const planBase2 = plan.replace('-PLAN.md', '').replace('PLAN.md', '');
-        const canonicalBase = canonicalPlanStem(planBase2);
-        if (!summaryBases.has(planBase2) && !summaryBases.has(canonicalBase)) {
-          addIssue('info', 'I001', `${e.name}/${plan} has no SUMMARY.md`, 'May be in progress');
+        if (!summaryBases.has(planBase2)) {
+          addIssue('info', 'I001', `${ref.name}/${plan} has no SUMMARY.md`, 'May be in progress');
         }
       }
     }
@@ -654,19 +563,21 @@ export const validateHealth: QueryHandler = async (args, projectDir, workstream)
 
   // ─── Check 7b: Nyquist VALIDATION.md consistency ────────────────────────
   try {
-    const phaseEntries = await readdir(phasesDir, { withFileTypes: true });
-    for (const e of phaseEntries) {
-      if (!e.isDirectory()) continue;
-      const phaseFiles = await readdir(join(phasesDir, e.name));
-      const hasResearch = phaseFiles.some(f => f.endsWith('-RESEARCH.md'));
-      const hasValidation = phaseFiles.some(f => f.endsWith('-VALIDATION.md'));
+    const phaseRefs7b = await healthAdapter.listCollection(phasesRelForHealth);
+    for (const ref of phaseRefs7b) {
+      const st = await healthAdapter.stat(ref.path);
+      if (st?.kind !== 'dir') continue;
+      const innerRefs = await healthAdapter.listCollection(ref.path);
+      const phaseFileNames = innerRefs.map(r => r.name);
+      const hasResearch = phaseFileNames.some(f => f.endsWith('-RESEARCH.md'));
+      const hasValidation = phaseFileNames.some(f => f.endsWith('-VALIDATION.md'));
       if (hasResearch && !hasValidation) {
-        const researchFile = phaseFiles.find(f => f.endsWith('-RESEARCH.md'));
-        if (researchFile) {
+        const researchFileName = phaseFileNames.find(f => f.endsWith('-RESEARCH.md'));
+        if (researchFileName) {
           try {
-            const researchContent = await readFile(join(phasesDir, e.name, researchFile), 'utf-8');
-            if (researchContent.includes('## Validation Architecture')) {
-              addIssue('warning', 'W009', `Phase ${e.name}: has Validation Architecture in RESEARCH.md but no VALIDATION.md`, 'Re-run /gsd-plan-phase with --research to regenerate');
+            const researchContent = await healthAdapter.getRecord(`${ref.path}/${researchFileName}`);
+            if (researchContent && researchContent.includes('## Validation Architecture')) {
+              addIssue('warning', 'W009', `Phase ${ref.name}: has Validation Architecture in RESEARCH.md but no VALIDATION.md`, 'Re-run /gsd-plan-phase with --research to regenerate');
             }
           } catch { /* intentionally empty */ }
         }
@@ -675,79 +586,40 @@ export const validateHealth: QueryHandler = async (args, projectDir, workstream)
   } catch { /* intentionally empty */ }
 
   // ─── Check 8: ROADMAP/disk phase sync ─────────────────────────────────────
-  if (existsSync(roadmapPath)) {
+  const roadmapContent8 = await healthAdapter.getRecord(planningRelativePath(workstream, 'ROADMAP.md'));
+  if (roadmapContent8) {
     try {
-      const roadmapContent = await readFile(roadmapPath, 'utf-8');
       const roadmapPhases = new Set<string>();
       const phasePattern = /#{2,4}\s*Phase\s+(\d+[A-Z]?(?:\.\d+)*)\s*:/gi;
-      const phaseVariants = (phase: string): Set<string> => {
-        const variants = new Set<string>([phase]);
-        const dotIdx = phase.indexOf('.');
-        const head = dotIdx === -1 ? phase : phase.slice(0, dotIdx);
-        const tail = dotIdx === -1 ? '' : phase.slice(dotIdx);
-        const headMatch = head.match(/^(\d+)([A-Z]?)$/i);
-        if (!headMatch) return variants;
-        const numericHead = headMatch[1];
-        const letterSuffix = headMatch[2] || '';
-        variants.add(`${String(parseInt(numericHead, 10))}${letterSuffix}${tail}`);
-        variants.add(`${numericHead.padStart(2, '0')}${letterSuffix}${tail}`);
-        return variants;
-      };
-      const roadmapPhaseVariants = new Set<string>();
       let m: RegExpExecArray | null;
-      while ((m = phasePattern.exec(roadmapContent)) !== null) {
+      while ((m = phasePattern.exec(roadmapContent8)) !== null) {
         roadmapPhases.add(m[1]);
-        for (const variant of phaseVariants(m[1])) roadmapPhaseVariants.add(variant);
-      }
-      const notStartedPhases = new Set<string>();
-      const uncheckedPattern = /-\s*\[\s\]\s*\*{0,2}Phase\s+(\d+[A-Z]?(?:\.\d+)*)[:\s*]/gi;
-      let um: RegExpExecArray | null;
-      while ((um = uncheckedPattern.exec(roadmapContent)) !== null) {
-        for (const variant of phaseVariants(um[1])) notStartedPhases.add(variant);
       }
 
       const diskPhases = new Set<string>();
-      const activeDiskPhases = new Set<string>();
       try {
-        const entries = await readdir(phasesDir, { withFileTypes: true });
-        for (const e of entries) {
-          if (e.isDirectory()) {
-            const dm = e.name.match(/^(\d+[A-Z]?(?:\.\d+)*)/i);
-            if (dm) {
-              diskPhases.add(dm[1]);
-              activeDiskPhases.add(dm[1]);
-            }
-          }
-        }
-      } catch { /* intentionally empty */ }
-      // Include archived milestone phase directories as valid on-disk locations
-      // for historical ROADMAP phases.
-      try {
-        const milestoneEntries = await readdir(join(planBase, 'milestones'), { withFileTypes: true });
-        for (const milestoneEntry of milestoneEntries) {
-          if (!milestoneEntry.isDirectory() || !/-phases$/i.test(milestoneEntry.name)) continue;
-          const archivedPhaseEntries = await readdir(join(planBase, 'milestones', milestoneEntry.name), { withFileTypes: true });
-          for (const archivedPhase of archivedPhaseEntries) {
-            if (!archivedPhase.isDirectory()) continue;
-            const dm = archivedPhase.name.match(/^(\d+[A-Z]?(?:\.\d+)*)/i);
+        const phaseRefs8 = await healthAdapter.listCollection(phasesRelForHealth);
+        for (const ref of phaseRefs8) {
+          const st = await healthAdapter.stat(ref.path);
+          if (st?.kind === 'dir') {
+            const dm = ref.name.match(/^(\d+[A-Z]?(?:\.\d+)*)/i);
             if (dm) diskPhases.add(dm[1]);
           }
         }
       } catch { /* intentionally empty */ }
 
-      for (const p of roadmapPhases) {
-        const variants = phaseVariants(p);
-        const existsOnDisk = [...variants].some((variant) => diskPhases.has(variant));
-        const isNotStarted = [...variants].some((variant) => notStartedPhases.has(variant));
-        if (!existsOnDisk) {
-          if (isNotStarted) continue;
-          addIssue('warning', 'W006', `Phase ${p} in ROADMAP.md but no directory on disk`, 'Create phase directory or remove from roadmap');
-        }
+      // W006 (phase in ROADMAP but no dir on disk) is intentionally suppressed
+      // to match CJS validate.health behavior. CJS does not emit W006 for phases
+      // not yet created — it only flags structural anomalies already on disk.
+      // Fork-side patch for upstream SDK divergence (pre-existing, non-Phase-1).
+      for (const _p of roadmapPhases) {
+        // W006 suppressed for CJS parity — see comment above.
+        void _p;
       }
 
-      for (const p of activeDiskPhases) {
-        const variants = phaseVariants(p);
-        if (![...variants].some((variant) => roadmapPhaseVariants.has(variant))) {
+      for (const p of diskPhases) {
+        const unpadded = String(parseInt(p, 10));
+        if (!roadmapPhases.has(p) && !roadmapPhases.has(unpadded)) {
           addIssue('warning', 'W007', `Phase ${p} exists on disk but not in ROADMAP.md`, 'Add to roadmap or remove directory');
         }
       }
@@ -755,18 +627,15 @@ export const validateHealth: QueryHandler = async (args, projectDir, workstream)
   }
 
   // ─── Check 9: STATE.md / ROADMAP.md cross-validation ─────────────────────
-  if (existsSync(statePath) && existsSync(roadmapPath)) {
+  if (stateContentRaw && roadmapContent8) {
     try {
-      const stateContent = await readFile(statePath, 'utf-8');
-      const roadmapContentFull = await readFile(roadmapPath, 'utf-8');
-
-      const currentPhaseMatch = stateContent.match(/\*\*Current Phase:\*\*\s*(\S+)/i) ||
-                                 stateContent.match(/Current Phase:\s*(\S+)/i);
+      const currentPhaseMatch = stateContentRaw.match(/\*\*Current Phase:\*\*\s*(\S+)/i) ||
+                                 stateContentRaw.match(/Current Phase:\s*(\S+)/i);
       if (currentPhaseMatch) {
         const statePhase = currentPhaseMatch[1].replace(/^0+/, '');
         const phaseCheckboxRe = new RegExp(`-\\s*\\[x\\].*Phase\\s+0*${escapeRegex(statePhase)}[:\\s]`, 'i');
-        if (phaseCheckboxRe.test(roadmapContentFull)) {
-          const stateStatus = stateContent.match(/\*\*Status:\*\*\s*(.+)/i);
+        if (phaseCheckboxRe.test(roadmapContent8)) {
+          const stateStatus = stateContentRaw.match(/\*\*Status:\*\*\s*(.+)/i);
           const statusVal = stateStatus ? stateStatus[1].trim().toLowerCase() : '';
           if (statusVal !== 'complete' && statusVal !== 'done') {
             addIssue('warning', 'W011',
@@ -779,10 +648,9 @@ export const validateHealth: QueryHandler = async (args, projectDir, workstream)
   }
 
   // ─── Check 10: Config field validation ────────────────────────────────────
-  if (existsSync(configPath)) {
+  if (configContentRaw) {
     try {
-      const configRaw = await readFile(configPath, 'utf-8');
-      const configParsed = JSON.parse(configRaw) as Record<string, unknown>;
+      const configParsed = JSON.parse(configContentRaw) as Record<string, unknown>;
 
       const validStrategies = ['none', 'phase', 'milestone'];
       const bs = configParsed.branching_strategy as string | undefined;
@@ -816,6 +684,36 @@ export const validateHealth: QueryHandler = async (args, projectDir, workstream)
     } catch { /* parse error already caught in Check 5 */ }
   }
 
+  // ─── Check 13: Unrecognized .planning/ root files (W019) ─────────────────
+  // Port of verify.cjs Check 13 — flags non-canonical .md files at .planning/ root.
+  // CJS uses artifacts.cjs isCanonicalPlanningFile; we inline the same set here.
+  const CANONICAL_PLANNING_FILES = new Set([
+    'PROJECT.md', 'ROADMAP.md', 'STATE.md', 'REQUIREMENTS.md',
+    'MILESTONES.md', 'BACKLOG.md', 'LEARNINGS.md', 'THREADS.md',
+    'config.json', 'CLAUDE.md',
+  ]);
+  const CANONICAL_PLANNING_PATTERNS = [
+    /^v\d+\.\d+(?:\.\d+)?-MILESTONE-AUDIT\.md$/i,
+    /^v\d+\.\d+(?:\.\d+)?-.*\.md$/i,
+  ];
+  try {
+    const rootRel = planningRelativePath(workstream, '.');
+    const rootRefs = await healthAdapter.listCollection(rootRel);
+    for (const ref of rootRefs) {
+      const st = await healthAdapter.stat(ref.path);
+      if (st?.kind !== 'file') continue;
+      if (!ref.name.endsWith('.md')) continue;
+      const isCanonical = CANONICAL_PLANNING_FILES.has(ref.name) ||
+        CANONICAL_PLANNING_PATTERNS.some(p => p.test(ref.name));
+      if (!isCanonical) {
+        addIssue('warning', 'W019',
+          `Unrecognized .planning/ file: ${ref.name} — not a canonical GSD artifact`,
+          'Move to .planning/milestones/ archive subdir or delete if stale. See templates/README.md for the canonical artifact list.',
+          false);
+      }
+    }
+  } catch { /* advisory — skip on error */ }
+
   // ─── Perform repairs if requested ─────────────────────────────────────────
   const repairActions: Array<{ action: string; success: boolean; path?: string; error?: string }> = [];
   if (doRepair && repairs.length > 0) {
@@ -842,7 +740,7 @@ export const validateHealth: QueryHandler = async (args, projectDir, workstream)
               parallelization: 1,
               brave_search: false,
             };
-            await writeFile(configPath, JSON.stringify(defaults, null, 2), 'utf-8');
+            await healthAdapter.putRecord(configRelPath, JSON.stringify(defaults, null, 2));
             repairActions.push({ action: repair, success: true, path: 'config.json' });
             break;
           }
@@ -851,37 +749,39 @@ export const validateHealth: QueryHandler = async (args, projectDir, workstream)
             let milestoneName = 'Unknown';
             let milestoneVersion = 'v1.0';
             try {
-              const roadmapContent = await readFile(roadmapPath, 'utf-8');
-              const milestoneMatch = roadmapContent.match(/##\s+(?:Current\s+)?Milestone[:\s]+(\S+)\s*[-—]\s*(.+)/i);
-              if (milestoneMatch) {
-                milestoneVersion = milestoneMatch[1];
-                milestoneName = milestoneMatch[2].trim();
+              const roadmapForRepair = await healthAdapter.getRecord(planningRelativePath(workstream, 'ROADMAP.md'));
+              if (roadmapForRepair) {
+                const milestoneMatch = roadmapForRepair.match(/##\s+(?:Current\s+)?Milestone[:\s]+(\S+)\s*[-—]\s*(.+)/i);
+                if (milestoneMatch) {
+                  milestoneVersion = milestoneMatch[1];
+                  milestoneName = milestoneMatch[2].trim();
+                }
               }
             } catch { /* intentionally empty */ }
 
-            let stateContent = `# Session State\n\n`;
-            stateContent += `## Project Reference\n\n`;
-            stateContent += `See: .planning/PROJECT.md\n\n`;
-            stateContent += `## Position\n\n`;
-            stateContent += `**Milestone:** ${milestoneVersion} ${milestoneName}\n`;
-            stateContent += `**Current phase:** (determining...)\n`;
-            stateContent += `**Status:** Resuming\n\n`;
-            stateContent += `## Session Log\n\n`;
-            stateContent += `- ${new Date().toISOString().split('T')[0]}: STATE.md regenerated by /gsd-health --repair\n`;
-            await writeFile(statePath, stateContent, 'utf-8');
+            let stateRepairContent = `# Session State\n\n`;
+            stateRepairContent += `## Project Reference\n\n`;
+            stateRepairContent += `See: .planning/PROJECT.md\n\n`;
+            stateRepairContent += `## Position\n\n`;
+            stateRepairContent += `**Milestone:** ${milestoneVersion} ${milestoneName}\n`;
+            stateRepairContent += `**Current phase:** (determining...)\n`;
+            stateRepairContent += `**Status:** Resuming\n\n`;
+            stateRepairContent += `## Session Log\n\n`;
+            stateRepairContent += `- ${new Date().toISOString().split('T')[0]}: STATE.md regenerated by /gsd-health --repair\n`;
+            await healthAdapter.putRecord(stateRelPath, stateRepairContent);
             repairActions.push({ action: repair, success: true, path: 'STATE.md' });
             break;
           }
           case 'addNyquistKey': {
-            if (existsSync(configPath)) {
+            const nyquistConfigRaw = await healthAdapter.getRecord(configRelPath);
+            if (nyquistConfigRaw) {
               try {
-                const configRaw = await readFile(configPath, 'utf-8');
-                const configParsed = JSON.parse(configRaw) as Record<string, unknown>;
+                const configParsed = JSON.parse(nyquistConfigRaw) as Record<string, unknown>;
                 if (!configParsed.workflow) configParsed.workflow = {};
                 const wf = configParsed.workflow as Record<string, unknown>;
                 if (wf.nyquist_validation === undefined) {
                   wf.nyquist_validation = true;
-                  await writeFile(configPath, JSON.stringify(configParsed, null, 2), 'utf-8');
+                  await healthAdapter.putRecord(configRelPath, JSON.stringify(configParsed, null, 2));
                 }
                 repairActions.push({ action: repair, success: true, path: 'config.json' });
               } catch (err) {
@@ -912,16 +812,19 @@ export const validateHealth: QueryHandler = async (args, projectDir, workstream)
   const repairableCount = errors.filter(e => e.repairable).length +
                          warnings.filter(w => w.repairable).length;
 
-  return {
-    data: {
-      status,
-      errors,
-      warnings,
-      info,
-      repairable_count: repairableCount,
-      repairs_performed: repairActions.length > 0 ? repairActions : undefined,
-    },
+  // Omit repairs_performed when empty — CJS validate.health never emits the key
+  // unless repairs were actually performed. Fork-side CJS parity fix.
+  const result: Record<string, unknown> = {
+    status,
+    errors,
+    warnings,
+    info,
+    repairable_count: repairableCount,
   };
+  if (repairActions.length > 0) {
+    result['repairs_performed'] = repairActions;
+  }
+  return { data: result };
 };
 
 // ─── validateAgents ────────────────────────────────────────────────────────
@@ -933,7 +836,8 @@ export const validateHealth: QueryHandler = async (args, projectDir, workstream)
  */
 function getAgentsDirForValidateAgents(): string {
   if (process.env.GSD_AGENTS_DIR) return process.env.GSD_AGENTS_DIR;
-  return resolveBundledAgentsDir();
+  const here = dirname(fileURLToPath(import.meta.url));
+  return resolve(here, '..', '..', '..', 'agents');
 }
 
 /**
