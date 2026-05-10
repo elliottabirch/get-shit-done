@@ -23,13 +23,12 @@ Output: Milestone archived (roadmap + requirements), PROJECT.md evolved, git tag
 - @~/.claude/get-shit-done/templates/milestone-archive.md (archive template)
   </execution_context>
 
-<context>
-**Project files:**
-- `.planning/ROADMAP.md`
-- `.planning/REQUIREMENTS.md`
-- `.planning/STATE.md`
-- `.planning/PROJECT.md`
+<project_context>
+<!-- Injected by orchestrator via: gsd-sdk query state.load -->
+<!-- Provides: ROADMAP.md, REQUIREMENTS.md, STATE.md, PROJECT.md content -->
+</project_context>
 
+<context>
 **User input:**
 
 - Version: {{version}} (e.g., "1.0", "1.1", "2.0")

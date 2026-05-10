@@ -44,11 +44,14 @@ Output: [What artifacts will be created]
 @~/.claude/get-shit-done/references/checkpoints.md
 </execution_context>
 
-<context>
-@.planning/PROJECT.md
-@.planning/ROADMAP.md
-@.planning/STATE.md
+<project_context>
+<!-- Injected by orchestrator via: gsd-sdk query init.execute-phase -->
+<!-- Provides: PROJECT.md content, ROADMAP.md content, STATE.md content -->
+<!-- Prior SUMMARY refs resolved via: gsd-sdk query history-digest -->
+{project_context_placeholder}
+</project_context>
 
+<context>
 # Only reference prior plan SUMMARYs if genuinely needed:
 # - This plan uses types/exports from prior plan
 # - Prior plan made decision that affects this plan
@@ -215,11 +218,14 @@ Wave 3 runs after Waves 1 and 2. Pauses at checkpoint, orchestrator presents to 
 **Parallel-aware context:**
 
 ```markdown
-<context>
-@.planning/PROJECT.md
-@.planning/ROADMAP.md
-@.planning/STATE.md
+<project_context>
+<!-- Injected by orchestrator via: gsd-sdk query init.execute-phase -->
+<!-- Provides: PROJECT.md content, ROADMAP.md content, STATE.md content -->
+<!-- Prior SUMMARY refs resolved via: gsd-sdk query history-digest -->
+{project_context_placeholder}
+</project_context>
 
+<context>
 # Only include SUMMARY refs if genuinely needed:
 # - This plan imports types from prior plan
 # - Prior plan made decision affecting this plan
@@ -234,10 +240,9 @@ Wave 3 runs after Waves 1 and 2. Pauses at checkpoint, orchestrator presents to 
 
 **Bad pattern (creates false dependencies):**
 ```markdown
-<context>
-@.planning/phases/03-features/03-01-SUMMARY.md  # Just because it's earlier
-@.planning/phases/03-features/03-02-SUMMARY.md  # Reflexive chaining
-</context>
+<!-- DO NOT reference prior SUMMARYs reflexively: -->
+`@.planning/phases/03-features/03-01-SUMMARY.md`  # Just because it's earlier
+`@.planning/phases/03-features/03-02-SUMMARY.md`  # Reflexive chaining
 ```
 
 ---
@@ -322,11 +327,10 @@ Purpose: Self-contained user management that can run parallel to other features.
 Output: User model, API endpoints, and UI components.
 </objective>
 
-<context>
-@.planning/PROJECT.md
-@.planning/ROADMAP.md
-@.planning/STATE.md
-</context>
+<project_context>
+<!-- Injected by orchestrator via: gsd-sdk query init.execute-phase -->
+<!-- Provides: PROJECT.md, ROADMAP.md, STATE.md content -->
+</project_context>
 
 <tasks>
 <task type="auto">
@@ -387,12 +391,11 @@ Output: Working dashboard component.
 @~/.claude/get-shit-done/references/checkpoints.md
 </execution_context>
 
-<context>
-@.planning/PROJECT.md
-@.planning/ROADMAP.md
-@.planning/phases/03-features/03-01-SUMMARY.md
-@.planning/phases/03-features/03-02-SUMMARY.md
-</context>
+<project_context>
+<!-- Injected by orchestrator via: gsd-sdk query init.execute-phase -->
+<!-- Provides: PROJECT.md, ROADMAP.md, STATE.md content -->
+<!-- Prior SUMMARYs (03-01, 03-02) resolved via: gsd-sdk query history-digest -->
+</project_context>
 
 <tasks>
 <task type="auto">
