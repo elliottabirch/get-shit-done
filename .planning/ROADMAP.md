@@ -88,10 +88,17 @@ Plans:
   4. OQ-01 is resolved: `commitPlanningState` semantics for non-git backends are documented (no-op vs checkpoint snapshot) and adapter implementations match the documented behavior; the conformance harness has a stub test that will be filled in Phase 7.
 **Plans:** 5 plans
 Plans:
+**Wave 1**
 - [ ] 03-01-PLAN.md — Foundation: withTransaction impl + event types + phase-helpers scaffold + leak-grep write patterns
+
+**Wave 2** *(blocked on Wave 1 completion)*
 - [ ] 03-02-PLAN.md — State-mutation event handlers (10 handlers -> 3 adapter event families)
+
+**Wave 3** *(blocked on Wave 2 completion)*
 - [ ] 03-03-PLAN.md — State-mutation non-event handlers (8 field-update/maintenance handlers)
 - [ ] 03-04-PLAN.md — Phase-lifecycle handlers (13 handlers -> shared SDK helpers)
+
+**Wave 4** *(blocked on Wave 3 completion)*
 - [ ] 03-05-PLAN.md — Conformance tests + OQ-01 ADR + leak-grep verification
 
 ### Phase 4: Plug workflow leaks (top-10 + `<context>`-block class)
