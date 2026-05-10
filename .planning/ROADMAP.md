@@ -120,8 +120,8 @@ Plans:
 - [x] 04-02-PLAN.md — Migrate SDK production files to adapter (init, init-complex, config-mutation, workstream, validate, state-mutation residuals, 12 smaller files)
 
 **Wave 2** *(blocked on Wave 1 — workflows depend on SDK queries existing)*
-- [ ] 04-03-PLAN.md — Rewrite heavy-leaker workflows (map-codebase, execute-phase, quick, docs-update, import, spike, spike-wrap-up, session-report, graduation)
-- [ ] 04-04-PLAN.md — Rewrite remaining workflows + agents + commands + raw-git outliers (OQ-03)
+- [x] 04-03-PLAN.md — Rewrite heavy-leaker workflows (map-codebase, execute-phase, quick, docs-update, import, spike, spike-wrap-up, session-report, graduation)
+- [x] 04-04-PLAN.md — Rewrite remaining workflows + agents + commands + raw-git outliers (OQ-03)
 
 **Wave 3** *(blocked on Wave 2 — templates reference workflows that must be clean first)*
 - [ ] 04-05-PLAN.md — Template/reference context-block rewrites + REWRITE-CANDIDATE mitigation (OQ-04)
