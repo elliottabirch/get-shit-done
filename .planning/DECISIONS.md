@@ -507,3 +507,80 @@ of Phase 2 CONTEXT (explicit-first-arg DI shape); ROADMAP SC#2
 (byte-identical bundle preservation).
 
 ---
+
+## D-2026-05-10-01 — OQ-01 Resolution: commitPlanningState semantics (Phase 3)
+
+**Date:** 2026-05-10
+**Resolves:** OQ-01 (from SYNTHESIS.md §6 #1)
+
+**Question:** What does `commitPlanningState` mean for non-git backends?
+
+**Decision:** Every adapter MUST implement `commitPlanningState` as a meaningful
+save point. No no-op allowed.
+
+**Semantics per adapter:**
+- MarkdownAdapter: `git add` + `git commit` (current behavior, unchanged)
+- BeadsAdapter (Phase 6): bead-hash bookmark (record current state hash as a
+  named restore point; leverages bd's immutable content-addressed architecture)
+- Hypothetical SQLiteAdapter: WAL checkpoint + metadata row
+
+**Rationale:** The "always checkpoint" philosophy ensures that every workflow
+step that calls `commitPlanningState` produces an identifiable restore point
+regardless of backend. This enables `snapshot()/restore()` in Phase 5 to have
+a meaningful target on all adapters.
+
+**Impact:** `commitPlanningState` removed from `Capabilities` enum. All
+adapters must implement it. `hasCommitPlanningState` type guard removed.
+Call sites simplified (no capability check needed).
+
+**Alternatives considered:**
+
+1. **No-op for non-git adapters.** Rejected: loses the ability to restore
+   state at a workflow checkpoint — defeats the purpose of the primitive.
+2. **Capability-gated (status quo ante).** Rejected: call sites need
+   `if (hasCommitPlanningState(adapter))` guards everywhere; dead code
+   paths that never fire in production.
+3. **Optional with fallback.** Rejected: a fallback that silently does
+   nothing is semantically the same as a no-op — the save point is lost.
+
+**Cross-reference:** Phase 3 CONTEXT.md D-11, D-12, D-13.
+
+---
+
+## D-2026-05-10-02 — commitPlanningState promoted to required method (Phase 3)
+
+**Date:** 2026-05-10
+**Trigger:** OQ-01 resolution (D-2026-05-10-01) mandates all adapters
+provide meaningful save points.
+
+**Previous state:** `commitPlanningState` was capability-gated
+(`Capabilities.commitPlanningState: boolean`) with a companion type guard
+`hasCommitPlanningState()`. Call sites checked the capability before calling.
+
+**New state:** Required method on `StorageAdapter` (like `getRecord`,
+`putRecord`). The `commitPlanningState: boolean` field removed from
+`Capabilities` interface. The `hasCommitPlanningState` type guard removed.
+Call sites call directly without capability check.
+
+**Rationale:** Per OQ-01 resolution (D-2026-05-10-01), every adapter must
+provide meaningful save points. Making it required eliminates dead capability-
+check code and ensures adapters fail at compile time (TypeScript) rather than
+runtime if they omit the implementation.
+
+**Affected files:** `adapters/types.ts` (interface change),
+`adapters/markdown/index.ts` (capabilities field removed), all call sites
+that previously used `hasCommitPlanningState()` (simplified to direct call).
+
+**Alternatives considered:**
+
+1. **Keep capability-gated, just enforce non-no-op via conformance test.**
+   Rejected: conformance test catches at test time, not compile time;
+   TypeScript's type system is strictly better for this guarantee.
+2. **Soft-required (default no-op with console.warn).** Rejected: silent
+   degradation is the exact failure mode OQ-01 was raised to prevent.
+
+**Implication:** Phase 7 conformance test suite verifies that BeadsAdapter's
+`commitPlanningState` produces a recoverable checkpoint. The `it.todo` stub
+in `tests/conformance/commit-planning-state.test.ts` is the placeholder.
+
+---
