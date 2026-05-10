@@ -14,9 +14,5 @@
       "types": "./dist/markdown/index.d.ts"
     }
   },
-  "private": true,
-  "devDependencies": {
-    "@types/node": "^25.6.2",
-    "vitest": "^4.1.5"
-  }
+  "private": true
 }
