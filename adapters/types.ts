@@ -71,10 +71,11 @@ export interface StorageAdapter {
   restore(snapshotId: string): Promise<void>;
   withTransaction<T>(fn: () => Promise<T>): Promise<T>;
   // D-14 (Phase 5): discriminated overloads — 'root' narrows key to RootNamedDocKey.
-  putNamedDoc(category: 'root', key: RootNamedDocKey, body: string): Promise<void>;
-  putNamedDoc(category: Exclude<NamedDocCategory, 'root'>, key: string, body: string): Promise<void>;
-  getNamedDoc(category: 'root', key: RootNamedDocKey): Promise<string | null>;
-  getNamedDoc(category: Exclude<NamedDocCategory, 'root'>, key: string): Promise<string | null>;
+  // Phase 5 Plan 04: optional `opts.workstream` preserves Phase-4 workstream semantics.
+  putNamedDoc(category: 'root', key: RootNamedDocKey, body: string, opts?: { workstream?: string }): Promise<void>;
+  putNamedDoc(category: Exclude<NamedDocCategory, 'root'>, key: string, body: string, opts?: { workstream?: string }): Promise<void>;
+  getNamedDoc(category: 'root', key: RootNamedDocKey, opts?: { workstream?: string }): Promise<string | null>;
+  getNamedDoc(category: Exclude<NamedDocCategory, 'root'>, key: string, opts?: { workstream?: string }): Promise<string | null>;
   commitPlanningState(message: string, files?: string[]): Promise<void>;
 
   // Event families (D-01/D-04): grouped by mutation semantics

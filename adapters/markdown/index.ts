@@ -30,6 +30,7 @@ import type {
   RecordRef,
   RecordFilter,
   SectionMode,
+  NamedDocCategory,
 } from '../types.js';
 import { UnsupportedCapabilityError } from '../types.js';
 import type { AppendEvent, MutationEvent, SignalEvent } from '../state-event-types.js';
@@ -97,10 +98,10 @@ export class MarkdownAdapter implements StorageAdapter {
     record: true,
     section: true,
     frontmatter: true,
-    binaryAsset: false,
-    snapshot: true,
+    binaryAsset: true,     // D-17: Phase 5 Plan 04
+    snapshot: true,        // D-03: Phase 5 Plan 03
     transaction: true,
-    namedDoc: false,
+    namedDoc: true,        // D-16: Phase 5 Plan 04
     markdownLockfile: true,
   };
 
@@ -366,8 +367,12 @@ export class MarkdownAdapter implements StorageAdapter {
   // ─── Foundational primitives — defensive throws (D-10 / D-11) ────────────
   // Phase 5 replaces these with real implementations.
 
-  async writeBinaryAsset(_path: string, _bytes: Uint8Array): Promise<void> {
-    throw new UnsupportedCapabilityError('binaryAsset', this.name);
+  async writeBinaryAsset(path: string, bytes: Uint8Array): Promise<void> {
+    // D-17: raw bytes — no 'utf-8' encoding. Routes through resolveWrite so
+    // shadow-dir journal captures binary writes inside active transactions.
+    const abs = this.resolveWrite(path);
+    await mkdir(dirname(abs), { recursive: true });
+    await writeFile(abs, Buffer.from(bytes));
   }
 
   /** D-03: snapshot the current .planning/ tree into an opaque tmpdir; returns its path as the id. */
@@ -918,18 +923,26 @@ export class MarkdownAdapter implements StorageAdapter {
   }
 
   async putNamedDoc(
-    _category: string,
-    _key: string,
-    _body: string,
+    category: NamedDocCategory,
+    key: string,
+    body: string,
+    opts?: { workstream?: string },
   ): Promise<void> {
-    throw new UnsupportedCapabilityError('namedDoc', this.name);
+    const base = category === 'root' ? `${key}.md` : `${category}/${key}.md`;
+    const path = opts?.workstream ? `workstreams/${opts.workstream}/${base}` : base;
+    // Inherits shadow-dir redirection via resolveWrite inside putRecord (Plan 03).
+    await this.putRecord(path, body);
   }
 
   async getNamedDoc(
-    _category: string,
-    _key: string,
+    category: NamedDocCategory,
+    key: string,
+    opts?: { workstream?: string },
   ): Promise<string | null> {
-    throw new UnsupportedCapabilityError('namedDoc', this.name);
+    const base = category === 'root' ? `${key}.md` : `${category}/${key}.md`;
+    const path = opts?.workstream ? `workstreams/${opts.workstream}/${base}` : base;
+    // Inherits shadow-over-real merge via resolveRead inside getRecord (Plan 03).
+    return this.getRecord(path);
   }
 }
 
