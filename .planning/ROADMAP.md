@@ -124,7 +124,7 @@ Plans:
 - [x] 04-04-PLAN.md — Rewrite remaining workflows + agents + commands + raw-git outliers (OQ-03)
 
 **Wave 3** *(blocked on Wave 2 — templates reference workflows that must be clean first)*
-- [ ] 04-05-PLAN.md — Template/reference context-block rewrites + REWRITE-CANDIDATE mitigation (OQ-04)
+- [x] 04-05-PLAN.md — Template/reference context-block rewrites + REWRITE-CANDIDATE mitigation (OQ-04)
 - [x] 04-06-PLAN.md — SDK test fixture migration + verify.fat-skills handler (LEAKS-05)
 
 **Wave 4** *(blocked on all prior — gate activates only at zero-leak state)*
