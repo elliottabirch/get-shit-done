@@ -92,7 +92,7 @@ Plans:
 - [x] 03-01-PLAN.md — Foundation: withTransaction impl + event types + phase-helpers scaffold + leak-grep write patterns
 
 **Wave 2** *(blocked on Wave 1 completion)*
-- [ ] 03-02-PLAN.md — State-mutation event handlers (10 handlers -> 3 adapter event families)
+- [x] 03-02-PLAN.md — State-mutation event handlers (10 handlers -> 3 adapter event families)
 
 **Wave 3** *(blocked on Wave 2 completion)*
 - [ ] 03-03-PLAN.md — State-mutation non-event handlers (8 field-update/maintenance handlers)
@@ -115,7 +115,7 @@ Plans:
   5. The `verify.fat-skills` SDK query lists every non-router skill with line-count + leak-count and is wired into CI as an authoritative list (Rule 4 demotion tooling per SYNTHESIS §9 risk).
 **Plans:** 5 plans
 Plans:
-- [ ] 03-01-PLAN.md — Foundation: withTransaction impl + event types + phase-helpers scaffold + leak-grep write patterns
+- [x] 03-01-PLAN.md — Foundation: withTransaction impl + event types + phase-helpers scaffold + leak-grep write patterns
 - [ ] 03-02-PLAN.md — State-mutation event handlers (10 handlers -> 3 adapter event families)
 - [ ] 03-03-PLAN.md — State-mutation non-event handlers (8 field-update/maintenance handlers)
 - [ ] 03-04-PLAN.md — Phase-lifecycle handlers (13 handlers -> shared SDK helpers)
