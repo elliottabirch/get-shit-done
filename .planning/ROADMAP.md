@@ -116,8 +116,8 @@ Plans:
 **Plans:** 7 plans
 Plans:
 **Wave 1** *(foundation — no dependencies)*
-- [ ] 04-01-PLAN.md — Extend leak-grep + scaffold new SDK query handlers (codebase-docs, named-docs, debug-session, spike-sketch, thread-seed, milestone-ops, tmp-docs)
-- [ ] 04-02-PLAN.md — Migrate SDK production files to adapter (init, init-complex, config-mutation, workstream, validate, state-mutation residuals, 12 smaller files)
+- [x] 04-01-PLAN.md — Extend leak-grep + scaffold new SDK query handlers (codebase-docs, named-docs, debug-session, spike-sketch, thread-seed, milestone-ops, tmp-docs)
+- [x] 04-02-PLAN.md — Migrate SDK production files to adapter (init, init-complex, config-mutation, workstream, validate, state-mutation residuals, 12 smaller files)
 
 **Wave 2** *(blocked on Wave 1 — workflows depend on SDK queries existing)*
 - [ ] 04-03-PLAN.md — Rewrite heavy-leaker workflows (map-codebase, execute-phase, quick, docs-update, import, spike, spike-wrap-up, session-report, graduation)
