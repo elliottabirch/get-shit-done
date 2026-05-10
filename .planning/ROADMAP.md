@@ -89,7 +89,7 @@ Plans:
 **Plans:** 5 plans
 Plans:
 **Wave 1**
-- [ ] 03-01-PLAN.md — Foundation: withTransaction impl + event types + phase-helpers scaffold + leak-grep write patterns
+- [x] 03-01-PLAN.md — Foundation: withTransaction impl + event types + phase-helpers scaffold + leak-grep write patterns
 
 **Wave 2** *(blocked on Wave 1 completion)*
 - [ ] 03-02-PLAN.md — State-mutation event handlers (10 handlers -> 3 adapter event families)
