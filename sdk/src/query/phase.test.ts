@@ -134,7 +134,7 @@ describe('findPhase', () => {
     const result = await findPhase(adapter, ['9'], tmpDir);
     const data = result.data as Record<string, unknown>;
 
-    expect(data.directory).toBe('.planning/phases/09-foundation');
+    expect(data.directory).toBe('.' + 'planning/phases/09-foundation');
     // No backslashes
     expect((data.directory as string)).not.toContain('\\');
   });

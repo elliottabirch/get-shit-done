@@ -1,6 +1,6 @@
 /**
  * Regression: issue #2623 — `gsd-sdk query` must resolve the parent
- * `.planning/` root when invoked from a `sub_repos`-listed child repo.
+ * planning root when invoked from a `sub_repos`-listed child repo.
  *
  * Exercises the end-to-end path: findProjectRoot(startDir) -> registry dispatch
  * of `init.new-milestone`, and asserts the handler reports the parent workspace

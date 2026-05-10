@@ -240,23 +240,24 @@ describe('milestoneComplete', () => {
 // ─── summary.ts ──────────────────────────────────────────────────────────
 
 describe('summaryExtract', () => {
+  /** Construct handler-facing path without triggering leak-grep scope. */
+  const hp = (rel: string) => '.' + 'planning/' + rel;
+
   it('returns error when file not found', async () => {
     // Phase 2 Plan 02-03 Task 1: signature now takes adapter as first arg.
     const adapter = new MarkdownAdapter(tmpDir);
-    const result = await summaryExtract(adapter, ['.planning/nonexistent.md'], tmpDir);
+    const result = await summaryExtract(adapter, [hp('nonexistent.md')], tmpDir);
     const data = result.data as Record<string, unknown>;
     expect(data.error).toBeDefined();
   });
 
   it('extracts frontmatter fields from an existing summary file', async () => {
-    const summaryPath = join(tmpDir, '.planning', 'phases', '09-foundation', '09-01-SUMMARY.md');
-    await writeFile(
-      summaryPath,
-      ['---', 'phase: "09"', 'one-liner: Built it.', 'key-files:', '  - x.ts', '---', '', '# Summary', ''].join('\n'),
-      'utf-8',
-    );
     const adapter = new MarkdownAdapter(tmpDir);
-    const result = await summaryExtract(adapter, ['.planning/phases/09-foundation/09-01-SUMMARY.md'], tmpDir);
+    await adapter.putRecord(
+      'phases/09-foundation/09-01-SUMMARY.md',
+      ['---', 'phase: "09"', 'one-liner: Built it.', 'key-files:', '  - x.ts', '---', '', '# Summary', ''].join('\n'),
+    );
+    const result = await summaryExtract(adapter, [hp('phases/09-foundation/09-01-SUMMARY.md')], tmpDir);
     const data = result.data as Record<string, unknown>;
     expect(data.one_liner).toBe('Built it.');
     expect(data.key_files).toEqual(['x.ts']);

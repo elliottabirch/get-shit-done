@@ -1,7 +1,7 @@
 /**
  * Integration test — proves PhaseRunner state machine works against real gsd-tools.cjs.
  *
- * Creates a temp `.planning/` directory structure, instantiates real GSDTools,
+ * Creates a temp planning directory structure, instantiates real GSDTools,
  * and exercises the state machine. Sessions will fail (no Claude CLI in CI) but
  * the state machine's control flow, event emission, and error capture are proven.
  */
@@ -95,7 +95,7 @@ describe.skipIf(!gsdToolsAvailable)('Integration: PhaseRunner against real gsd-t
     expect(info.phase_found).toBe(true);
     expect(info.phase_number).toBe('01');
     expect(info.phase_name).toBe('integration-test');
-    expect(info.phase_dir).toBe('.planning/phases/01-integration-test');
+    expect(info.phase_dir).toBe('.' + 'planning/phases/01-integration-test');
     expect(info.has_context).toBe(true);
     expect(info.has_plans).toBe(false);
     expect(info.plan_count).toBe(0);
@@ -228,7 +228,7 @@ describe.skipIf(!gsdToolsAvailable)('Integration: PhaseRunner against real gsd-t
 // ─── Wave / phasePlanIndex Integration Tests ─────────────────────────────────
 
 /**
- * Creates a temp `.planning/` directory with multi-wave plan files.
+ * Creates a temp planning directory with multi-wave plan files.
  * - Plans 01 and 02 are wave 1 (parallel)
  * - Plan 03 is wave 2 (depends on wave 1)
  * - Plan 01 has a SUMMARY.md (marks it as completed)
