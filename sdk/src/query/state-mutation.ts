@@ -283,12 +283,9 @@ async function readModifyWriteStateMd(
   const statePath = planningPaths(projectDir, workstream).state;
   const lockPath = await acquireStateLock(statePath);
   try {
-    let content: string;
-    try {
-      content = await readFile(statePath, 'utf-8');
-    } catch {
-      content = '';
-    }
+    const adapter = await adapterFor(projectDir);
+    const stateRel = planningRelativePath(workstream, 'STATE.md');
+    const content = (await adapter.getRecord(stateRel)) ?? '';
     // Strip frontmatter before passing to modifier so that regex replacements
     // operate on body fields only (not on YAML frontmatter keys like 'status:').
     // syncStateFrontmatter rebuilds frontmatter from the modified body + disk.
@@ -296,7 +293,7 @@ async function readModifyWriteStateMd(
     const modified = await modifier(body);
     const synced = await syncStateFrontmatter(modified, projectDir);
     const normalized = normalizeMd(synced);
-    await writeFile(statePath, normalized, 'utf-8');
+    await adapter.putRecord(stateRel, normalized);
     return normalized;
   } finally {
     await releaseStateLock(lockPath);
@@ -320,15 +317,12 @@ export async function readModifyWriteStateMdFull(
   const statePath = planningPaths(projectDir, workstream).state;
   const lockPath = await acquireStateLock(statePath);
   try {
-    let content = '';
-    try {
-      content = await readFile(statePath, 'utf-8');
-    } catch {
-      /* missing */
-    }
+    const adapter = await adapterFor(projectDir);
+    const stateRel = planningRelativePath(workstream, 'STATE.md');
+    const content = (await adapter.getRecord(stateRel)) ?? '';
     const modified = await modifier(content);
     const synced = await syncStateFrontmatter(modified, projectDir);
-    await writeFile(statePath, normalizeMd(synced), 'utf-8');
+    await adapter.putRecord(stateRel, normalizeMd(synced));
   } finally {
     await releaseStateLock(lockPath);
   }
@@ -699,16 +693,20 @@ export const stateUpdateProgress: QueryHandler = async (_args, projectDir, works
   try {
     const progressAdapter = await adapterFor(projectDir);
     const isDirInMilestone = await getMilestonePhaseFilter(progressAdapter, workstream);
-    const entries = await readdir(phasesDir, { withFileTypes: true });
-    const phaseDirs = entries
-      .filter(e => e.isDirectory())
-      .map(e => e.name)
-      .filter(isDirInMilestone);
+    const phasesRel = planningRelativePath(workstream, 'phases');
+    const phaseRefs = await progressAdapter.listCollection(phasesRel);
+    const phaseDirNames: string[] = [];
+    for (const ref of phaseRefs) {
+      const st = await progressAdapter.stat(ref.path);
+      if (st?.kind === 'dir') phaseDirNames.push(ref.name);
+    }
+    const filteredDirs = phaseDirNames.filter(isDirInMilestone);
 
-    for (const dir of phaseDirs) {
-      const files = await readdir(join(phasesDir, dir));
-      totalPlans += files.filter(f => /-PLAN\.md$/i.test(f)).length;
-      totalSummaries += files.filter(f => /-SUMMARY\.md$/i.test(f)).length;
+    for (const dir of filteredDirs) {
+      const innerRefs = await progressAdapter.listCollection(`${phasesRel}/${dir}`);
+      const fileNames = innerRefs.map(r => r.name);
+      totalPlans += fileNames.filter(f => /-PLAN\.md$/i.test(f)).length;
+      totalSummaries += fileNames.filter(f => /-SUMMARY\.md$/i.test(f)).length;
     }
   } catch { /* phases dir may not exist */ }
 
@@ -984,15 +982,15 @@ export const statePlannedPhase: QueryHandler = async (args, projectDir, workstre
 
   const phaseLabel = String(phaseNumber).trim();
 
-  const statePath = planningPaths(projectDir, workstream).state;
-  if (!existsSync(statePath)) {
+  const adapter = await adapterFor(projectDir);
+  const stateRel = planningRelativePath(workstream, 'STATE.md');
+  if (!(await adapter.exists(stateRel))) {
     return { data: { error: 'STATE.md not found' } };
   }
 
   const today = new Date().toISOString().split('T')[0];
   const updated: string[] = [];
 
-  const adapter = await adapterFor(projectDir);
   await readModifyWriteState(adapter, workstream, (content) => {
     let result = stateReplaceField(content, 'Status', 'Ready to execute');
     if (result) { content = result; updated.push('Status'); }
@@ -1211,13 +1209,13 @@ export const stateSignalResume: QueryHandler = async (_args, projectDir, _workst
  * Port of `cmdStateValidate` from state.cjs.
  */
 export const stateValidate: QueryHandler = async (_args, projectDir, workstream) => {
-  const paths = planningPaths(projectDir, workstream);
-  const statePath = paths.state;
-  if (!existsSync(statePath)) {
+  const validateAdapter = await adapterFor(projectDir);
+  const stateRel = planningRelativePath(workstream, 'STATE.md');
+  const content = await validateAdapter.getRecord(stateRel);
+  if (!content) {
     return { data: { error: 'STATE.md not found' } };
   }
 
-  const content = await readFile(statePath, 'utf-8');
   const warnings: string[] = [];
   const drift: Record<string, unknown> = {};
 
@@ -1226,18 +1224,23 @@ export const stateValidate: QueryHandler = async (_args, projectDir, workstream)
   const totalPlansRaw = stateExtractField(content, 'Total Plans in Phase');
   const totalPlansInPhase = totalPlansRaw ? parseInt(totalPlansRaw, 10) : null;
 
-  const phasesDir = paths.phases;
+  const phasesRel = planningRelativePath(workstream, 'phases');
 
-  if (currentPhase && existsSync(phasesDir)) {
+  if (currentPhase && await validateAdapter.exists(phasesRel)) {
     const normalized = normalizePhaseName(currentPhase.replace(/\s+of\s+\d+.*/, '').trim());
     try {
-      const entries = readdirSync(phasesDir, { withFileTypes: true });
-      const phaseDir = entries.find(
-        e => e.isDirectory() && phaseTokenMatches(e.name, normalized),
-      );
-      if (phaseDir) {
-        const phaseDirPath = join(phasesDir, phaseDir.name);
-        const files = readdirSync(phaseDirPath);
+      const phaseRefs = await validateAdapter.listCollection(phasesRel);
+      let matchedRef: { name: string; path: string } | undefined;
+      for (const ref of phaseRefs) {
+        const st = await validateAdapter.stat(ref.path);
+        if (st?.kind === 'dir' && phaseTokenMatches(ref.name, normalized)) {
+          matchedRef = ref;
+          break;
+        }
+      }
+      if (matchedRef) {
+        const innerRefs = await validateAdapter.listCollection(matchedRef.path);
+        const files = innerRefs.map(r => r.name);
         const diskPlans = files.filter(f => /-PLAN\.md$/i.test(f)).length;
         const diskSummaries = files.filter(f => /-SUMMARY\.md$/i.test(f)).length;
 
@@ -1251,8 +1254,8 @@ export const stateValidate: QueryHandler = async (_args, projectDir, workstream)
         const verificationFiles = files.filter(f => f.includes('VERIFICATION') && f.endsWith('.md'));
         for (const vf of verificationFiles) {
           try {
-            const vContent = readFileSync(join(phaseDirPath, vf), 'utf-8');
-            if (/status:\s*passed/i.test(vContent) && /executing/i.test(status)) {
+            const vContent = await validateAdapter.getRecord(`${matchedRef.path}/${vf}`);
+            if (vContent && /status:\s*passed/i.test(vContent) && /executing/i.test(status)) {
               warnings.push(
                 `Status drift: STATE.md says "${status}" but ${vf} shows verification passed — phase may be complete`,
               );
@@ -1283,27 +1286,30 @@ export const stateValidate: QueryHandler = async (_args, projectDir, workstream)
  */
 export const stateSync: QueryHandler = async (args, projectDir, workstream) => {
   const verify = args.includes('--verify');
-  const paths = planningPaths(projectDir, workstream);
-  const statePath = paths.state;
-  if (!existsSync(statePath)) {
+  const syncAdapter2 = await adapterFor(projectDir);
+  const stateRel2 = planningRelativePath(workstream, 'STATE.md');
+  const content = await syncAdapter2.getRecord(stateRel2);
+  if (!content) {
     return { data: { error: 'STATE.md not found' } };
   }
 
-  const content = await readFile(statePath, 'utf-8');
   const changes: string[] = [];
   const today = new Date().toISOString().split('T')[0];
 
-  const phasesDir = paths.phases;
-  if (!existsSync(phasesDir)) {
+  const phasesRel2 = planningRelativePath(workstream, 'phases');
+  if (!(await syncAdapter2.exists(phasesRel2))) {
     return { data: { synced: true, changes: [], dry_run: verify } };
   }
 
   let entries: string[];
   try {
-    entries = readdirSync(phasesDir, { withFileTypes: true })
-      .filter(e => e.isDirectory())
-      .map(e => e.name)
-      .sort((a, b) => comparePhaseNum(a, b));
+    const phaseRefs2 = await syncAdapter2.listCollection(phasesRel2);
+    const dirNames: string[] = [];
+    for (const ref of phaseRefs2) {
+      const st = await syncAdapter2.stat(ref.path);
+      if (st?.kind === 'dir') dirNames.push(ref.name);
+    }
+    entries = dirNames.sort((a, b) => comparePhaseNum(a, b));
   } catch {
     return { data: { synced: true, changes: [], dry_run: verify } };
   }
@@ -1314,8 +1320,8 @@ export const stateSync: QueryHandler = async (args, projectDir, workstream) => {
   let highestIncompletePhaseplanCount = 0;
 
   for (const dir of entries) {
-    const dirPath = join(phasesDir, dir);
-    const files = readdirSync(dirPath);
+    const innerRefs2 = await syncAdapter2.listCollection(`${phasesRel2}/${dir}`);
+    const files = innerRefs2.map(r => r.name);
     const plans = files.filter(f => /-PLAN\.md$/i.test(f)).length;
     const summaries = files.filter(f => /-SUMMARY\.md$/i.test(f)).length;
     totalDiskPlans += plans;
@@ -1506,13 +1512,13 @@ export const statePrune: QueryHandler = async (args, projectDir, workstream) => 
   const keepRecent = parsedKeepRecent;
   const dryRun = parsed['dry-run'] === true;
 
-  const paths = planningPaths(projectDir, workstream);
-  const statePath = paths.state;
-  if (!existsSync(statePath)) {
+  const pruneAdapter = await adapterFor(projectDir);
+  const pruneStateRel = planningRelativePath(workstream, 'STATE.md');
+  const fullContent = await pruneAdapter.getRecord(pruneStateRel);
+  if (!fullContent) {
     return { data: { error: 'STATE.md not found' } };
   }
 
-  const fullContent = await readFile(statePath, 'utf-8');
   const currentPhaseRaw = stateExtractField(fullContent, 'Current Phase');
   const currentPhase = parseInt(String(currentPhaseRaw ?? ''), 10) || 0;
   const cutoff = currentPhase - keepRecent;
@@ -1549,7 +1555,6 @@ export const statePrune: QueryHandler = async (args, projectDir, workstream) => 
 
   const archived: PruneSection[] = [];
 
-  const pruneAdapter = await adapterFor(projectDir);
   const stateRelPath = planningRelativePath(workstream, 'STATE.md');
   const archiveRelPath = planningRelativePath(workstream, 'STATE-ARCHIVE.md');
 

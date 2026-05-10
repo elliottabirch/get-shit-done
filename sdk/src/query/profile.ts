@@ -22,7 +22,7 @@ import { join, basename, resolve } from 'node:path';
 import { homedir } from 'node:os';
 import { createHash, randomBytes } from 'node:crypto';
 
-import { planningPaths } from './helpers.js';
+import { planningPaths, adapterFor, planningRelativePath } from './helpers.js';
 import { GSDError, ErrorClassification } from '../errors.js';
 import type { QueryHandler } from './utils.js';
 import { buildScanSessionsProjects, getScanSessionsRoot } from './profile-scan-sessions.js';
@@ -105,12 +105,11 @@ export const learningsQuery: QueryHandler = async (args) => {
 };
 
 export const learningsCopy: QueryHandler = async (_args, projectDir, workstream) => {
-  const paths = planningPaths(projectDir, workstream);
-  const learningsPath = join(paths.planning, 'LEARNINGS.md');
-  if (!existsSync(learningsPath)) {
+  const adapter = await adapterFor(projectDir);
+  const content = await adapter.getRecord(planningRelativePath(workstream, 'LEARNINGS.md'));
+  if (!content) {
     return { data: { copied: false, total: 0, created: 0, skipped: 0, reason: 'No LEARNINGS.md found' } };
   }
-  const content = readFileSync(learningsPath, 'utf-8');
   const sourceProject = basename(resolve(projectDir));
   const sections = content.split(/^## /m).slice(1);
   let created = 0; let skipped = 0;

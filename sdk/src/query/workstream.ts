@@ -18,11 +18,11 @@
 
 import {
   existsSync, readdirSync, readFileSync, writeFileSync,
-  mkdirSync, renameSync, rmdirSync, unlinkSync,
+  renameSync, rmdirSync, unlinkSync, mkdirSync,
 } from 'node:fs';
 import { join, relative } from 'node:path';
 
-import { toPosixPath, stateExtractField } from './helpers.js';
+import { toPosixPath, stateExtractField, adapterFor } from './helpers.js';
 import { GSDError, ErrorClassification } from '../errors.js';
 import type { QueryHandler } from './utils.js';
 
@@ -108,11 +108,15 @@ export const workstreamGet: QueryHandler = async (_args, projectDir) => {
 };
 
 export const workstreamList: QueryHandler = async (_args, projectDir) => {
-  const dir = workstreamsDir(projectDir);
-  if (!existsSync(dir)) return { data: { mode: 'flat', workstreams: [], message: 'No workstreams — operating in flat mode' } };
+  const adapter = await adapterFor(projectDir);
+  if (!(await adapter.exists('workstreams'))) return { data: { mode: 'flat', workstreams: [], message: 'No workstreams — operating in flat mode' } };
   try {
-    const entries = readdirSync(dir, { withFileTypes: true });
-    const workstreams = entries.filter(e => e.isDirectory()).map(e => e.name);
+    const refs = await adapter.listCollection('workstreams');
+    const workstreams: string[] = [];
+    for (const ref of refs) {
+      const st = await adapter.stat(ref.path);
+      if (st?.kind === 'dir') workstreams.push(ref.name);
+    }
     return { data: { mode: 'workstream', workstreams, count: workstreams.length } };
   } catch {
     return { data: { mode: 'flat', workstreams: [], count: 0 } };
@@ -129,20 +133,20 @@ export const workstreamCreate: QueryHandler = async (args, projectDir) => {
   const slug = rawName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
   if (!slug) return { data: { created: false, reason: 'invalid workstream name — must contain at least one alphanumeric character' } };
 
-  const baseDir = planningRoot(projectDir);
-  if (!existsSync(baseDir)) {
+  const adapter = await adapterFor(projectDir);
+  if (!(await adapter.exists('.'))) {
     return { data: { created: false, reason: '.planning/ directory not found — run /gsd-new-project first' } };
   }
 
-  const wsRoot = workstreamsDir(projectDir);
-  const wsDir = join(wsRoot, slug);
+  const wsRelPath = `workstreams/${slug}`;
 
-  if (existsSync(wsDir) && existsSync(join(wsDir, 'STATE.md'))) {
-    return { data: { created: false, error: 'already_exists', workstream: slug, path: toPosixPath(relative(projectDir, wsDir)) } };
+  if (await adapter.exists(wsRelPath) && await adapter.exists(`${wsRelPath}/STATE.md`)) {
+    return { data: { created: false, error: 'already_exists', workstream: slug, path: `.planning/${wsRelPath}` } };
   }
 
-  mkdirSync(wsDir, { recursive: true });
-  mkdirSync(join(wsDir, 'phases'), { recursive: true });
+  // Create workstream structure via adapter (putRecord creates parent dirs)
+  await adapter.putRecord(`${wsRelPath}/.gitkeep`, '');
+  await adapter.putRecord(`${wsRelPath}/phases/.gitkeep`, '');
 
   const today = new Date().toISOString().split('T')[0];
   const stateContent = [
@@ -169,14 +173,13 @@ export const workstreamCreate: QueryHandler = async (args, projectDir) => {
     '',
   ].join('\n');
 
-  const statePath = join(wsDir, 'STATE.md');
-  if (!existsSync(statePath)) {
-    writeFileSync(statePath, stateContent, 'utf-8');
+  if (!(await adapter.exists(`${wsRelPath}/STATE.md`))) {
+    await adapter.putRecord(`${wsRelPath}/STATE.md`, stateContent);
   }
 
   setActiveWorkstream(projectDir, slug);
 
-  const relPath = toPosixPath(relative(projectDir, wsDir));
+  const relPath = `.planning/${wsRelPath}`;
   return {
     data: {
       created: true,
@@ -198,13 +201,13 @@ export const workstreamCreate: QueryHandler = async (args, projectDir) => {
  * pass-through copy. We write content verbatim (atomic write via writeFileSync)
  * so frontmatter fields and body stay in lockstep with the source.
  */
-function syncRootStateMirror(projectDir: string, name: string): void {
-  const wsStatePath = join(workstreamsDir(projectDir), name, 'STATE.md');
-  const rootStatePath = join(planningRoot(projectDir), 'STATE.md');
-  if (!existsSync(wsStatePath)) return;
+async function syncRootStateMirror(projectDir: string, name: string): Promise<void> {
+  const adapter = await adapterFor(projectDir);
+  const wsStateRel = `workstreams/${name}/STATE.md`;
   try {
-    const content = readFileSync(wsStatePath, 'utf-8');
-    writeFileSync(rootStatePath, content, 'utf-8');
+    const content = await adapter.getRecord(wsStateRel);
+    if (!content) return;
+    await adapter.putRecord('STATE.md', content);
   } catch { /* best-effort mirror; do not fail the switch */ }
 }
 
@@ -230,8 +233,9 @@ export const workstreamSet: QueryHandler = async (args, projectDir) => {
   }
 
   setActiveWorkstream(projectDir, name);
-  syncRootStateMirror(projectDir, name);
-  return { data: { active: name, set: true, mirror_synced: existsSync(join(wsDir, 'STATE.md')) } };
+  await syncRootStateMirror(projectDir, name);
+  const adapter = await adapterFor(projectDir);
+  return { data: { active: name, set: true, mirror_synced: await adapter.exists(`workstreams/${name}/STATE.md`) } };
 };
 
 export const workstreamStatus: QueryHandler = async (args, projectDir) => {

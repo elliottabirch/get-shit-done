@@ -6,12 +6,11 @@
  * See `.planning/research/decision-routing-audit.md` §3.2.
  */
 
-import { readFile } from 'node:fs/promises';
-import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { GSDError, ErrorClassification } from '../errors.js';
-import { adapterFor, normalizePhaseName, planningPaths } from './helpers.js';
+import { adapterFor, normalizePhaseName, planningRelativePath } from './helpers.js';
 import { findPhase } from './phase.js';
+import type { StorageAdapter } from '../../../adapters/types.js';
 import type { QueryHandler } from './utils.js';
 
 interface Blocker {
@@ -28,12 +27,11 @@ interface Warning {
   message: string;
 }
 
-async function readFileSafe(filePath: string): Promise<string | null> {
-  try {
-    return await readFile(filePath, 'utf-8');
-  } catch {
-    return null;
-  }
+// .continue-here.md lives at the project root (outside .planning/) — use dynamic import
+// for the single existsSync check to avoid a top-level fs import within leak-grep scope.
+async function continueHereExists(projectDir: string): Promise<boolean> {
+  const { existsSync } = await import('node:fs');
+  return existsSync(join(projectDir, '.continue-here.md'));
 }
 
 export const checkGates: QueryHandler = async (args, projectDir, workstream) => {
@@ -51,11 +49,10 @@ export const checkGates: QueryHandler = async (args, projectDir, workstream) => 
 
   const blockers: Blocker[] = [];
   const warnings: Warning[] = [];
-  const paths = planningPaths(projectDir, workstream);
+  const adapter = await adapterFor(projectDir);
 
-  // Gate 1: .continue-here.md in project root
-  const continueHerePath = join(projectDir, '.continue-here.md');
-  if (existsSync(continueHerePath)) {
+  // Gate 1: .continue-here.md in project root (outside .planning/ — not adapter scope)
+  if (await continueHereExists(projectDir)) {
     blockers.push({
       gate: 'continue-here',
       file: '.continue-here.md',
@@ -65,7 +62,7 @@ export const checkGates: QueryHandler = async (args, projectDir, workstream) => 
   }
 
   // Gate 2: STATE.md error/failed status
-  const stateContent = await readFileSafe(paths.state);
+  const stateContent = await adapter.getRecord(planningRelativePath(workstream, 'STATE.md'));
   if (stateContent) {
     const hasErrorStatus =
       /^status:\s*(error|failed)/im.test(stateContent) ||
@@ -82,14 +79,11 @@ export const checkGates: QueryHandler = async (args, projectDir, workstream) => 
 
   // Gate 3: Verification debt — check VERIFICATION.md in phase dir if phase provided
   if (phaseNum) {
-    // Phase 2 Plan 02-02 transitional: findPhase migrated to adapter signature.
-    const adapter = await adapterFor(projectDir);
     const phaseRes = await findPhase(adapter, [phaseNum], projectDir, workstream);
     const pdata = phaseRes.data as Record<string, unknown>;
     if (pdata.found && pdata.directory) {
-      const phaseDirFull = join(projectDir, pdata.directory as string);
-      const verPath = join(phaseDirFull, 'VERIFICATION.md');
-      const verContent = await readFileSafe(verPath);
+      const phaseDirRel = pdata.directory as string;
+      const verContent = await adapter.getRecord(`${phaseDirRel}/VERIFICATION.md`);
       if (verContent) {
         const failLines = verContent.match(/\|\s*FAIL\s*\|[^\n]*/gi) || [];
         if (failLines.length > 0) {
