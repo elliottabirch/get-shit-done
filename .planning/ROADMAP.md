@@ -116,7 +116,7 @@ Plans:
 **Plans:** 5 plans
 Plans:
 - [x] 03-01-PLAN.md — Foundation: withTransaction impl + event types + phase-helpers scaffold + leak-grep write patterns
-- [ ] 03-02-PLAN.md — State-mutation event handlers (10 handlers -> 3 adapter event families)
+- [x] 03-02-PLAN.md — State-mutation event handlers (10 handlers -> 3 adapter event families)
 - [ ] 03-03-PLAN.md — State-mutation non-event handlers (8 field-update/maintenance handlers)
 - [ ] 03-04-PLAN.md — Phase-lifecycle handlers (13 handlers -> shared SDK helpers)
 - [ ] 03-05-PLAN.md — Conformance tests + OQ-01 ADR + leak-grep verification
@@ -135,8 +135,8 @@ Plans:
   5. OQ-02, OQ-05, OQ-07 are resolved: ROADMAP.md / STATE.md / PROJECT.md write atomicity unit is "section"; sidecar paths (`.next-call-count`, `tmp/*`) are named methods not generic kv; scratch artifacts (`*-DISCUSS-CHECKPOINT.json`, `*-QUESTIONS.json`, `*-QUESTIONS.html`, `tmp/*`) are first-class types in the noun catalog. Each resolution is recorded in `.planning/DECISIONS.md`.
 **Plans:** 5 plans
 Plans:
-- [ ] 03-01-PLAN.md — Foundation: withTransaction impl + event types + phase-helpers scaffold + leak-grep write patterns
-- [ ] 03-02-PLAN.md — State-mutation event handlers (10 handlers -> 3 adapter event families)
+- [x] 03-01-PLAN.md — Foundation: withTransaction impl + event types + phase-helpers scaffold + leak-grep write patterns
+- [x] 03-02-PLAN.md — State-mutation event handlers (10 handlers -> 3 adapter event families)
 - [ ] 03-03-PLAN.md — State-mutation non-event handlers (8 field-update/maintenance handlers)
 - [ ] 03-04-PLAN.md — Phase-lifecycle handlers (13 handlers -> shared SDK helpers)
 - [ ] 03-05-PLAN.md — Conformance tests + OQ-01 ADR + leak-grep verification
@@ -155,7 +155,7 @@ Plans:
   5. UI-review and sketch workflows running against `BeadsAdapter` degrade gracefully (per BEADS-05) when `writeBinaryAsset` is unsupported — they log a warning and skip the binary write rather than crashing or corrupting state.
 **Plans:** 5 plans
 Plans:
-- [ ] 03-01-PLAN.md — Foundation: withTransaction impl + event types + phase-helpers scaffold + leak-grep write patterns
+- [x] 03-01-PLAN.md — Foundation: withTransaction impl + event types + phase-helpers scaffold + leak-grep write patterns
 - [ ] 03-02-PLAN.md — State-mutation event handlers (10 handlers -> 3 adapter event families)
 - [ ] 03-03-PLAN.md — State-mutation non-event handlers (8 field-update/maintenance handlers)
 - [ ] 03-04-PLAN.md — Phase-lifecycle handlers (13 handlers -> shared SDK helpers)
