@@ -774,7 +774,7 @@ export function createRegistry(opts?: {
   }
 
   // Phase 4 stub registrations: verbs referenced by rewritten workflows/agents
-  const stubHandler = async () => ({ error: 'stub — implementation pending' });
+  const stubHandler: QueryHandler = async () => ({ data: { error: 'stub — implementation pending' } });
   registry.register('debug.append-knowledge', stubHandler);
   registry.register('debug.create', stubHandler);
   registry.register('debug.get-resolved', stubHandler);
