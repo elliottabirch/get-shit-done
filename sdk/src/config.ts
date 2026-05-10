@@ -5,9 +5,9 @@
  * `buildNewProjectConfig()`.
  */
 
-import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { relPlanningPath } from './workstream-utils.js';
+import { adapterFor, planningRelativePath } from './query/helpers.js';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -125,26 +125,27 @@ export const CONFIG_DEFAULTS: GSDConfig = {
  * Throws on malformed JSON with a helpful error message.
  */
 export async function loadConfig(projectDir: string, workstream?: string): Promise<GSDConfig> {
-  const configPath = join(projectDir, relPlanningPath(workstream), 'config.json');
-  const rootConfigPath = join(projectDir, '.planning', 'config.json');
+  const adapter = await adapterFor(projectDir);
+  const configRel = planningRelativePath(workstream, 'config.json');
+  const configPath = join(projectDir, '.planning', configRel);
 
   let raw: string;
   let projectConfigFound = false;
-  try {
-    raw = await readFile(configPath, 'utf-8');
+  const content = await adapter.getRecord(configRel);
+  if (content !== null) {
+    raw = content;
     projectConfigFound = true;
-  } catch {
+  } else if (workstream) {
     // If workstream config missing, fall back to root config
-    if (workstream) {
-      try {
-        raw = await readFile(rootConfigPath, 'utf-8');
-        projectConfigFound = true;
-      } catch {
-        raw = '';
-      }
+    const rootContent = await adapter.getRecord('config.json');
+    if (rootContent !== null) {
+      raw = rootContent;
+      projectConfigFound = true;
     } else {
       raw = '';
     }
+  } else {
+    raw = '';
   }
 
   // Pre-project context: no .planning/config.json exists.
