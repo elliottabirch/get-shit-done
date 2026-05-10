@@ -1,5 +1,7 @@
 // StorageAdapter v1.0 interface — locked contract for pluggable storage backends.
 
+import type { AppendEvent, MutationEvent, SignalEvent } from './state-event-types.js';
+
 export interface RecordRef {
   path: string;
   name: string;
@@ -14,12 +16,11 @@ export interface Capabilities {
   record: true;
   section: true;
   frontmatter: true;
-  // Optional, closed enum of 6 (D-08)
+  // Optional, closed enum of 5 (D-08; commitPlanningState promoted to required per D-12)
   binaryAsset: boolean;
   snapshot: boolean;
   transaction: boolean;
   namedDoc: boolean;
-  commitPlanningState: boolean;
   markdownLockfile: boolean;
 }
 
@@ -54,10 +55,15 @@ export interface StorageAdapter {
   writeBinaryAsset(path: string, bytes: Uint8Array): Promise<void>;
   snapshot(): Promise<string>;
   restore(snapshotId: string): Promise<void>;
-  withTransaction(fn: () => Promise<void>): Promise<void>;
+  withTransaction<T>(fn: () => Promise<T>): Promise<T>;
   putNamedDoc(category: string, key: string, body: string): Promise<void>;
   getNamedDoc(category: string, key: string): Promise<string | null>;
   commitPlanningState(message: string, files?: string[]): Promise<void>;
+
+  // Event families (D-01/D-04): grouped by mutation semantics
+  recordStateAppend(event: AppendEvent): Promise<void>;
+  recordStateMutation(event: MutationEvent): Promise<void>;
+  recordStateSignal(event: SignalEvent): Promise<void>;
 }
 
 export class UnsupportedCapabilityError extends Error {
@@ -93,9 +99,6 @@ export function hasTransaction(a: StorageAdapter): a is StorageAdapter & { capab
 }
 export function hasNamedDoc(a: StorageAdapter): a is StorageAdapter & { capabilities: Capabilities & { namedDoc: true } } {
   return a.capabilities.namedDoc;
-}
-export function hasCommitPlanningState(a: StorageAdapter): a is StorageAdapter & { capabilities: Capabilities & { commitPlanningState: true } } {
-  return a.capabilities.commitPlanningState;
 }
 export function hasMarkdownLockfile(a: StorageAdapter): a is StorageAdapter & { capabilities: Capabilities & { markdownLockfile: true } } {
   return a.capabilities.markdownLockfile;

@@ -88,7 +88,6 @@ export class MarkdownAdapter implements StorageAdapter {
     snapshot: false,
     transaction: false,
     namedDoc: false,
-    commitPlanningState: true,
     markdownLockfile: true,
   };
 
@@ -315,8 +314,21 @@ export class MarkdownAdapter implements StorageAdapter {
     throw new UnsupportedCapabilityError('snapshot', this.name);
   }
 
-  async withTransaction(_fn: () => Promise<void>): Promise<void> {
+  async withTransaction<T>(_fn: () => Promise<T>): Promise<T> {
     throw new UnsupportedCapabilityError('transaction', this.name);
+  }
+
+  // Event family stubs (Phase 3 Plan 02 fills these)
+  async recordStateAppend(_event: import('../state-event-types.js').AppendEvent): Promise<void> {
+    throw new Error('recordStateAppend not yet implemented (Phase 3 Plan 02)');
+  }
+
+  async recordStateMutation(_event: import('../state-event-types.js').MutationEvent): Promise<void> {
+    throw new Error('recordStateMutation not yet implemented (Phase 3 Plan 02)');
+  }
+
+  async recordStateSignal(_event: import('../state-event-types.js').SignalEvent): Promise<void> {
+    throw new Error('recordStateSignal not yet implemented (Phase 3 Plan 02)');
   }
 
   async putNamedDoc(
