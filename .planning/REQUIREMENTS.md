@@ -42,11 +42,11 @@
 
 ### LEAKS — Plug workflow leaks (top-10 + `<context>`-block class)
 
-- [ ] **LEAKS-01**: Top-10 leaking workflows refactored to use only adapter calls (no Read/Write/Edit/cp/mv against `.planning/`): `plan-phase` (12 leaks), `execute-phase` (10), `spike` (10), `forensics` (9), `progress` (8), `verify-phase` (8), `sketch` (8), `discuss-phase` (8), `execute-plan` (8), `gsd-debugger` (7+)
-- [ ] **LEAKS-02**: `<context>`-block leak class mitigated — skill frontmatter `@.planning/...` references either intercepted at install time, rewritten to SDK calls, or explicitly declared as a documented exception (resolves OQ-4)
-- [ ] **LEAKS-03**: Two raw-git outliers (`spec-phase.md` Step 7, `eval-review.md` end) refactored to use `gsd-sdk query commit` instead of raw `git add`/`git commit` (resolves OQ-3; upstream issue filed)
-- [ ] **LEAKS-04**: CI gate enforces leak-grep (extended per Rubric R5 to catch `cp`, `mv`, `rm -rf`, `>>` against `.planning/`) so new direct I/O cannot regress
-- [ ] **LEAKS-05**: Rule-4 demotion tooling shipped — `verify.fat-skills` SDK query lists all non-router skills with line-count + leak count, surfaced in CI
+- [x] **LEAKS-01**: Top-10 leaking workflows refactored to use only adapter calls (no Read/Write/Edit/cp/mv against `.planning/`): `plan-phase` (12 leaks), `execute-phase` (10), `spike` (10), `forensics` (9), `progress` (8), `verify-phase` (8), `sketch` (8), `discuss-phase` (8), `execute-plan` (8), `gsd-debugger` (7+) (completed 2026-05-10, Plans 04-03/04-04/04-07)
+- [x] **LEAKS-02**: `<context>`-block leak class mitigated — skill frontmatter `@.planning/...` references either intercepted at install time, rewritten to SDK calls, or explicitly declared as a documented exception (resolves OQ-4) (completed 2026-05-10, Plan 04-05)
+- [x] **LEAKS-03**: Two raw-git outliers (`spec-phase.md` Step 7, `eval-review.md` end) refactored to use `gsd-sdk query commit` instead of raw `git add`/`git commit` (resolves OQ-3) (completed 2026-05-10, Plan 04-04)
+- [x] **LEAKS-04**: CI gate enforces leak-grep (extended per Rubric R5 to catch `cp`, `mv`, `rm -rf`, `>>` against `.planning/`) so new direct I/O cannot regress (completed 2026-05-10, Plan 04-07)
+- [x] **LEAKS-05**: Rule-4 demotion tooling shipped — `verify.fat-skills` SDK query lists all non-router skills with line-count + leak count, surfaced in CI (completed 2026-05-10, Plans 04-06/04-07)
 
 ### PRIMITIVES — Foundational primitive lift
 
@@ -158,11 +158,11 @@ Source phase scope: SYNTHESIS.md §7 (canonical, locked).
 | WRITES-02 | Phase 3 — Wire core write methods + recordStateEvent | this | Pending |
 | WRITES-03 | Phase 3 — Wire core write methods + recordStateEvent | this | Pending |
 | WRITES-04 | Phase 3 — Wire core write methods + recordStateEvent | this | Pending |
-| LEAKS-01 | Phase 4 — Plug workflow leaks (top-10 + `<context>`-block class) | this | Pending |
+| LEAKS-01 | Phase 4 — Plug workflow leaks (top-10 + `<context>`-block class) | this | Complete (Plans 04-03/04-04/04-07) |
 | LEAKS-02 | Phase 4 — Plug workflow leaks (top-10 + `<context>`-block class) | this | Pending |
 | LEAKS-03 | Phase 4 — Plug workflow leaks (top-10 + `<context>`-block class) | this | Pending |
-| LEAKS-04 | Phase 4 — Plug workflow leaks (top-10 + `<context>`-block class) | this | Pending |
-| LEAKS-05 | Phase 4 — Plug workflow leaks (top-10 + `<context>`-block class) | this | Pending |
+| LEAKS-04 | Phase 4 — Plug workflow leaks (top-10 + `<context>`-block class) | this | Complete (Plan 04-07) |
+| LEAKS-05 | Phase 4 — Plug workflow leaks (top-10 + `<context>`-block class) | this | Complete (Plans 04-06/04-07) |
 | PRIMITIVES-01 | Phase 5 — Foundational primitive lift | this | Pending |
 | PRIMITIVES-02 | Phase 5 — Foundational primitive lift | this | Pending |
 | PRIMITIVES-03 | Phase 5 — Foundational primitive lift | this | Pending |
