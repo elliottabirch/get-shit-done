@@ -6,8 +6,9 @@
  * advance-plan, record-metric, update-progress, add-decision, add-blocker,
  * resolve-blocker, record-session, validate, sync, prune, signal-waiting, signal-resume.
  *
- * All writes go through readModifyWriteStateMd which acquires a lockfile,
- * applies the modifier, syncs frontmatter, normalizes markdown, and writes.
+ * All writes go through the adapter (readModifyWriteState from phase-helpers.ts
+ * or direct adapter.withTransaction + getRecord/putRecord). Legacy
+ * readModifyWriteStateMd is deprecated — retained for external callers.
  *
  * @example
  * ```typescript
@@ -33,6 +34,7 @@ import {
   normalizePhaseName,
   phaseTokenMatches,
   planningPaths,
+  planningRelativePath,
   normalizeMd,
   stateExtractField,
 } from './helpers.js';
@@ -175,6 +177,10 @@ async function isLockProcessDead(lockPath: string): Promise<boolean | null> {
  * 200ms + jitter delay. Cleans stale locks when the holder PID is dead, or when
  * the lock file is older than 10 seconds (existing heuristic).
  *
+ * @deprecated Phase 3 migration complete. Locking is now internalized into
+ * MarkdownAdapter.withTransaction. Retained for external callers.
+ * Will be removed when all consumers migrate.
+ *
  * @param statePath - Path to STATE.md
  * @returns Path to the lockfile
  */
@@ -222,6 +228,10 @@ export async function acquireStateLock(statePath: string): Promise<string> {
 /**
  * Release a lockfile.
  *
+ * @deprecated Phase 3 migration complete. Internalized into
+ * MarkdownAdapter.withTransaction. Retained for external callers.
+ * Will be removed when all consumers migrate.
+ *
  * @param lockPath - Path to the lockfile to release
  */
 export async function releaseStateLock(lockPath: string): Promise<void> {
@@ -256,6 +266,10 @@ export async function syncStateFrontmatter(content: string, projectDir: string):
  * Atomic read-modify-write for STATE.md.
  *
  * Holds lock across the entire read -> transform -> write cycle.
+ *
+ * @deprecated Phase 3 migration complete. Use readModifyWriteState from phase-helpers.ts
+ * or direct adapter.withTransaction + getRecord/putRecord. Retained temporarily for
+ * any callers outside this file. Will be removed in Phase 4.
  *
  * @param projectDir - Project root directory
  * @param modifier - Function to transform STATE.md content
@@ -293,6 +307,10 @@ async function readModifyWriteStateMd(
  * Full-file read-modify-write for STATE.md — matches CJS `readModifyWriteStateMd` in `state.cjs`
  * (modifier receives entire file content including YAML frontmatter).
  * Used by milestone completion and other flows that replace body fields the same way as the CLI.
+ *
+ * @deprecated Phase 3 migration complete. Use readModifyWriteState from phase-helpers.ts
+ * or direct adapter.withTransaction + getRecord/putRecord. Retained temporarily for
+ * any callers outside this file. Will be removed in Phase 4.
  */
 export async function readModifyWriteStateMdFull(
   projectDir: string,
@@ -701,7 +719,8 @@ export const stateUpdateProgress: QueryHandler = async (_args, projectDir, works
   const progressStr = `[${bar}] ${percent}%`;
 
   let updated = false;
-  await readModifyWriteStateMd(projectDir, (content) => {
+  const adapter = await adapterFor(projectDir);
+  await readModifyWriteState(adapter, workstream, (content) => {
     const boldProgressPattern = /(\*\*Progress:\*\*\s*).*/i;
     const plainProgressPattern = /^(Progress:\s*).*/im;
     if (boldProgressPattern.test(content)) {
@@ -713,7 +732,7 @@ export const stateUpdateProgress: QueryHandler = async (_args, projectDir, works
       return content.replace(plainProgressPattern, (_match, prefix: string) => `${prefix}${progressStr}`);
     }
     return content;
-  }, workstream);
+  }, projectDir);
 
   if (updated) {
     return { data: { updated: true, percent, completed: totalSummaries, total: totalPlans, bar: progressStr } };
@@ -881,8 +900,8 @@ function formatRoadmapEvolutionEntry(opts: {
  * Throws `GSDError` with `ErrorClassification.Validation` when required
  * inputs are missing or `--action` is not in the allowed set.
  *
- * Atomicity: goes through `readModifyWriteStateMd` which holds a lockfile
- * across read -> transform -> write. Matches sibling mutation handlers.
+ * Atomicity: goes through adapter.recordStateAppend which uses
+ * adapter.withTransaction for atomic read-modify-write.
  */
 export const stateAddRoadmapEvolution: QueryHandler = async (args, projectDir, _workstream) => {
   const parsed = parseNamedArgs(args, ['phase', 'action', 'note', 'after'], ['urgent']);
@@ -1049,14 +1068,11 @@ export const stateMilestoneSwitch: QueryHandler = async (args, projectDir, works
   }
 
   const today = new Date().toISOString().split('T')[0]!;
-  const statePath = planningPaths(projectDir, workstream).state;
-  const lockPath = await acquireStateLock(statePath);
+  const adapter = await adapterFor(projectDir);
+  const statePath = planningRelativePath(workstream, 'STATE.md');
 
-  try {
-    let content = '';
-    try {
-      content = await readFile(statePath, 'utf-8');
-    } catch { /* STATE.md may not exist yet */ }
+  return await adapter.withTransaction(async () => {
+    const content = (await adapter.getRecord(statePath)) ?? '';
 
     const existingFm = extractFrontmatter(content);
     const body = stripFrontmatter(content);
@@ -1106,7 +1122,7 @@ export const stateMilestoneSwitch: QueryHandler = async (args, projectDir, works
 
     const yamlStr = reconstructFrontmatter(fm);
     const assembled = `---\n${yamlStr}\n---\n\n${newBody.replace(/^\n+/, '')}`;
-    await writeFile(statePath, normalizeMd(assembled), 'utf-8');
+    await adapter.putRecord(statePath, normalizeMd(assembled));
 
     return {
       data: {
@@ -1116,9 +1132,7 @@ export const stateMilestoneSwitch: QueryHandler = async (args, projectDir, works
         status: 'planning',
       },
     };
-  } finally {
-    await releaseStateLock(lockPath);
-  }
+  });
 };
 
 // ─── parseNamedArgs (matches gsd-tools.cjs) ───────────────────────────────
@@ -1357,7 +1371,8 @@ export const stateSync: QueryHandler = async (args, projectDir, workstream) => {
     return { data: { synced: false, changes, dry_run: true } };
   }
 
-  await readModifyWriteStateMd(projectDir, (body) => runModifier(body), workstream);
+  const syncAdapter = await adapterFor(projectDir);
+  await readModifyWriteState(syncAdapter, workstream, (body) => runModifier(body), projectDir);
 
   return { data: { synced: true, changes, dry_run: false } };
 };
@@ -1534,29 +1549,37 @@ export const statePrune: QueryHandler = async (args, projectDir, workstream) => 
 
   const archived: PruneSection[] = [];
 
-  await readModifyWriteStateMd(projectDir, (b) => {
-    const result = prunePass(b, cutoff);
-    archived.push(...result.archivedSections);
-    return result.newContent;
-  }, workstream);
+  const pruneAdapter = await adapterFor(projectDir);
+  const stateRelPath = planningRelativePath(workstream, 'STATE.md');
+  const archiveRelPath = planningRelativePath(workstream, 'STATE-ARCHIVE.md');
 
-  const archivePath = join(paths.planning, 'STATE-ARCHIVE.md');
+  await pruneAdapter.withTransaction(async () => {
+    // Read STATE.md body, apply prune, write back with frontmatter sync
+    const stateContent = (await pruneAdapter.getRecord(stateRelPath)) ?? '';
+    const stateBody = stripFrontmatter(stateContent);
+    const pruneResult = prunePass(stateBody, cutoff);
+    archived.push(...pruneResult.archivedSections);
+
+    // Write pruned STATE.md with frontmatter sync
+    const synced = await syncStateFrontmatter(pruneResult.newContent, projectDir);
+    await pruneAdapter.putRecord(stateRelPath, normalizeMd(synced));
+
+    // Write archived sections to STATE-ARCHIVE.md if any were pruned
+    if (archived.length > 0) {
+      const timestamp = new Date().toISOString().split('T')[0];
+      let archiveContent = (await pruneAdapter.getRecord(archiveRelPath)) ?? '';
+      if (!archiveContent) {
+        archiveContent = '# STATE Archive\n\nPruned entries from STATE.md. Recoverable but no longer loaded into agent context.\n\n';
+      }
+      archiveContent += `## Pruned ${timestamp} (phases 1-${cutoff}, kept recent ${keepRecent})\n\n`;
+      for (const section of archived) {
+        archiveContent += `### ${section.section}\n\n${section.lines.join('\n')}\n\n`;
+      }
+      await pruneAdapter.putRecord(archiveRelPath, archiveContent);
+    }
+  });
+
   const totalPruned = archived.reduce((sum, s) => sum + s.count, 0);
-
-  if (archived.length > 0) {
-    const timestamp = new Date().toISOString().split('T')[0];
-    let archiveContent = '';
-    if (existsSync(archivePath)) {
-      archiveContent = readFileSync(archivePath, 'utf-8');
-    } else {
-      archiveContent = '# STATE Archive\n\nPruned entries from STATE.md. Recoverable but no longer loaded into agent context.\n\n';
-    }
-    archiveContent += `## Pruned ${timestamp} (phases 1-${cutoff}, kept recent ${keepRecent})\n\n`;
-    for (const section of archived) {
-      archiveContent += `### ${section.section}\n\n${section.lines.join('\n')}\n\n`;
-    }
-    writeFileSync(archivePath, archiveContent, 'utf-8');
-  }
 
   return {
     data: {
