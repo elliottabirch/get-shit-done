@@ -17,10 +17,10 @@
  * ```
  */
 
-import { writeFile } from 'node:fs/promises';
 import { GSDError, ErrorClassification } from '../errors.js';
 import { resolveGsdToolsPath } from '../sdk-package-compatibility.js';
 import {
+  adapterFor,
   escapeRegex,
   normalizePhaseName,
   phaseTokenMatches,
@@ -975,15 +975,10 @@ export const requirementsMarkComplete: QueryHandler = async (args, projectDir, w
     throw new GSDError('no valid requirement IDs found', ErrorClassification.Validation);
   }
 
-  // Phase 2 D-14: read paths migrated to adapter; writeFile below remains
-  // unchanged (Phase 3 territory). The handler signature stays QueryHandler
-  // (no adapter first-arg) because requirementsMarkComplete is a write-side
-  // handler — Phase 3 owns the full migration including the writeFile.
-  // Until then, we construct an adapter inline for the read calls.
-  const { MarkdownAdapter } = await import('../../../adapters/markdown/index.js');
-  const reqAdapter: StorageAdapter = new MarkdownAdapter(projectDir);
-  const paths = planningPaths(projectDir, workstream);
-  const reqRaw = await reqAdapter.getRecord(planningRelativePath(workstream, 'REQUIREMENTS.md'));
+  // Phase 4 Plan 02: fully migrated read+write to adapter.
+  const reqAdapter = await adapterFor(projectDir);
+  const reqRelPath = planningRelativePath(workstream, 'REQUIREMENTS.md');
+  const reqRaw = await reqAdapter.getRecord(reqRelPath);
   if (reqRaw === null) {
     return { data: { updated: false, reason: 'REQUIREMENTS.md not found', ids: reqIds } };
   }
@@ -1025,7 +1020,7 @@ export const requirementsMarkComplete: QueryHandler = async (args, projectDir, w
   }
 
   if (updated.length > 0) {
-    await writeFile(paths.requirements, reqContent, 'utf-8');
+    await reqAdapter.putRecord(reqRelPath, reqContent);
   }
 
   return {

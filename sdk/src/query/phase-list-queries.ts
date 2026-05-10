@@ -3,8 +3,6 @@
  * for agents (replaces shell `ls` / `find` patterns). SDK-only; no gsd-tools.cjs mirror.
  */
 
-import { readFile, readdir } from 'node:fs/promises';
-import { join, relative } from 'node:path';
 import { GSDError, ErrorClassification } from '../errors.js';
 import { extractFrontmatter } from './frontmatter.js';
 import {
@@ -12,22 +10,26 @@ import {
   comparePhaseNum,
   phaseTokenMatches,
   toPosixPath,
-  planningPaths,
+  adapterFor,
+  planningRelativePath,
 } from './helpers.js';
+import type { StorageAdapter } from '../../../adapters/types.js';
 import type { QueryHandler } from './utils.js';
 
-/** Resolve `.planning/phases/<dir>` for a phase token, or null. */
-async function resolvePhaseDir(phase: string, projectDir: string, workstream?: string): Promise<string | null> {
-  const phasesDir = planningPaths(projectDir, workstream).phases;
+/** Resolve adapter-relative path for a phase token, or null. */
+async function resolvePhaseDirRel(phase: string, adapter: StorageAdapter, workstream?: string): Promise<string | null> {
+  const phasesRel = planningRelativePath(workstream, 'phases');
   const normalized = normalizePhaseName(phase);
   try {
-    const entries = await readdir(phasesDir, { withFileTypes: true });
-    const dirs = entries
-      .filter(e => e.isDirectory())
-      .map(e => e.name)
-      .sort((a, b) => comparePhaseNum(a, b));
-    const match = dirs.find(d => phaseTokenMatches(d, normalized));
-    return match ? join(phasesDir, match) : null;
+    const refs = await adapter.listCollection(phasesRel);
+    const dirs: Array<{ name: string; path: string }> = [];
+    for (const ref of refs) {
+      const st = await adapter.stat(ref.path);
+      if (st?.kind === 'dir') dirs.push(ref);
+    }
+    dirs.sort((a, b) => comparePhaseNum(a.name, b.name));
+    const match = dirs.find(d => phaseTokenMatches(d.name, normalized));
+    return match ? match.path : null;
   } catch {
     return null;
   }
@@ -56,12 +58,14 @@ export const phaseListArtifacts: QueryHandler = async (args, projectDir, workstr
   }
   const artifactType = rawType as ArtifactType;
 
-  const phaseDir = await resolvePhaseDir(phase, projectDir, workstream);
-  if (!phaseDir) {
+  const adapter = await adapterFor(projectDir);
+  const phaseDirRel = await resolvePhaseDirRel(phase, adapter, workstream);
+  if (!phaseDirRel) {
     return { data: { phase: normalizePhaseName(phase), type: artifactType, artifacts: [], error: 'Phase not found' } };
   }
 
-  const files = await readdir(phaseDir);
+  const innerRefs = await adapter.listCollection(phaseDirRel);
+  const files = innerRefs.map(r => r.name);
   const baseNames = files.filter((f) => {
     if (artifactType === 'context') {
       return f.endsWith('-CONTEXT.md') || f === 'CONTEXT.md';
@@ -76,7 +80,7 @@ export const phaseListArtifacts: QueryHandler = async (args, projectDir, workstr
   });
 
   const artifacts = baseNames.sort().map((f) =>
-    toPosixPath(relative(projectDir, join(phaseDir, f))),
+    toPosixPath(`${phaseDirRel}/${f}`),
   );
 
   return {
@@ -108,8 +112,9 @@ export const phaseListPlans: QueryHandler = async (args, projectDir, workstream)
 
   const phase = args[0];
   const normalized = normalizePhaseName(phase);
-  const phaseDir = await resolvePhaseDir(phase, projectDir, workstream);
-  if (!phaseDir) {
+  const adapter = await adapterFor(projectDir);
+  const phaseDirRel = await resolvePhaseDirRel(phase, adapter, workstream);
+  if (!phaseDirRel) {
     return {
       data: {
         phase: normalized,
@@ -119,14 +124,15 @@ export const phaseListPlans: QueryHandler = async (args, projectDir, workstream)
     };
   }
 
-  const phaseFiles = await readdir(phaseDir);
+  const innerRefs = await adapter.listCollection(phaseDirRel);
+  const phaseFiles = innerRefs.map(r => r.name);
   const planFiles = phaseFiles.filter(f => f.endsWith('-PLAN.md') || f === 'PLAN.md').sort();
 
   const plans: Array<Record<string, unknown>> = [];
   for (const planFile of planFiles) {
     const planId = planFile.replace('-PLAN.md', '').replace('PLAN.md', '');
-    const planPath = join(phaseDir, planFile);
-    const content = await readFile(planPath, 'utf-8');
+    const content = await adapter.getRecord(`${phaseDirRel}/${planFile}`);
+    if (!content) continue;
     const fm = extractFrontmatter(content) as Record<string, unknown>;
 
     if (schemaKey && !(schemaKey in fm)) {

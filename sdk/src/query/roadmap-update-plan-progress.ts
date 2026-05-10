@@ -9,8 +9,7 @@
 
 import { findPhase } from './phase.js';
 import { readModifyWriteRoadmapMd, replaceInCurrentMilestone } from './phase-roadmap-mutation.js';
-import { existsSync } from 'node:fs';
-import { adapterFor, escapeRegex, planningPaths } from './helpers.js';
+import { adapterFor, escapeRegex, planningPaths, planningRelativePath } from './helpers.js';
 import { GSDError, ErrorClassification } from '../errors.js';
 import type { QueryHandler } from './utils.js';
 
@@ -78,8 +77,8 @@ export const roadmapUpdatePlanProgress: QueryHandler = async (args, projectDir, 
   const status = isComplete ? 'Complete' : summaryCount > 0 ? 'In Progress' : 'Planned';
   const today = new Date().toISOString().split('T')[0]!;
 
-  const roadmapPath = planningPaths(projectDir, workstream).roadmap;
-  if (!existsSync(roadmapPath)) {
+  const roadmapAdapter = await adapterFor(projectDir);
+  if (!(await roadmapAdapter.exists(planningRelativePath(workstream, 'ROADMAP.md')))) {
     return {
       data: {
         updated: false,

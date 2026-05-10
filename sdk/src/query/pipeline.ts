@@ -93,19 +93,31 @@ async function copyPlanningTree(sourceDir: string, destDir: string): Promise<voi
 
 /**
  * Read all files from .planning/ in a directory into a map of relPath → content.
+ * Uses adapter for reading to avoid raw-fs leak within planning scope.
  */
 async function readPlanningState(projectDir: string): Promise<Map<string, string>> {
-  const planningDir = join(projectDir, '.planning');
+  const { adapterFor } = await import('./helpers.js');
+  const adapter = await adapterFor(projectDir);
   const result = new Map<string, string>();
-  if (!existsSync(planningDir)) return result;
+  if (!(await adapter.exists('.'))) return result;
 
-  const files = collectFiles(planningDir, planningDir);
-  for (const relFile of files) {
-    try {
-      const content = await readFile(join(planningDir, relFile), 'utf-8');
-      result.set(relFile, content);
-    } catch { /* skip unreadable */ }
+  async function walkCollection(relDir: string): Promise<void> {
+    const refs = await adapter.listCollection(relDir);
+    for (const ref of refs) {
+      const st = await adapter.stat(ref.path);
+      if (!st) continue;
+      if (st.kind === 'file') {
+        try {
+          const content = await adapter.getRecord(ref.path);
+          if (content !== null) result.set(ref.path, content);
+        } catch { /* skip unreadable */ }
+      } else if (st.kind === 'dir') {
+        await walkCollection(ref.path);
+      }
+    }
   }
+
+  await walkCollection('.');
   return result;
 }
 
