@@ -99,7 +99,7 @@ Plans:
 - [ ] 03-04-PLAN.md — Phase-lifecycle handlers (13 handlers -> shared SDK helpers)
 
 **Wave 4** *(blocked on Wave 3 completion)*
-- [ ] 03-05-PLAN.md — Conformance tests + OQ-01 ADR + leak-grep verification
+- [x] 03-05-PLAN.md — Conformance tests + OQ-01 ADR + leak-grep verification
 
 ### Phase 4: Plug workflow leaks (top-10 + `<context>`-block class)
 **Repo:** this repo (`feat/storage-adapter`)
@@ -156,7 +156,7 @@ Plans:
 **Plans:** 5 plans
 Plans:
 - [x] 03-01-PLAN.md — Foundation: withTransaction impl + event types + phase-helpers scaffold + leak-grep write patterns
-- [ ] 03-02-PLAN.md — State-mutation event handlers (10 handlers -> 3 adapter event families)
+- [x] 03-02-PLAN.md — State-mutation event handlers (10 handlers -> 3 adapter event families)
 - [ ] 03-03-PLAN.md — State-mutation non-event handlers (8 field-update/maintenance handlers)
 - [ ] 03-04-PLAN.md — Phase-lifecycle handlers (13 handlers -> shared SDK helpers)
 - [ ] 03-05-PLAN.md — Conformance tests + OQ-01 ADR + leak-grep verification
@@ -174,7 +174,7 @@ Plans:
   4. A deliberate failure injection mid-transaction (e.g. throw after the second of three writes) causes both adapters' `restore()` / rollback to leave their respective stores byte-identical (or record-identical, for bd) to the pre-transaction state — verified by snapshot diff on each adapter.
 **Plans:** 5 plans
 Plans:
-- [ ] 03-01-PLAN.md — Foundation: withTransaction impl + event types + phase-helpers scaffold + leak-grep write patterns
+- [x] 03-01-PLAN.md — Foundation: withTransaction impl + event types + phase-helpers scaffold + leak-grep write patterns
 - [ ] 03-02-PLAN.md — State-mutation event handlers (10 handlers -> 3 adapter event families)
 - [ ] 03-03-PLAN.md — State-mutation non-event handlers (8 field-update/maintenance handlers)
 - [ ] 03-04-PLAN.md — Phase-lifecycle handlers (13 handlers -> shared SDK helpers)
