@@ -154,7 +154,7 @@ Plans:
 - [x] 05-03-PLAN.md — Shadow-dir journal withTransaction + snapshot/restore + reentrant-lock + updateSection D-09 wrap + capabilities.snapshot flip + dryRun guard
 
 **Wave 4** *(blocked on Wave 3 completion)*
-- [ ] 05-04-PLAN.md — putNamedDoc/getNamedDoc/writeBinaryAsset real bodies + capabilities.namedDoc/binaryAsset flips + named-doc/binary-asset live tests
+- [x] 05-04-PLAN.md — putNamedDoc/getNamedDoc/writeBinaryAsset real bodies + capabilities.namedDoc/binaryAsset flips + named-doc/binary-asset live tests
 
 **Wave 5** *(blocked on Wave 4 completion)*
 - [ ] 05-05-PLAN.md — pipeline.ts dry-run refactor + sidecar.ts + scratch.ts + 8 new SDK verbs + SC#1 byte-identity pipeline test
