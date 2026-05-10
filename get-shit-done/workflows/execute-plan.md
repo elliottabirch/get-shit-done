@@ -42,8 +42,8 @@ If `.planning/` missing: error.
 <step name="identify_plan">
 ```bash
 # Use plans/summaries from INIT JSON, or list files
-(ls .planning/phases/XX-name/*-PLAN.md 2>/dev/null || true) | sort
-(ls .planning/phases/XX-name/*-SUMMARY.md 2>/dev/null || true) | sort
+gsd-sdk query phase.list-plans "${PHASE}" 2>/dev/null || true
+gsd-sdk query phase.list-summaries "${PHASE}" 2>/dev/null || true
 ```
 
 Find first PLAN without matching SUMMARY. Decimal phases supported (`01.1-hotfix/`):
@@ -102,19 +102,16 @@ Fresh context per subagent preserves peak quality. Main context stays lean.
 
 <step name="init_agent_tracking">
 ```bash
-if [ ! -f .planning/agent-history.json ]; then
-  echo '{"version":"1.0","max_entries":50,"entries":[]}' > .planning/agent-history.json
-fi
-rm -f .planning/current-agent-id.txt
-if [ -f .planning/current-agent-id.txt ]; then
-  INTERRUPTED_ID=$(cat .planning/current-agent-id.txt)
+gsd-sdk query agent-tracking.init 2>/dev/null || true
+INTERRUPTED_ID=$(gsd-sdk query agent-tracking.check-interrupted 2>/dev/null || true)
+if [ -n "$INTERRUPTED_ID" ]; then
   echo "Found interrupted agent: $INTERRUPTED_ID"
 fi
 ```
 
 If interrupted: ask user to resume (Task `resume` parameter) or start fresh.
 
-**Tracking protocol:** On spawn: write agent_id to `current-agent-id.txt`, append to agent-history.json: `{"agent_id":"[id]","task_description":"[desc]","phase":"[phase]","plan":"[plan]","segment":[num|null],"timestamp":"[ISO]","status":"spawned","completion_timestamp":null}`. On completion: status → "completed", set completion_timestamp, delete current-agent-id.txt. Prune: if entries > max_entries, remove oldest "completed" (never "spawned").
+**Tracking protocol:** On spawn: record agent_id via `gsd-sdk query agent-tracking.spawn`, append entry with `{"agent_id":"[id]","task_description":"[desc]","phase":"[phase]","plan":"[plan]","segment":[num|null],"timestamp":"[ISO]","status":"spawned","completion_timestamp":null}`. On completion: status -> "completed" via `gsd-sdk query agent-tracking.complete`, set completion_timestamp, clear current. Prune: if entries > max_entries, remove oldest "completed" (never "spawned").
 
 Run for Pattern A/B before spawning. Pattern C: skip.
 </step>
@@ -148,7 +145,7 @@ Pattern B only (verify-only checkpoints). Skip for A/C.
 
 <step name="load_prompt">
 ```bash
-cat .planning/phases/XX-name/{phase}-{plan}-PLAN.md
+gsd-sdk query phase.get-plan "${PHASE}" "${PLAN}"
 ```
 This IS the execution instructions. Follow exactly. If plan references CONTEXT.md: honor user's vision throughout.
 
@@ -497,8 +494,8 @@ gsd-sdk query commit "" --files .planning/codebase/*.md --amend
 If `USER_SETUP_CREATED=true`: display `⚠️ USER SETUP REQUIRED` with path + env/config tasks at TOP.
 
 ```bash
-(ls -1 .planning/phases/[current-phase-dir]/*-PLAN.md 2>/dev/null || true) | wc -l
-(ls -1 .planning/phases/[current-phase-dir]/*-SUMMARY.md 2>/dev/null || true) | wc -l
+PLAN_COUNT=$(gsd-sdk query phase.count-plans "${PHASE}" 2>/dev/null || echo "0")
+SUMMARY_COUNT=$(gsd-sdk query phase.count-summaries "${PHASE}" 2>/dev/null || echo "0")
 ```
 
 | Condition | Route | Action |

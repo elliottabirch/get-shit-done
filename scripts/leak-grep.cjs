@@ -100,6 +100,16 @@ const PLANNING_SCOPE_RE = /(?:['"`]\.planning\/|planningPaths\s*\(|relPlanningPa
 const SDK_FS_EXTS = /\.ts$/;
 
 // ---------------------------------------------------------------------------
+// File-level and line-level exclusion directives (D-07 / Phase 4 formalization)
+// ---------------------------------------------------------------------------
+
+// File-level: first 5 lines contain `// leak-grep-allow file` → skip entire file
+const FILE_ALLOW_RE = /\/[/*]\s*leak-grep-allow\s+file\b/;
+
+// Line-level: line contains `// leak-grep-ignore` or `/* leak-grep-ignore */` → skip that line
+const LINE_IGNORE_RE = /\/[/*]\s*leak-grep-ignore\b/;
+
+// ---------------------------------------------------------------------------
 // Core scanner
 // ---------------------------------------------------------------------------
 
@@ -118,10 +128,18 @@ function scanFile(filePath) {
     return matches;
   }
 
+  // File-level exclusion: check first 5 lines for `leak-grep-allow file`
+  const headerLines = text.split(/\r?\n/).slice(0, 5);
+  if (headerLines.some(l => FILE_ALLOW_RE.test(l))) {
+    return matches;
+  }
+
   const lines = text.split(/\r?\n/);
 
   // Per-line scan for TOOL_PATTERNS + SHELL_PATTERNS
   lines.forEach((line, i) => {
+    // Line-level exclusion: skip lines with `leak-grep-ignore` directive
+    if (LINE_IGNORE_RE.test(line)) return;
     for (const { name, re, zone } of [...TOOL_PATTERNS, ...SHELL_PATTERNS]) {
       if (!re.test(line)) continue;
       // Zone filter (T-04-02): patterns with zone='workflow' only fire in workflow/agent/command zones
@@ -143,6 +161,8 @@ function scanFile(filePath) {
   if (SDK_FS_EXTS.test(filePath)) {
     const allSdkPatterns = [...SDK_FS_READ_PATTERNS, ...SDK_FS_WRITE_PATTERNS];
     lines.forEach((line, i) => {
+      // Line-level exclusion: skip lines with `leak-grep-ignore` directive
+      if (LINE_IGNORE_RE.test(line)) return;
       for (const { name, re } of allSdkPatterns) {
         if (!re.test(line)) continue;
         const lo = Math.max(0, i - 20);

@@ -51,7 +51,7 @@ If the flag is absent, keep the current behavior of continuing phase numbering f
 Check `.planning/seeds/` for seed files that match the milestone goals gathered in step 2.
 
 ```bash
-ls .planning/seeds/SEED-*.md 2>/dev/null
+gsd-sdk query thread-seed.list-seeds 2>/dev/null
 ```
 
 **If no seed files exist:** Skip this step silently — do not print any message or prompt.
@@ -251,8 +251,7 @@ If `--reset-phase-numbers` is active:
 If `phase_dir_count > 0` and `phase_archive_path` is available:
 
 ```bash
-mkdir -p "${phase_archive_path}"
-find .planning/phases -mindepth 1 -maxdepth 1 -type d -exec mv {} "${phase_archive_path}/" \;
+gsd-sdk query milestone-ops.archive-phases "${phase_archive_path}"
 ```
 
 Then verify `.planning/phases/` no longer contains old milestone directories before continuing.
@@ -291,7 +290,7 @@ AskUserQuestion: "Research the domain ecosystem for new features before defining
 ```
 
 ```bash
-mkdir -p .planning/research
+gsd-sdk query workspace.ensure-dir "research"
 ```
 
 Spawn 4 parallel gsd-project-researcher agents. Each uses this template with dimension-specific fields:
@@ -539,7 +538,7 @@ After roadmap approval, scan pending todos against the newly approved phases. Fo
 
 **Check for pending todos:**
 ```bash
-PENDING_TODOS=$(ls .planning/todos/pending/*.md 2>/dev/null | head -50)
+PENDING_TODOS=$(gsd-sdk query todo.list-pending --limit 50 2>/dev/null)
 ```
 
 **If no pending todos exist:** Skip this step silently.

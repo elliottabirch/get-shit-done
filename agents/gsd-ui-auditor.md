@@ -79,23 +79,8 @@ If no UI-SPEC exists: audit against abstract 6-pillar standards.
 **MUST run before any screenshot capture.** Prevents binary files from reaching git history.
 
 ```bash
-# Ensure directory exists
-mkdir -p .planning/ui-reviews
-
-# Write .gitignore if not present
-if [ ! -f .planning/ui-reviews/.gitignore ]; then
-  cat > .planning/ui-reviews/.gitignore << 'GITIGNORE'
-# Screenshot files — never commit binary assets
-*.png
-*.webp
-*.jpg
-*.jpeg
-*.gif
-*.bmp
-*.tiff
-GITIGNORE
-  echo "Created .planning/ui-reviews/.gitignore"
-fi
+# Ensure ui-reviews directory exists with binary .gitignore
+gsd-sdk query workspace.ensure-dir "ui-reviews" --gitignore-binary
 ```
 
 This gate runs unconditionally on every audit. The .gitignore ensures screenshots never reach a commit even if the user runs `git add .` before cleanup.

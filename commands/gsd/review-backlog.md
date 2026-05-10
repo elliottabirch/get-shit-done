@@ -18,12 +18,12 @@ milestone sequence or remove stale entries.
 
 1. **List backlog items:**
    ```bash
-   ls -d .planning/phases/999* 2>/dev/null || echo "No backlog items found"
+   gsd-sdk query phase.list-backlog 2>/dev/null || echo "No backlog items found"
    ```
 
 2. **Read ROADMAP.md** and extract all 999.x phase entries:
    ```bash
-   cat .planning/ROADMAP.md
+   gsd-sdk query roadmap
    ```
    Show each backlog item with its description, any accumulated context (CONTEXT.md, RESEARCH.md), and creation date.
 

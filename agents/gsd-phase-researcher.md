@@ -626,7 +626,7 @@ cat "$phase_dir"/*-CONTEXT.md 2>/dev/null
 Check for knowledge graph:
 
 ```bash
-ls .planning/graphs/graph.json 2>/dev/null
+gsd-sdk query workspace.file-exists "graphs/graph.json" 2>/dev/null
 ```
 
 If graph.json exists, check freshness:

@@ -35,7 +35,7 @@ TDD_MODE=$(gsd-sdk query config-get workflow.tdd_mode 2>/dev/null | jq -r 'if ty
 When SUBCMD=list:
 
 ```bash
-ls .planning/debug/*.md 2>/dev/null | grep -v resolved
+gsd-sdk query debug-session.list --active 2>/dev/null
 ```
 
 For each file found, parse frontmatter fields (`status`, `trigger`, `updated`) and the `Current Focus` block (`hypothesis`, `next_action`). Display a formatted table:

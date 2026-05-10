@@ -557,7 +557,7 @@ Re-filter incomplete phases using the same logic as discover_phases:
 Read STATE.md fresh:
 
 ```bash
-cat .planning/STATE.md
+gsd-sdk query state.load
 ```
 
 Check for blockers in the Blockers/Concerns section. If blockers are found, go to handle_blocker with the blocker description.
@@ -673,7 +673,7 @@ Skill(skill="gsd-complete-milestone", args="${milestone_version}")
 After complete-milestone returns, verify it produced output:
 
 ```bash
-ls .planning/milestones/v${milestone_version}-ROADMAP.md 2>/dev/null || true
+gsd-sdk query milestone-ops.check-roadmap "${milestone_version}" 2>/dev/null || true
 ```
 
 If the archive file does not exist, go to handle_blocker: "Complete milestone did not produce expected archive files."

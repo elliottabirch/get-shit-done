@@ -584,3 +584,75 @@ that previously used `hasCommitPlanningState()` (simplified to direct call).
 in `tests/conformance/commit-planning-state.test.ts` is the placeholder.
 
 ---
+
+## D-2026-05-10-OQ03 — Raw-git outlier resolution
+
+**Date:** 2026-05-10
+**Resolves:** OQ-03 (from SYNTHESIS.md §6 #3)
+
+**Question:** Two workflow files (`spec-phase.md` Step 7 and `eval-review.md` end)
+use raw `git add` + `git commit` to commit `.planning/` artifacts. Should these
+be fixed, or are they acceptable?
+
+**Decision:** Replace raw `git add` + `git commit` in both sites with
+`gsd-sdk query commit` calls.
+
+**Context:** Raw git commands to commit `.planning/` artifacts bypass the SDK's
+commit mediation layer and cannot be intercepted by a non-filesystem adapter.
+The adapter's `commitPlanningState` method (promoted to required in D-2026-05-10-02)
+is the correct abstraction for persisting planning state.
+
+**Resolution:** Both sites now use `gsd-sdk query commit "<message>" --files <path>`
+which routes through the SDK's commit handler. The commit handler supports
+adapter-mediated semantics (no-op for non-git backends per OQ-01 Phase 3
+resolution).
+
+**Affected files:** `get-shit-done/workflows/spec-phase.md`,
+`get-shit-done/workflows/eval-review.md`
+
+**Status:** Resolved in Phase 4 Plan 04-04.
+
+---
+
+## D-2026-05-10-OQ04 — Context-block leak mitigation strategy
+
+**Date:** 2026-05-10
+**Resolves:** OQ-04 (from SYNTHESIS.md §6 #4)
+
+**Question:** How to mitigate `<context>`-block `@.planning/...` references that
+auto-load files at skill activation time, before any runtime hook can intercept?
+
+**Decision:** All `@.planning/...` references in templates and references are
+replaced with orchestrator-injected `<project_context>` blocks. The orchestrator
+calls SDK queries (e.g., `gsd-sdk query init.execute-phase`) and pastes the
+result into the subagent prompt at construction time.
+
+**Context:** The `@` directive in Claude Code auto-loads files at skill activation
+time, before any runtime hook can intercept. This creates a leak class that cannot
+be caught by a StorageAdapter seam at the SDK layer. The audit register
+(D-2026-05-01-OQ04) identified 30 references: 5 REWRITE-CANDIDATE + 25 EXCEPTION.
+
+**Resolution strategy (uniform, no per-file ad-hoc handling):**
+
+1. `<context>` blocks with `@.planning/` -> `<project_context>` with
+   orchestrator-injection comments
+2. Read-tool instructions against `.planning/` in references -> `gsd-sdk query`
+   instructions
+3. Illustrative `@` syntax in examples -> backtick-wrapped or described in prose
+4. 5 REWRITE-CANDIDATE entries from Phase 2 audit -> same treatment as (1)
+5. 25 EXCEPTION entries remain as exceptions (illustrative, non-runtime-activating)
+
+**Equally deterministic:** The orchestrator injects data before the subagent starts,
+making the data equally present in the prompt as `@` syntax would provide. No
+information loss.
+
+**Affected files:** `get-shit-done/templates/phase-prompt.md`,
+`get-shit-done/templates/debug-subagent-prompt.md`,
+`get-shit-done/templates/planner-subagent-prompt.md`,
+`get-shit-done/references/tdd.md`,
+`get-shit-done/references/planner-antipatterns.md`,
+`agents/gsd-planner.md`, `commands/gsd/add-tests.md`
+
+**Status:** Resolved in Phase 4 Plan 04-05.
+
+---
