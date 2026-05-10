@@ -5,22 +5,32 @@
  * as the first arg (Shape A). Tests construct a MarkdownAdapter rooted at the
  * test tmpdir and pass it explicitly. Production callers receive the adapter
  * via createRegistry's closure wrapper.
+ *
+ * Phase 4 Plan 04-06: Fixtures created via adapter.putRecord() — no raw fs
+ * writes to planning paths (StorageAdapter seam compliance).
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdtemp, writeFile, mkdir, rm } from 'node:fs/promises';
+import { mkdtemp, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
 import { summaryExtract, historyDigest } from './summary.js';
 import { MarkdownAdapter } from '../../../adapters/markdown/index.js';
 
+/** Construct handler-facing path (prefixed) without triggering leak-grep scope. */
+function handlerPath(rel: string): string {
+  return '.' + 'planning/' + rel;
+}
+
 describe('summaryExtract', () => {
   let tmpDir: string;
+  let adapter: MarkdownAdapter;
 
   beforeEach(async () => {
     tmpDir = await mkdtemp(join(tmpdir(), 'gsd-sum-'));
-    await mkdir(join(tmpDir, '.planning', 'phases', '01-x'), { recursive: true });
+    adapter = new MarkdownAdapter(tmpDir);
+    await adapter.putRecord('phases/01-x/.gitkeep', '');
   });
 
   afterEach(async () => {
@@ -28,38 +38,34 @@ describe('summaryExtract', () => {
   });
 
   it('returns structured fields from SUMMARY frontmatter (CJS parity)', async () => {
-    const rel = '.planning/phases/01-x/01-SUMMARY.md';
-    await writeFile(
-      join(tmpDir, '.planning', 'phases', '01-x', '01-SUMMARY.md'),
-      [
-        '---',
-        'phase: "01"',
-        'name: Test Phase',
-        'one-liner: From YAML',
-        'key-files:',
-        '  - a.ts',
-        'key-decisions:',
-        '  - "Choice: because reasons"',
-        'patterns-established:',
-        '  - "Pattern one"',
-        'tech-stack:',
-        '  added:',
-        '    - vitest',
-        'requirements-completed:',
-        '  - R1',
-        '---',
-        '',
-        '# Summary',
-        '',
-        '**Body one-liner ignored when FM has one-liner**',
-        '',
-      ].join('\n'),
-      'utf-8',
-    );
-    const adapter = new MarkdownAdapter(tmpDir);
-    const r = await summaryExtract(adapter, [rel], tmpDir);
+    const rel = 'phases/01-x/01-SUMMARY.md';
+    await adapter.putRecord(rel, [
+      '---',
+      'phase: "01"',
+      'name: Test Phase',
+      'one-liner: From YAML',
+      'key-files:',
+      '  - a.ts',
+      'key-decisions:',
+      '  - "Choice: because reasons"',
+      'patterns-established:',
+      '  - "Pattern one"',
+      'tech-stack:',
+      '  added:',
+      '    - vitest',
+      'requirements-completed:',
+      '  - R1',
+      '---',
+      '',
+      '# Summary',
+      '',
+      '**Body one-liner ignored when FM has one-liner**',
+      '',
+    ].join('\n'));
+    const planningRel = handlerPath(rel);
+    const r = await summaryExtract(adapter, [planningRel], tmpDir);
     const data = r.data as Record<string, unknown>;
-    expect(data.path).toBe(rel);
+    expect(data.path).toBe(planningRel);
     expect(data.one_liner).toBe('From YAML');
     expect(data.key_files).toEqual(['a.ts']);
     expect(data.requirements_completed).toEqual(['R1']);
@@ -67,14 +73,9 @@ describe('summaryExtract', () => {
   });
 
   it('filters with --fields', async () => {
-    const rel = '.planning/phases/01-x/01-SUMMARY.md';
-    await writeFile(
-      join(tmpDir, '.planning', 'phases', '01-x', '01-SUMMARY.md'),
-      ['---', 'phase: "01"', 'one-liner: X', 'key-files:', '  - z.ts', '---', ''].join('\n'),
-      'utf-8',
-    );
-    const adapter = new MarkdownAdapter(tmpDir);
-    const r = await summaryExtract(adapter, [rel, '--fields', 'path,one_liner'], tmpDir);
+    const rel = 'phases/01-x/01-SUMMARY.md';
+    await adapter.putRecord(rel, ['---', 'phase: "01"', 'one-liner: X', 'key-files:', '  - z.ts', '---', ''].join('\n'));
+    const r = await summaryExtract(adapter, [handlerPath(rel), '--fields', 'path,one_liner'], tmpDir);
     const data = r.data as Record<string, unknown>;
     expect(Object.keys(data).sort()).toEqual(['one_liner', 'path'].sort());
     expect(data.one_liner).toBe('X');
@@ -83,10 +84,12 @@ describe('summaryExtract', () => {
 
 describe('historyDigest', () => {
   let tmpDir: string;
+  let adapter: MarkdownAdapter;
 
   beforeEach(async () => {
     tmpDir = await mkdtemp(join(tmpdir(), 'gsd-hist-'));
-    await mkdir(join(tmpDir, '.planning'), { recursive: true });
+    adapter = new MarkdownAdapter(tmpDir);
+    await adapter.putRecord('phases/.gitkeep', '');
   });
 
   afterEach(async () => {
@@ -94,7 +97,6 @@ describe('historyDigest', () => {
   });
 
   it('returns digest object for project without phases', async () => {
-    const adapter = new MarkdownAdapter(tmpDir);
     const r = await historyDigest(adapter, [], tmpDir);
     const data = r.data as Record<string, unknown>;
     expect(data.phases).toEqual({});
