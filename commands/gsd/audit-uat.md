@@ -15,10 +15,8 @@ Scan all phases for pending, skipped, blocked, and human_needed UAT items. Cross
 @~/.claude/get-shit-done/workflows/audit-uat.md
 </execution_context>
 
-<context>
-Core planning files are loaded in-workflow via CLI.
-
-**Scope:**
-Glob: .planning/phases/*/*-UAT.md
-Glob: .planning/phases/*/*-VERIFICATION.md
-</context>
+<project_context>
+<!-- Injected by orchestrator via: gsd-sdk query state.load -->
+<!-- UAT/VERIFICATION files resolved via: gsd-sdk query audit-uat -->
+<!-- Core planning files loaded in-workflow via SDK queries -->
+</project_context>

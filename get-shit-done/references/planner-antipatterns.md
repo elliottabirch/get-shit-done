@@ -60,11 +60,10 @@ A plan should not interleave multiple checkpoint types with implementation tasks
 ### Bad — Reflexive SUMMARY chaining
 
 ```markdown
-<context>
-@.planning/phases/01-foundation/01-01-SUMMARY.md
-@.planning/phases/01-foundation/01-02-SUMMARY.md  <!-- Does Plan 02 actually need Plan 01's output? -->
-@.planning/phases/01-foundation/01-03-SUMMARY.md  <!-- Chain grows, context bloats -->
-</context>
+<!-- DO NOT reflexively chain prior SUMMARYs: -->
+`@.planning/phases/01-foundation/01-01-SUMMARY.md`
+`@.planning/phases/01-foundation/01-02-SUMMARY.md`  <!-- Does Plan 02 actually need Plan 01's output? -->
+`@.planning/phases/01-foundation/01-03-SUMMARY.md`  <!-- Chain grows, context bloats -->
 ```
 
 **Why bad:** Plans are often independent. Reflexive chaining (02 refs 01, 03 refs 02...) wastes context. Only reference prior SUMMARY files when the plan genuinely uses types/exports from that prior plan or a decision from it affects the current plan.
@@ -72,11 +71,11 @@ A plan should not interleave multiple checkpoint types with implementation tasks
 ### Good — Selective context
 
 ```markdown
-<context>
-@.planning/PROJECT.md
-@.planning/STATE.md
-@.planning/phases/01-foundation/01-01-SUMMARY.md  <!-- Uses User type defined in Plan 01 -->
-</context>
+<project_context>
+<!-- Injected by orchestrator via: gsd-sdk query init.execute-phase -->
+<!-- Provides: PROJECT.md, STATE.md content -->
+<!-- Prior SUMMARY (01-01) resolved via: gsd-sdk query history-digest -->
+</project_context>
 ```
 
 ## Scope Reduction Anti-Patterns

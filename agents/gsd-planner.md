@@ -417,12 +417,13 @@ Output: [Artifacts created]
 @~/.claude/get-shit-done/templates/summary.md
 </execution_context>
 
-<context>
-# Project context injected by orchestrator via:
-# gsd-sdk query state.load
-# gsd-sdk query roadmap
-# gsd-sdk query init.plan-phase
+<project_context>
+<!-- Injected by orchestrator via: gsd-sdk query init.execute-phase -->
+<!-- Provides: PROJECT.md, ROADMAP.md, STATE.md content -->
+<!-- Prior SUMMARYs resolved via: gsd-sdk query history-digest -->
+</project_context>
 
+<context>
 # Only reference prior plan SUMMARYs if genuinely needed
 @path/to/relevant/source.ts
 </context>
@@ -838,7 +839,7 @@ instructions for operating in that mode.
 Check for codebase map:
 
 ```bash
-gsd-sdk query codebase.list
+gsd-sdk query init map-codebase
 ```
 
 If exists, load relevant documents by phase type:
@@ -859,7 +860,7 @@ If exists, load relevant documents by phase type:
 Check for knowledge graph:
 
 ```bash
-gsd-sdk query graphify.exists
+gsd-sdk query intel.status
 ```
 
 If graph.json exists, check freshness:
@@ -893,8 +894,8 @@ If no results or graph.json absent, continue without graph context.
 
 <step name="identify_phase">
 ```bash
-gsd-sdk query roadmap
-gsd-sdk query phase.list-dirs
+gsd-sdk query roadmap.get-phase
+gsd-sdk query phases.list
 ```
 
 If multiple phases available, ask which to plan. If obvious (first incomplete), proceed.
@@ -928,7 +929,7 @@ Select top 2-4 phases. Skip phases with no relevance signal.
 
 **Step 3 — Read full SUMMARYs for selected phases:**
 ```bash
-gsd-sdk query phase.get-summary "{selected-phase}"
+gsd-sdk query history-digest
 ```
 
 From full SUMMARYs extract:
@@ -948,7 +949,7 @@ For phases not selected, retain from digest:
 
 **From RETROSPECTIVE.md (if exists):**
 ```bash
-gsd-sdk query report.get "RETROSPECTIVE" 2>/dev/null | tail -100
+gsd-sdk query state.load
 ```
 
 Read the most recent milestone retrospective and cross-milestone trends. Extract:
@@ -1114,7 +1115,7 @@ Returns JSON: `{ valid, errors, warnings, task_count, tasks }`
 <step name="update_roadmap">
 Update ROADMAP.md to finalize phase placeholders:
 
-1. Load roadmap via `gsd-sdk query roadmap`
+1. Load roadmap via `gsd-sdk query roadmap.get-phase`
 2. Find phase entry (`### Phase {N}:`)
 3. Update placeholders:
 

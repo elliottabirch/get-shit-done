@@ -22,16 +22,14 @@ Output: MILESTONE_SUMMARY written to `.planning/reports/`, presented inline, opt
 @~/.claude/get-shit-done/workflows/milestone-summary.md
 </execution_context>
 
-<context>
-**Project files:**
-- `.planning/ROADMAP.md`
-- `.planning/PROJECT.md`
-- `.planning/STATE.md`
-- `.planning/RETROSPECTIVE.md`
-- `.planning/milestones/v{version}-ROADMAP.md` (if archived)
-- `.planning/milestones/v{version}-REQUIREMENTS.md` (if archived)
-- `.planning/phases/*-*/` (SUMMARY.md, VERIFICATION.md, CONTEXT.md, RESEARCH.md)
+<project_context>
+<!-- Injected by orchestrator via: gsd-sdk query state.load -->
+<!-- Provides: ROADMAP.md, PROJECT.md, STATE.md, RETROSPECTIVE.md content -->
+<!-- Milestone archives resolved by orchestrator at construction time -->
+<!-- Phase artifacts (SUMMARY.md, VERIFICATION.md, CONTEXT.md, RESEARCH.md) via: gsd-sdk query history-digest -->
+</project_context>
 
+<context>
 **User input:**
 - Version: $ARGUMENTS (optional — defaults to current/latest milestone)
 </context>
