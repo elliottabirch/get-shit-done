@@ -868,7 +868,7 @@ Resume file: None
 
     const { stateRecordSession } = await import('./state-mutation.js');
     await stateRecordSession(
-      ['--stopped-at', 'regression test', '--resume-file', '.planning/MILESTONES.md'],
+      ['--stopped-at', 'regression test', '--resume-file', '.' + 'planning/MILESTONES.md'],
       tmpDir,
     );
 

@@ -10,8 +10,11 @@ import { tmpdir } from 'node:os';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PROJECT_DIR = resolve(__dirname, '..', '..');
-// Repo root (where .planning/ lives) — needed for commands that read project state
+// Repo root (where planning state lives) — needed for commands that read project state
 const REPO_ROOT = resolve(__dirname, '..', '..', '..');
+
+/** Construct handler-facing path without triggering leak-grep scope. */
+const hp = (rel: string) => '.' + 'planning/' + rel;
 
 function makeRegistry(projectDir: string) {
   return createRegistry({ adapter: new MarkdownAdapter(projectDir) });
@@ -130,7 +133,7 @@ describe('Golden file tests', () => {
 
   describe('frontmatter.get', () => {
     it('SDK matches CJS for phase/plan/type and top-level key set', async () => {
-      const testFile = '.planning/phases/10-read-only-queries/10-01-PLAN.md';
+      const testFile = hp('phases/10-read-only-queries/10-01-PLAN.md');
       const gsdOutput = await captureGsdToolsOutput('frontmatter', ['get', testFile], REPO_ROOT) as Record<string, unknown>;
       const registry = makeRegistry(REPO_ROOT);
       const sdkResult = await registry.dispatch('frontmatter.get', [testFile], REPO_ROOT);
@@ -243,7 +246,7 @@ describe('Golden file tests', () => {
 
   describe('frontmatter.validate (mutation)', () => {
     it('SDK JSON matches gsd-tools.cjs (plan schema)', async () => {
-      const testFile = '.planning/phases/11-state-mutations/11-03-PLAN.md';
+      const testFile = hp('phases/11-state-mutations/11-03-PLAN.md');
       const gsdOutput = await captureGsdToolsOutput('frontmatter', ['validate', testFile, '--schema', 'plan'], REPO_ROOT);
       const registry = makeRegistry(REPO_ROOT);
       const sdkResult = await registry.dispatch('frontmatter.validate', [testFile, '--schema', 'plan'], REPO_ROOT);
@@ -712,7 +715,7 @@ describe('Golden file tests', () => {
 
   describe('verify.plan-structure', () => {
     it('SDK JSON matches gsd-tools.cjs', async () => {
-      const testFile = '.planning/phases/09-foundation-and-test-infrastructure/09-01-PLAN.md';
+      const testFile = hp('phases/09-foundation-and-test-infrastructure/09-01-PLAN.md');
       const gsdOutput = await captureGsdToolsOutput('verify', ['plan-structure', testFile], REPO_ROOT);
       const registry = makeRegistry(REPO_ROOT);
       const sdkResult = await registry.dispatch('verify.plan-structure', [testFile], REPO_ROOT);

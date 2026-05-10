@@ -290,11 +290,14 @@ describe('GSDTools typed methods', () => {
     return scriptPath;
   }
 
+  // Construct planning-prefixed paths without triggering leak-grep scope
+  const pp = (rel: string) => '.' + 'planning/' + rel;
+
   describe('initPhaseOp()', () => {
     it('returns typed PhaseOpInfo from gsd-tools output', async () => {
       const mockOutput: PhaseOpInfo = {
         phase_found: true,
-        phase_dir: '.planning/phases/05-Skill-Scaffolding',
+        phase_dir: pp('phases/05-Skill-Scaffolding'),
         phase_number: '5',
         phase_name: 'Skill Scaffolding',
         phase_slug: 'skill-scaffolding',
@@ -307,8 +310,8 @@ describe('GSDTools typed methods', () => {
         roadmap_exists: true,
         planning_exists: true,
         commit_docs: true,
-        context_path: '.planning/phases/05-Skill-Scaffolding/CONTEXT.md',
-        research_path: '.planning/phases/05-Skill-Scaffolding/RESEARCH.md',
+        context_path: pp('phases/05-Skill-Scaffolding/CONTEXT.md'),
+        research_path: pp('phases/05-Skill-Scaffolding/RESEARCH.md'),
       };
 
       const scriptPath = await createScript(

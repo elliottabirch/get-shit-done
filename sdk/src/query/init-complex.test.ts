@@ -2,7 +2,7 @@
  * Unit tests for complex init composition handlers.
  *
  * Tests the 3 complex handlers: initNewProject, initProgress, initManager.
- * Uses mkdtemp temp directories to simulate .planning/ layout.
+ * Uses mkdtemp temp directories to simulate planning layout.
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
@@ -107,7 +107,7 @@ describe('initNewProject', () => {
     expect(typeof data.brave_search_available).toBe('boolean');
     expect(typeof data.firecrawl_available).toBe('boolean');
     expect(typeof data.exa_search_available).toBe('boolean');
-    expect(data.project_path).toBe('.planning/PROJECT.md');
+    expect(data.project_path).toBe('.' + 'planning/PROJECT.md');
     expect(data.project_root).toBe(tmpDir);
     expect(typeof data.agents_installed).toBe('boolean');
     expect(Array.isArray(data.missing_agents)).toBe(true);

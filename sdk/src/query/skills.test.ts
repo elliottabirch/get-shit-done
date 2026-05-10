@@ -1,9 +1,12 @@
 /**
  * Tests for agent skills query handler.
  *
- * Verifies the handler reads `config.agent_skills[agentType]` from
- * `.planning/config.json` and returns the `<agent_skills>` XML block
+ * Verifies the handler reads config.agent_skills[agentType] from the
+ * planning config.json and returns the <agent_skills> XML block
  * workflows interpolate into Task() prompts (regression for #2555).
+ *
+ * Phase 4 Plan 04-06: Fixtures created via adapter.putRecord() — no raw fs
+ * writes to planning paths (StorageAdapter seam compliance).
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
@@ -12,6 +15,7 @@ import { execSync } from 'node:child_process';
 import { join, resolve } from 'node:path';
 import { tmpdir, homedir } from 'node:os';
 import { fileURLToPath } from 'node:url';
+import { MarkdownAdapter } from '../../../adapters/markdown/index.js';
 
 import { agentSkills } from './skills.js';
 
@@ -27,8 +31,8 @@ async function writeSkill(rootDir: string, name: string) {
 }
 
 async function writeConfig(projectDir: string, config: unknown) {
-  await mkdir(join(projectDir, '.planning'), { recursive: true });
-  await writeFile(join(projectDir, '.planning', 'config.json'), JSON.stringify(config, null, 2));
+  const adapter = new MarkdownAdapter(projectDir);
+  await adapter.putRecord('config.json', JSON.stringify(config, null, 2));
 }
 
 describe('agentSkills', () => {
