@@ -96,8 +96,9 @@ export interface MilestoneSwitchPayload {
 }
 
 // ─── Signal Event Union ──────────────────────────────────────────────────────
+// milestone_switch moved to non-event handler territory per D-03 / Research OQ-03:
+// it performs a wholesale STATE.md rewrite, not a stateless signal. Handled in Plan 03.
 
 export type SignalEvent =
   | { type: 'waiting'; payload: WaitingPayload }
-  | { type: 'resume'; payload: ResumePayload }
-  | { type: 'milestone_switch'; payload: MilestoneSwitchPayload };
+  | { type: 'resume'; payload: ResumePayload };
