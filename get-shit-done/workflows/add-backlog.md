@@ -13,7 +13,7 @@ phase sequence and accumulate context over time.
 Check for existing backlog entries:
 
 ```bash
-cat .planning/ROADMAP.md
+gsd-sdk query roadmap
 ```
 
 ## Step 2: Find next backlog number
@@ -51,8 +51,7 @@ Plans:
 
 ```bash
 SLUG=$(gsd-sdk query generate-slug "$ARGUMENTS" --raw)
-mkdir -p ".planning/phases/${NEXT}-${SLUG}"
-touch ".planning/phases/${NEXT}-${SLUG}/.gitkeep"
+gsd-sdk query phase.create-dir "${NEXT}" "${SLUG}"
 ```
 
 ## Step 5: Commit

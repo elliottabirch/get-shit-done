@@ -484,8 +484,8 @@ export class InitRunner {
       summaryTemplate,
       '</summary_template>',
       '',
-      'Write .planning/research/SUMMARY.md synthesizing all research findings.',
-      'Also commit all research files: git add .planning/research/ && git commit.',
+      'Write research/SUMMARY.md (via gsd-sdk query named-doc.put) synthesizing all research findings.',
+      'Also commit all research files: gsd-sdk query commit "docs: research synthesis" --files research/',
     ].join('\n'), this.projectDir);
   }
 

@@ -1,4 +1,5 @@
 // sdk/src/query/bootstrap.ts
+// leak-grep-allow file
 //
 // BOOTSTRAP — raw fs intentional; runs BEFORE the StorageAdapter is constructed
 // (the adapter needs projectDir to compute its planningBase). This file is
@@ -6,8 +7,7 @@
 // so that Plan 1 leak-grep gate against helpers.ts is unambiguous: helpers.ts has
 // ZERO raw-fs callsites; bootstrap.ts is excluded from leak-grep scope.
 //
-// Phase 4 LEAKS-04 may add a `// leak-grep-allow file:` directive parser to
-// formalize this carve-out; for Phase 2 the carve-out is by file path.
+// Formalized via `leak-grep-allow file` directive (Phase 4 LEAKS-04).
 
 import { existsSync, statSync, readFileSync } from 'node:fs';
 import { join, dirname, relative, resolve, parse as parsePath, sep as pathSep } from 'node:path';

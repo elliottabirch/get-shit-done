@@ -50,8 +50,8 @@ Configuration options for `.planning/` directory behavior.
 - Full history of planning decisions preserved
 
 **When `commit_docs: false`:**
-- Skip all `git add`/`git commit` for `.planning/` files
-- User must add `.planning/` to `.gitignore`
+- Skip all commit operations for planning workspace files
+- User must add the planning directory to `.gitignore`
 - Useful for: OSS contributions, client projects, keeping planning private
 
 **Using `gsd-sdk query` (preferred):**

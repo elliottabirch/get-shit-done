@@ -12,7 +12,7 @@ Read all files referenced by the invoking prompt's execution_context before star
 
 ```bash
 # Find the most recent audit file
-(ls -t .planning/v*-MILESTONE-AUDIT.md 2>/dev/null || true) | head -1
+gsd-sdk query milestone-ops.latest-audit 2>/dev/null || true
 ```
 
 Parse YAML frontmatter to extract structured gaps:
@@ -140,7 +140,7 @@ grep -c "Pending" .planning/REQUIREMENTS.md
 ## 8. Create Phase Directories
 
 ```bash
-mkdir -p ".planning/phases/{NN}-{name}"
+gsd-sdk query phase.create-dir "{NN}" "{name}"
 ```
 
 ## 9. Commit Roadmap and Requirements Update
@@ -171,7 +171,7 @@ gsd-sdk query commit "docs(roadmap): add gap closure phases {N}-{M}" --files .pl
 
 **Also available:**
 - `/gsd-execute-phase {N}` — if plans already exist
-- `cat .planning/ROADMAP.md` — see updated roadmap
+- `gsd-sdk query roadmap` — see updated roadmap
 
 ---
 
