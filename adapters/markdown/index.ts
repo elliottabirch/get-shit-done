@@ -20,7 +20,7 @@
 
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
-import { existsSync, constants } from 'node:fs';
+import { existsSync, constants, mkdirSync, writeFileSync, unlinkSync } from 'node:fs';
 import { readFile, writeFile, unlink, readdir, mkdir, stat as fsStat, open } from 'node:fs/promises';
 import { join, dirname } from 'node:path';
 import { homedir } from 'node:os';
@@ -374,18 +374,385 @@ export class MarkdownAdapter implements StorageAdapter {
     } catch { return true; }
   }
 
-  // ─── Event family stubs (Phase 3 Plan 02 fills these) ─────────────────────
+  // ─── Event family methods (Phase 3 Plan 02) ────────────────────────────────
 
-  async recordStateAppend(_event: AppendEvent): Promise<void> {
-    throw new Error('recordStateAppend not yet implemented (Phase 3 Plan 02)');
+  /**
+   * Append-family event: adds entries to STATE.md sections.
+   * Section targeting dispatches on event.type → correct STATE.md section regex.
+   * Pipeline: withTransaction → getRecord → strip frontmatter → find section →
+   * append formatted entry → syncStateFrontmatter → normalize → putRecord.
+   */
+  async recordStateAppend(event: AppendEvent): Promise<void> {
+    await this.withTransaction(async () => {
+      const raw = (await this.getRecord('STATE.md')) ?? '';
+      const body = this.stripFrontmatter(raw);
+      let modified: string;
+
+      switch (event.type) {
+        case 'decision': {
+          const { phase, summary, rationale } = event.payload;
+          const entry = `- [Phase ${phase || '?'}]: ${summary}${rationale ? ` — ${rationale}` : ''}`;
+          modified = this.appendToSection(
+            body,
+            /(###?\s*(?:Decisions|Decisions Made|Accumulated.*Decisions)\s*\n)([\s\S]*?)(?=\n###?|\n##[^#]|$)/i,
+            entry,
+          );
+          break;
+        }
+        case 'metric': {
+          const { phase, plan, duration, tasks, files } = event.payload;
+          const entry = `| Phase ${phase} P${plan} | ${duration} | ${tasks || '-'} tasks | ${files || '-'} files |`;
+          modified = this.appendToMetricsTable(body, entry);
+          break;
+        }
+        case 'roadmap_evolution': {
+          const { phase, action, note, after, urgent } = event.payload;
+          const entry = this.formatRoadmapEvolutionEntry({ phase, action, note, after, urgent });
+          modified = this.appendToRoadmapEvolution(body, entry);
+          break;
+        }
+        case 'session': {
+          const { stoppedAt, resumeFile } = event.payload;
+          modified = this.updateSessionFields(body, stoppedAt, resumeFile);
+          break;
+        }
+        case 'forensic_session': {
+          const { sessionId, findings } = event.payload;
+          const entry = `- ${sessionId}: ${findings}`;
+          modified = this.appendToOrCreateSection(
+            body,
+            /(##\s*Forensic Sessions\s*\n)([\s\S]*?)(?=\n##|$)/i,
+            '## Forensic Sessions',
+            entry,
+          );
+          break;
+        }
+        case 'quick_task': {
+          const { task, result } = event.payload;
+          const entry = `- ${task}${result ? ': ' + result : ''}`;
+          modified = this.appendToOrCreateSection(
+            body,
+            /(##\s*Quick Tasks\s*\n)([\s\S]*?)(?=\n##|$)/i,
+            '## Quick Tasks',
+            entry,
+          );
+          break;
+        }
+        default: {
+          const _exhaustive: never = event;
+          throw new Error(`Unknown AppendEvent type: ${(event as { type: string }).type}`);
+        }
+      }
+
+      const synced = await this.syncFrontmatter(modified);
+      const normalized = this.normalizeMd(synced);
+      await this.putRecord('STATE.md', normalized);
+    });
   }
 
-  async recordStateMutation(_event: MutationEvent): Promise<void> {
-    throw new Error('recordStateMutation not yet implemented (Phase 3 Plan 02)');
+  /**
+   * Mutation-family event: modifies existing lists in STATE.md sections.
+   * Pipeline: withTransaction → getRecord → strip frontmatter → mutate list →
+   * syncStateFrontmatter → normalize → putRecord.
+   */
+  async recordStateMutation(event: MutationEvent): Promise<void> {
+    await this.withTransaction(async () => {
+      const raw = (await this.getRecord('STATE.md')) ?? '';
+      const body = this.stripFrontmatter(raw);
+      let modified: string;
+
+      switch (event.type) {
+        case 'blocker_added': {
+          const { text } = event.payload;
+          const entry = `- ${text}`;
+          modified = this.appendToSection(
+            body,
+            /(###?\s*(?:Blockers|Blockers\/Concerns|Concerns)\s*\n)([\s\S]*?)(?=\n###?|\n##[^#]|$)/i,
+            entry,
+          );
+          break;
+        }
+        case 'blocker_resolved': {
+          const { text } = event.payload;
+          modified = this.removeFromBlockersList(body, text);
+          break;
+        }
+        case 'todo_count_update': {
+          const { count } = event.payload;
+          modified = this.updateTodoCount(body, count);
+          break;
+        }
+        case 'deferred_items': {
+          const { items, action } = event.payload;
+          modified = this.mutateDeferredItems(body, items, action);
+          break;
+        }
+        default: {
+          const _exhaustive: never = event;
+          throw new Error(`Unknown MutationEvent type: ${(event as { type: string }).type}`);
+        }
+      }
+
+      const synced = await this.syncFrontmatter(modified);
+      const normalized = this.normalizeMd(synced);
+      await this.putRecord('STATE.md', normalized);
+    });
   }
 
-  async recordStateSignal(_event: SignalEvent): Promise<void> {
-    throw new Error('recordStateSignal not yet implemented (Phase 3 Plan 02)');
+  /**
+   * Signal-family event: writes/removes stateless flags.
+   * Dual-write: .planning/WAITING.json via adapter + .gsd/WAITING.json via direct fs (Pitfall #4).
+   */
+  async recordStateSignal(event: SignalEvent): Promise<void> {
+    switch (event.type) {
+      case 'waiting': {
+        const { waitType, question, options, phase } = event.payload;
+        const signal = {
+          status: 'waiting',
+          type: waitType,
+          question: question ?? null,
+          options: options ?? [],
+          since: new Date().toISOString(),
+          phase: phase ?? null,
+        };
+        const payload = JSON.stringify(signal, null, 2);
+        // Write to .planning/WAITING.json via adapter
+        await this.putRecord('WAITING.json', payload);
+        // Dual-write to .gsd/WAITING.json (outside adapter scope per Pitfall #4)
+        mkdirSync(join(this.projectDir, '.gsd'), { recursive: true });
+        writeFileSync(join(this.projectDir, '.gsd', 'WAITING.json'), payload, 'utf-8');
+        break;
+      }
+      case 'resume': {
+        // Remove WAITING.json via adapter
+        await this.removeRecord('WAITING.json');
+        // Remove .gsd/WAITING.json (outside adapter scope)
+        try { unlinkSync(join(this.projectDir, '.gsd', 'WAITING.json')); } catch { /* ENOENT OK */ }
+        break;
+      }
+      default: {
+        const _exhaustive: never = event;
+        throw new Error(`Unknown SignalEvent type: ${(event as { type: string }).type}`);
+      }
+    }
+  }
+
+  // ─── recordState* internal helpers ──────────────────────────────────────────
+
+  /** Strip YAML frontmatter from markdown content. */
+  private stripFrontmatter(content: string): string {
+    const match = content.match(/^---\n[\s\S]*?\n---\n*/);
+    return match ? content.slice(match[0].length) : content;
+  }
+
+  /** Normalize markdown: collapse 3+ consecutive blank lines to 2, ensure trailing newline. */
+  private normalizeMd(content: string): string {
+    let result = content.replace(/\n{3,}/g, '\n\n');
+    if (!result.endsWith('\n')) result += '\n';
+    return result;
+  }
+
+  /** Rebuild frontmatter from body + disk via syncStateFrontmatter. */
+  private async syncFrontmatter(body: string): Promise<string> {
+    // Dynamic import using a variable to prevent TypeScript from following
+    // the import for rootDir analysis (adapters tsconfig rootDir = ".")
+    const modulePath = '../../sdk/src/query/state-mutation.js';
+    const mod = await (import(/* webpackIgnore: true */ modulePath) as Promise<{
+      syncStateFrontmatter: (content: string, projectDir: string) => Promise<string>;
+    }>);
+    return mod.syncStateFrontmatter(body, this.projectDir);
+  }
+
+  /** Append entry to a section matched by regex pattern. Strips placeholder text. */
+  private appendToSection(content: string, pattern: RegExp, entry: string): string {
+    const match = content.match(pattern);
+    if (!match) return content;
+    let sectionBody = match[2];
+    // Strip common placeholder lines
+    sectionBody = sectionBody.replace(/None yet\.?\s*\n?/gi, '').replace(/No decisions yet\.?\s*\n?/gi, '').replace(/^None\.?\s*\n?/gim, '');
+    sectionBody = sectionBody.trimEnd() + '\n' + entry + '\n';
+    return content.replace(pattern, (_m, header: string) => `${header}${sectionBody}`);
+  }
+
+  /** Append a row to the Performance Metrics table (handles the table pattern). */
+  private appendToMetricsTable(content: string, entry: string): string {
+    const metricsPattern = /(##\s*Performance Metrics[\s\S]*?\n\|[^\n]+\n\|[-|\s]+\n)([\s\S]*?)(?=\n##|\n$|$)/i;
+    const match = content.match(metricsPattern);
+    if (!match) return content;
+    let tableBody = match[2].trimEnd();
+    if (tableBody.trim() === '' || tableBody.includes('None yet')) {
+      tableBody = entry;
+    } else {
+      tableBody = tableBody + '\n' + entry;
+    }
+    return content.replace(metricsPattern, (_m, header: string) => `${header}${tableBody}\n`);
+  }
+
+  /** Format a Roadmap Evolution entry line. */
+  private formatRoadmapEvolutionEntry(opts: {
+    phase: string;
+    action: string;
+    note?: string | null;
+    after?: string | null;
+    urgent?: boolean;
+  }): string {
+    const { phase, action, note, after, urgent } = opts;
+    const trimmedNote = note ? note.trim() : '';
+    if (action === 'inserted') {
+      const afterClause = after ? ` after Phase ${after}` : '';
+      let line = `- Phase ${phase} inserted${afterClause}`;
+      if (trimmedNote) line += `: ${trimmedNote}`;
+      if (urgent) line += ' (URGENT)';
+      return line;
+    }
+    let line = `- Phase ${phase} ${action}`;
+    if (trimmedNote) line += `: ${trimmedNote}`;
+    return line;
+  }
+
+  /** Append entry to Roadmap Evolution subsection; create if missing. */
+  private appendToRoadmapEvolution(content: string, entry: string): string {
+    const subsectionPattern = /(###\s*Roadmap Evolution\s*\n)([\s\S]*?)(?=\n###?\s|\n##[^#]|$)/i;
+    const match = content.match(subsectionPattern);
+
+    if (match) {
+      let sectionBody = match[2];
+      // Dedupe: exact line match
+      const existingLines = sectionBody.split('\n').map(l => l.trim());
+      if (existingLines.some(l => l === entry.trim())) return content;
+      // Strip placeholder
+      sectionBody = sectionBody.replace(/^None(?:\s+yet)?\.?\s*$/gim, '');
+      sectionBody = sectionBody.trimEnd() + '\n' + entry + '\n';
+      return content.replace(subsectionPattern, (_m, header: string) => `${header}${sectionBody}`);
+    }
+
+    // Subsection missing — create under Accumulated Context or at EOF
+    const accumulatedPattern = /(##\s*Accumulated Context\s*\n)/i;
+    const newSubsection = `\n### Roadmap Evolution\n\n${entry}\n`;
+    if (accumulatedPattern.test(content)) {
+      return content.replace(accumulatedPattern, (_m, header: string) => `${header}${newSubsection}`);
+    }
+    return content.trimEnd() + `\n\n## Accumulated Context\n${newSubsection}\n`;
+  }
+
+  /** Update session fields (Last session, Stopped At, Resume File) in body. */
+  private updateSessionFields(content: string, stoppedAt?: string, resumeFile?: string): string {
+    const now = new Date().toISOString();
+    let result = content;
+
+    // Update Last session
+    result = this.replaceFieldInBody(result, 'Last session', now) ?? result;
+    result = this.replaceFieldInBody(result, 'Last Date', now) ?? result;
+
+    // Update Stopped At
+    if (stoppedAt) {
+      const updated = this.replaceFieldInBody(result, 'Stopped At', stoppedAt)
+        ?? this.replaceFieldInBody(result, 'Stopped at', stoppedAt);
+      if (updated) result = updated;
+    }
+
+    // Update Resume File
+    const rf = resumeFile ?? 'None';
+    const rfUpdated = this.replaceFieldInBody(result, 'Resume File', rf)
+      ?? this.replaceFieldInBody(result, 'Resume file', rf);
+    if (rfUpdated) result = rfUpdated;
+
+    return result;
+  }
+
+  /** Replace a field value in body content (supports **bold:** and plain: formats). */
+  private replaceFieldInBody(content: string, fieldName: string, newValue: string): string | null {
+    const escaped = fieldName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const boldPattern = new RegExp(`(\\*\\*${escaped}:\\*\\*\\s*)(.*)`, 'i');
+    if (boldPattern.test(content)) {
+      return content.replace(boldPattern, (_m, prefix: string) => `${prefix}${newValue}`);
+    }
+    const plainPattern = new RegExp(`(^${escaped}:\\s*)(.*)`, 'im');
+    if (plainPattern.test(content)) {
+      return content.replace(plainPattern, (_m, prefix: string) => `${prefix}${newValue}`);
+    }
+    return null;
+  }
+
+  /** Append entry to a section (create section if missing). */
+  private appendToOrCreateSection(
+    content: string,
+    pattern: RegExp,
+    heading: string,
+    entry: string,
+  ): string {
+    const match = content.match(pattern);
+    if (match) {
+      let sectionBody = match[2];
+      sectionBody = sectionBody.replace(/None yet\.?\s*\n?/gi, '').replace(/^None\.?\s*\n?/gim, '');
+      sectionBody = sectionBody.trimEnd() + '\n' + entry + '\n';
+      return content.replace(pattern, (_m, header: string) => `${header}${sectionBody}`);
+    }
+    // Section not found — create at end
+    return content.trimEnd() + `\n\n${heading}\n\n${entry}\n`;
+  }
+
+  /** Remove a blocker line by text match and replace with "None" if empty. */
+  private removeFromBlockersList(content: string, searchText: string): string {
+    const sectionPattern = /(###?\s*(?:Blockers|Blockers\/Concerns|Concerns)\s*\n)([\s\S]*?)(?=\n###?|\n##[^#]|$)/i;
+    const match = content.match(sectionPattern);
+    if (!match) return content;
+    const sectionBody = match[2];
+    const lines = sectionBody.split('\n');
+    const filtered = lines.filter(line => {
+      if (!line.startsWith('- ')) return true;
+      return !line.toLowerCase().includes(searchText.toLowerCase());
+    });
+    let newBody = filtered.join('\n');
+    if (!newBody.trim() || !newBody.includes('- ')) {
+      newBody = 'None\n';
+    }
+    return content.replace(sectionPattern, (_m, header: string) => `${header}${newBody}`);
+  }
+
+  /** Update the Pending todos section with a new count. */
+  private updateTodoCount(content: string, count: number): string {
+    const todoPattern = /(##\s*Pending todos\s*\n)([\s\S]*?)(?=\n##|$)/i;
+    const match = content.match(todoPattern);
+    if (match) {
+      const replacement = count > 0 ? `(${count} items)\n` : '(none)\n';
+      return content.replace(todoPattern, (_m, header: string) => `${header}\n${replacement}`);
+    }
+    return content;
+  }
+
+  /** Mutate Deferred Ideas section: add or remove items. */
+  private mutateDeferredItems(content: string, items: string[], action: 'add' | 'remove'): string {
+    const sectionPattern = /(###?\s*(?:Deferred Ideas|Deferred)\s*\n)([\s\S]*?)(?=\n###?|\n##[^#]|$)/i;
+    const match = content.match(sectionPattern);
+
+    if (action === 'add') {
+      const entries = items.map(i => `- ${i}`).join('\n');
+      if (match) {
+        let sectionBody = match[2];
+        sectionBody = sectionBody.replace(/^None\.?\s*\n?/gim, '').replace(/None yet\.?\s*\n?/gi, '');
+        sectionBody = sectionBody.trimEnd() + '\n' + entries + '\n';
+        return content.replace(sectionPattern, (_m, header: string) => `${header}${sectionBody}`);
+      }
+      // Create section if missing
+      return content.trimEnd() + `\n\n## Deferred Ideas\n\n${entries}\n`;
+    }
+
+    // action === 'remove'
+    if (!match) return content;
+    const sectionBody = match[2];
+    const lines = sectionBody.split('\n');
+    const lowerItems = items.map(i => i.toLowerCase());
+    const filtered = lines.filter(line => {
+      if (!line.startsWith('- ')) return true;
+      const lineText = line.slice(2).trim().toLowerCase();
+      return !lowerItems.some(item => lineText.includes(item));
+    });
+    let newBody = filtered.join('\n');
+    if (!newBody.trim() || !newBody.includes('- ')) {
+      newBody = 'None\n';
+    }
+    return content.replace(sectionPattern, (_m, header: string) => `${header}${newBody}`);
   }
 
   async putNamedDoc(
