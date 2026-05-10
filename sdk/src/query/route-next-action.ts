@@ -18,12 +18,16 @@ import { stateJson } from './state.js';
 import { roadmapAnalyze } from './roadmap.js';
 import { findPhase } from './phase.js';
 import { nextCallCountGet } from './sidecar.js';
+
+/**
  * Strip the leading `.planning/` segment from a planning-relative directory
  * path returned by `findPhase`. The adapter is rooted at .planning/, so its
  * relative inputs must NOT include the leading prefix.
+ *
  * Handles workstream-prefixed dirs unchanged (the workstream segment lives
  * under .planning/workstreams/<ws>/, so once .planning/ is stripped the
  * remaining `workstreams/<ws>/...` is already adapter-resolvable).
+ */
 function toAdapterDir(planningRelDir: string): string {
   if (planningRelDir.startsWith('.planning/')) {
     return planningRelDir.slice('.planning/'.length);
