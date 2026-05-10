@@ -39,6 +39,7 @@ import {
 import { buildStateFrontmatter, getMilestonePhaseFilter } from './state.js';
 import type { QueryHandler } from './utils.js';
 import type { AppendEvent, MutationEvent, SignalEvent } from './state-event-types.js';
+import { readModifyWriteState } from './phase-helpers.js';
 
 // ─── Process exit lock cleanup (D2 — match CJS state.cjs:16-23) ─────────
 
@@ -335,14 +336,15 @@ export const stateUpdate: QueryHandler = async (args, projectDir, workstream) =>
   }
 
   let updated = false;
-  await readModifyWriteStateMd(projectDir, (content) => {
+  const adapter = await adapterFor(projectDir);
+  await readModifyWriteState(adapter, workstream, (content) => {
     const result = stateReplaceField(content, field, value);
     if (result) {
       updated = true;
       return result;
     }
     return content;
-  }, workstream);
+  }, projectDir);
 
   return { data: { updated } };
 };
@@ -380,7 +382,8 @@ export const statePatch: QueryHandler = async (args, projectDir, workstream) => 
 
   const updated: string[] = [];
   const failed: string[] = [];
-  await readModifyWriteStateMd(projectDir, (content) => {
+  const adapter = await adapterFor(projectDir);
+  await readModifyWriteState(adapter, workstream, (content) => {
     for (const [field, value] of Object.entries(patches)) {
       const result = stateReplaceField(content, field, String(value));
       if (result) {
@@ -391,7 +394,7 @@ export const statePatch: QueryHandler = async (args, projectDir, workstream) => 
       }
     }
     return content;
-  }, workstream);
+  }, projectDir);
 
   return { data: { updated, failed } };
 };
@@ -438,7 +441,8 @@ export const stateBeginPhase: QueryHandler = async (args, projectDir, workstream
   const today = new Date().toISOString().split('T')[0];
   const updated: string[] = [];
 
-  await readModifyWriteStateMd(projectDir, (content) => {
+  const adapter = await adapterFor(projectDir);
+  await readModifyWriteState(adapter, workstream, (content) => {
     // Update bold/plain fields
     const statusValue = `Executing Phase ${phaseNumber}`;
     let u = stateReplaceField(content, 'Status', statusValue);
@@ -532,7 +536,7 @@ export const stateBeginPhase: QueryHandler = async (args, projectDir, workstream
     }
 
     return content;
-  }, workstream);
+  }, projectDir);
 
   return {
     data: {
@@ -557,7 +561,8 @@ export const stateAdvancePlan: QueryHandler = async (_args, projectDir, workstre
   const today = new Date().toISOString().split('T')[0];
   let result: Record<string, unknown> = { error: 'STATE.md not found' };
 
-  await readModifyWriteStateMd(projectDir, (content) => {
+  const adapter = await adapterFor(projectDir);
+  await readModifyWriteState(adapter, workstream, (content) => {
     // Parse current plan info (content already has frontmatter stripped)
     const legacyPlan = stateExtractField(content, 'Current Plan');
     const legacyTotal = stateExtractField(content, 'Total Plans in Phase');
@@ -624,7 +629,7 @@ export const stateAdvancePlan: QueryHandler = async (_args, projectDir, workstre
     });
     result = { advanced: true, previous_plan: currentPlan, current_plan: newPlan, total_plans: totalPlans };
     return content;
-  }, workstream);
+  }, projectDir);
 
   return { data: result };
 };
@@ -968,7 +973,8 @@ export const statePlannedPhase: QueryHandler = async (args, projectDir, workstre
   const today = new Date().toISOString().split('T')[0];
   const updated: string[] = [];
 
-  await readModifyWriteStateMd(projectDir, (content) => {
+  const adapter = await adapterFor(projectDir);
+  await readModifyWriteState(adapter, workstream, (content) => {
     let result = stateReplaceField(content, 'Status', 'Ready to execute');
     if (result) { content = result; updated.push('Status'); }
 
@@ -992,7 +998,7 @@ export const statePlannedPhase: QueryHandler = async (args, projectDir, workstre
       lastActivity: `${today} -- Phase ${phaseLabel} planning complete`,
     });
     return content;
-  }, workstream);
+  }, projectDir);
 
   return { data: { updated, phase: phaseNumber, plan_count: planCount } };
 };
