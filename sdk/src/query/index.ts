@@ -100,6 +100,7 @@ import { auditOpen } from './audit-open.js';
 import { detectCustomFiles } from './detect-custom-files.js';
 import { commandsList } from './commands-list.js';
 import { checkConfigGates } from './config-gates.js';
+import { verifyFatSkills } from './verify-fat-skills.js';
 import { checkAutoMode } from './check-auto-mode.js';
 import { checkPhaseReady } from './phase-ready.js';
 import { routeNextAction } from './route-next-action.js';
@@ -392,6 +393,7 @@ export function createRegistry(opts?: {
     'verify.key-links': verifyKeyLinks,
     'verify.schema-drift': verifySchemaDrift,
     'verify.codebase-drift': verifyCodebaseDrift,
+    'verify.fat-skills': verifyFatSkills,
   };
 
   for (const entry of VERIFY_COMMAND_ALIASES) {
