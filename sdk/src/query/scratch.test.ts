@@ -3,10 +3,14 @@
  * Wave 0 scaffold (Plan 01): it.todo placeholders until Plan 05 creates scratch.ts.
  */
 
-import { describe, it, beforeEach, afterEach } from 'vitest';
+import { describe, it, beforeEach, afterEach, expect } from 'vitest';
 import { mkdtemp, rm, mkdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import {
+  discussCheckpointPut, discussCheckpointGet, discussCheckpointDelete,
+  discussQuestionsPut, discussQuestionsGet, discussQuestionsDelete,
+} from './scratch.js';
 
 describe('scratch — discuss.checkpoint.* + discuss.questions.* (PRIMITIVES-09)', () => {
   let tmpDir: string;
@@ -17,10 +21,49 @@ describe('scratch — discuss.checkpoint.* + discuss.questions.* (PRIMITIVES-09)
   });
   afterEach(async () => { await rm(tmpDir, { recursive: true, force: true }); });
 
-  void tmpDir;
+  it('discuss.checkpoint.put/get/delete roundtrip at .planning/phases/05-foo/05-DISCUSS-CHECKPOINT.json', async () => {
+    const phaseDir = '05-foo';
+    const phaseNum = '05';
+    const body = '{"state":"mid-discuss"}';
 
-  it.todo('discuss.checkpoint round-trip at .planning/phases/05-foo/05-DISCUSS-CHECKPOINT.json');
-  it.todo('discuss.checkpoint.delete removes the file; re-get returns null');
-  it.todo('discuss.questions round-trip with .json and .html formats');
-  it.todo('delete on nonexistent is no-op (no throw)');
+    const putRes = await discussCheckpointPut([phaseDir, phaseNum, body], tmpDir);
+    expect((putRes.data as { written: string }).written).toContain('phases/05-foo/05-DISCUSS-CHECKPOINT.json');
+
+    const getRes = await discussCheckpointGet([phaseDir, phaseNum], tmpDir);
+    expect((getRes.data as { found: boolean; content: string | null }).found).toBe(true);
+    expect((getRes.data as { content: string }).content).toBe(body);
+
+    await discussCheckpointDelete([phaseDir, phaseNum], tmpDir);
+    const afterDelete = await discussCheckpointGet([phaseDir, phaseNum], tmpDir);
+    expect((afterDelete.data as { found: boolean }).found).toBe(false);
+  });
+
+  it('discuss.questions roundtrip with json format', async () => {
+    await discussQuestionsPut(['05-foo', '05', 'json', '{"q":"x"}'], tmpDir);
+    const res = await discussQuestionsGet(['05-foo', '05', 'json'], tmpDir);
+    expect((res.data as { found: boolean; content: string }).found).toBe(true);
+    expect((res.data as { content: string }).content).toBe('{"q":"x"}');
+  });
+
+  it('discuss.questions roundtrip with html format', async () => {
+    await discussQuestionsPut(['05-foo', '05', 'html', '<p>q</p>'], tmpDir);
+    const res = await discussQuestionsGet(['05-foo', '05', 'html'], tmpDir);
+    expect((res.data as { content: string }).content).toBe('<p>q</p>');
+  });
+
+  it('delete on nonexistent scratch file is a no-op (no throw)', async () => {
+    await expect(discussCheckpointDelete(['99-nonexistent', '99'], tmpDir)).resolves.toBeDefined();
+  });
+
+  it('rejects phaseDir with ".." (path traversal guard)', async () => {
+    await expect(
+      discussCheckpointPut(['../../etc', '05', 'body'], tmpDir),
+    ).rejects.toThrow(/\.\./);
+  });
+
+  it('rejects invalid format arg on questions', async () => {
+    await expect(
+      discussQuestionsPut(['05-foo', '05', 'yaml', 'body'], tmpDir),
+    ).rejects.toThrow(/json.*html/i);
+  });
 });
