@@ -86,7 +86,13 @@ Plans:
   2. Recording a STATE.md event from a workflow uses exactly one call shape — `recordStateEvent({type, payload})` with `type` ∈ `roadmap_evolution | decision | blocker_added | blocker_resolved | metric | session | todo_count_update | deferred_items | forensic_session | quick_task` — and the same call shape works against any adapter that satisfies the interface.
   3. A user running any workflow that performs a write (e.g. `addPhase`, `completePhaseAndCascade`, `recordVerification`, `addSummary`, `createUat`/`updateUat`) observes byte-identical `.planning/` output to upstream when MarkdownAdapter is mounted (golden-file diff = empty).
   4. OQ-01 is resolved: `commitPlanningState` semantics for non-git backends are documented (no-op vs checkpoint snapshot) and adapter implementations match the documented behavior; the conformance harness has a stub test that will be filled in Phase 7.
-**Plans:** TBD
+**Plans:** 5 plans
+Plans:
+- [ ] 03-01-PLAN.md — Foundation: withTransaction impl + event types + phase-helpers scaffold + leak-grep write patterns
+- [ ] 03-02-PLAN.md — State-mutation event handlers (10 handlers -> 3 adapter event families)
+- [ ] 03-03-PLAN.md — State-mutation non-event handlers (8 field-update/maintenance handlers)
+- [ ] 03-04-PLAN.md — Phase-lifecycle handlers (13 handlers -> shared SDK helpers)
+- [ ] 03-05-PLAN.md — Conformance tests + OQ-01 ADR + leak-grep verification
 
 ### Phase 4: Plug workflow leaks (top-10 + `<context>`-block class)
 **Repo:** this repo (`feat/storage-adapter`)
@@ -100,7 +106,13 @@ Plans:
   3. OQ-04 is resolved: every skill frontmatter `<context>` `@.planning/...` reference is either rewritten through the adapter, intercepted at install time by a documented hook, or explicitly declared in an exceptions register — and the resolution strategy is uniform across the affected skills (no per-skill ad-hoc handling).
   4. OQ-03 is resolved: `spec-phase.md` Step 7 and `eval-review.md` end use `gsd-sdk query commit` instead of raw `git add`/`git commit`; an upstream issue is filed referencing the inconsistency.
   5. The `verify.fat-skills` SDK query lists every non-router skill with line-count + leak-count and is wired into CI as an authoritative list (Rule 4 demotion tooling per SYNTHESIS §9 risk).
-**Plans:** TBD
+**Plans:** 5 plans
+Plans:
+- [ ] 03-01-PLAN.md — Foundation: withTransaction impl + event types + phase-helpers scaffold + leak-grep write patterns
+- [ ] 03-02-PLAN.md — State-mutation event handlers (10 handlers -> 3 adapter event families)
+- [ ] 03-03-PLAN.md — State-mutation non-event handlers (8 field-update/maintenance handlers)
+- [ ] 03-04-PLAN.md — Phase-lifecycle handlers (13 handlers -> shared SDK helpers)
+- [ ] 03-05-PLAN.md — Conformance tests + OQ-01 ADR + leak-grep verification
 
 ### Phase 5: Foundational primitive lift
 **Repo:** this repo (`feat/storage-adapter`)
@@ -114,7 +126,13 @@ Plans:
   3. Every `.planning/` mutation that previously used a kind-tagged getter/writer pair (`getResearch(kind)`, `putIntelDoc(name)`, `putCodebaseDoc(name)`, `getArchivedMilestoneDoc(milestone, kind)`) now routes through `putNamedDoc(category, key, body)` / `getNamedDoc(category, key)` with closed-enum categories — verified by SDK-surface grep for the old method names returning zero call-sites.
   4. UI-review screenshots and sketch HTML/CSS/PNG assets write through `writeBinaryAsset(path, bytes)` against the MarkdownAdapter, and the capabilities flag correctly reports `binaryAsset: true`; the same call against a hypothetical adapter declaring `binaryAsset: false` triggers documented graceful degradation (workflow logs warn + skip, no exception).
   5. OQ-02, OQ-05, OQ-07 are resolved: ROADMAP.md / STATE.md / PROJECT.md write atomicity unit is "section"; sidecar paths (`.next-call-count`, `tmp/*`) are named methods not generic kv; scratch artifacts (`*-DISCUSS-CHECKPOINT.json`, `*-QUESTIONS.json`, `*-QUESTIONS.html`, `tmp/*`) are first-class types in the noun catalog. Each resolution is recorded in `.planning/DECISIONS.md`.
-**Plans:** TBD
+**Plans:** 5 plans
+Plans:
+- [ ] 03-01-PLAN.md — Foundation: withTransaction impl + event types + phase-helpers scaffold + leak-grep write patterns
+- [ ] 03-02-PLAN.md — State-mutation event handlers (10 handlers -> 3 adapter event families)
+- [ ] 03-03-PLAN.md — State-mutation non-event handlers (8 field-update/maintenance handlers)
+- [ ] 03-04-PLAN.md — Phase-lifecycle handlers (13 handlers -> shared SDK helpers)
+- [ ] 03-05-PLAN.md — Conformance tests + OQ-01 ADR + leak-grep verification
 
 ### Phase 6: BeadsAdapter implementation
 **Repo:** sibling `~/code/gsd-beads`
@@ -128,7 +146,13 @@ Plans:
   3. Every Bin B method has an implementation that maps to a bd-native shape (issue + label, typed comment, sub-record, or `updateSection`-style anchor); a smoke test exercising one workflow per Bin B method category (phase, plan, summary, uat, state-event, debug, intel, learnings, etc.) succeeds end-to-end against a real `bd` store.
   4. OQ-06 is resolved: the knowledge-graph subsystem scope decision is recorded in DECISIONS.md (separate `GraphAdapter` sub-interface OR out-of-scope for v1.0 with documented graceful degradation in `gsd-phase-researcher` and `graphify.md`); the BeadsAdapter behavior matches the recorded decision.
   5. UI-review and sketch workflows running against `BeadsAdapter` degrade gracefully (per BEADS-05) when `writeBinaryAsset` is unsupported — they log a warning and skip the binary write rather than crashing or corrupting state.
-**Plans:** TBD
+**Plans:** 5 plans
+Plans:
+- [ ] 03-01-PLAN.md — Foundation: withTransaction impl + event types + phase-helpers scaffold + leak-grep write patterns
+- [ ] 03-02-PLAN.md — State-mutation event handlers (10 handlers -> 3 adapter event families)
+- [ ] 03-03-PLAN.md — State-mutation non-event handlers (8 field-update/maintenance handlers)
+- [ ] 03-04-PLAN.md — Phase-lifecycle handlers (13 handlers -> shared SDK helpers)
+- [ ] 03-05-PLAN.md — Conformance tests + OQ-01 ADR + leak-grep verification
 **UI hint:** yes
 
 ### Phase 7: Conformance test suite
@@ -141,7 +165,13 @@ Plans:
   2. Property-based round-trip tests (`putRecord(x); getRecord(...) === x` modulo adapter-defined normalization) pass for every record type in the noun catalog: Phase, Plan, Summary, Uat, StateEvent, Roadmap, Decision, Blocker, DebugSession, Project, Spec, AiSpec — and any new noun added to the catalog requires a passing round-trip test before merge (CI gate).
   3. The section-semantics matrix is complete: for every (record-type, section-id) tuple in the codebase, the suite asserts `append` / `overwrite` / `prepend` produce defined outcomes on both adapters, and the test harness rejects any future adapter PR that lacks a defined semantic for any tuple (SYNTHESIS §9 high-severity "section semantics differ across adapters" risk mitigated by enforcement, not just convention).
   4. A deliberate failure injection mid-transaction (e.g. throw after the second of three writes) causes both adapters' `restore()` / rollback to leave their respective stores byte-identical (or record-identical, for bd) to the pre-transaction state — verified by snapshot diff on each adapter.
-**Plans:** TBD
+**Plans:** 5 plans
+Plans:
+- [ ] 03-01-PLAN.md — Foundation: withTransaction impl + event types + phase-helpers scaffold + leak-grep write patterns
+- [ ] 03-02-PLAN.md — State-mutation event handlers (10 handlers -> 3 adapter event families)
+- [ ] 03-03-PLAN.md — State-mutation non-event handlers (8 field-update/maintenance handlers)
+- [ ] 03-04-PLAN.md — Phase-lifecycle handlers (13 handlers -> shared SDK helpers)
+- [ ] 03-05-PLAN.md — Conformance tests + OQ-01 ADR + leak-grep verification
 
 ### Phase 8: Migration + distribution
 **Repo:** both
@@ -154,7 +184,13 @@ Plans:
   3. Running `git rebase upstream/main` against a representative recent upstream batch (e.g. the next 10 upstream commits after 2026-04-30) succeeds with conflicts only in the documented adapter-interface seam files, never in pure business-logic files; the rebase script runs leak-grep over the post-rebase diff and surfaces any new direct-I/O introduced upstream as PR-blocking findings (per D-2026-04-30-04 implication).
   4. Upstream's golden-test parity matrix (#2909) runs against the fork with `npm install <fork>` and no adapter config and produces zero diffs — the strict-superset invariant from PROJECT.md is validated by an external test, not just asserted in docs.
   5. DIST-05 is resolved: the distribution decision (submit upstream as PR vs maintain long-lived fork) is recorded in DECISIONS.md with the rationale referencing upstream's reception of #2898 / #2901 / #2908; the recorded decision drives the actual repo state at milestone close (PR opened, or fork-maintenance playbook published).
-**Plans:** TBD
+**Plans:** 5 plans
+Plans:
+- [ ] 03-01-PLAN.md — Foundation: withTransaction impl + event types + phase-helpers scaffold + leak-grep write patterns
+- [ ] 03-02-PLAN.md — State-mutation event handlers (10 handlers -> 3 adapter event families)
+- [ ] 03-03-PLAN.md — State-mutation non-event handlers (8 field-update/maintenance handlers)
+- [ ] 03-04-PLAN.md — Phase-lifecycle handlers (13 handlers -> shared SDK helpers)
+- [ ] 03-05-PLAN.md — Conformance tests + OQ-01 ADR + leak-grep verification
 
 ## Progress
 
