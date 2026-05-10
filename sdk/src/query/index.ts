@@ -108,6 +108,13 @@ import { checkCompletion } from './check-completion.js';
 import { checkGates } from './check-gates.js';
 import { checkVerificationStatus } from './check-verification-status.js';
 import { checkShipReady } from './check-ship-ready.js';
+import { codebasePut, codebaseGet, codebaseList } from './codebase-docs.js';
+import { reportPut, reportGet, handoffPut, continueHerePut, forensicsPut, decisionsIndexGet } from './named-docs.js';
+import { debugArchive } from './debug-session.js';
+import { spikeGetManifest, spikeGetConventions, spikePutWrapUp, spikePutConventions, sketchGetManifest, sketchGetConventions, sketchPutWrapUp } from './spike-sketch.js';
+import { threadAdd, seedAdd, todoAdd } from './thread-seed.js';
+import { milestoneArchivePhases, phaseGetManifest, graphifyStore } from './milestone-ops.js';
+import { tmpPut, tmpGet } from './tmp-docs.js';
 import { GSDEventStream } from '../event-stream.js';
 import type { StorageAdapter } from '../../../adapters/types.js';
 import { MarkdownAdapter } from '../../../adapters/markdown/index.js';
@@ -710,6 +717,40 @@ export function createRegistry(opts?: {
   registry.register('profile-sample', profileSample);
   registry.register('scan-sessions', scanSessions);
   registry.register('generate-claude-md', generateClaudeMd);
+
+  // Phase 4 Plan 01: New domain query verbs for workflow leak elimination.
+  // Codebase docs (covers map-codebase 7 leaks, new-project 1, scout-codebase 1)
+  registry.register('codebase.put', (args, projectDir, ws) => codebasePut(args, projectDir, ws));
+  registry.register('codebase.get', (args, projectDir, ws) => codebaseGet(args, projectDir, ws));
+  registry.register('codebase.list', (args, projectDir, ws) => codebaseList(args, projectDir, ws));
+  // Named docs (covers session-report, milestone-summary, forensics, inbox, pause-work, discuss-phase)
+  registry.register('report.put', (args, projectDir, ws) => reportPut(args, projectDir, ws));
+  registry.register('report.get', (args, projectDir, ws) => reportGet(args, projectDir, ws));
+  registry.register('handoff.put', (args, projectDir, ws) => handoffPut(args, projectDir, ws));
+  registry.register('continue-here.put', (args, projectDir, ws) => continueHerePut(args, projectDir, ws));
+  registry.register('forensics.put', (args, projectDir, ws) => forensicsPut(args, projectDir, ws));
+  registry.register('decisions-index.get', (args, projectDir, ws) => decisionsIndexGet(args, projectDir, ws));
+  // Debug session (covers execute-phase debug archive, gsd-debugger 3 leaks)
+  registry.register('debug.archive', (args, projectDir, ws) => debugArchive(args, projectDir, ws));
+  // Spike/sketch (covers spike 3, spike-wrap-up 3, sketch 2, sketch-wrap-up 1)
+  registry.register('spike.get-manifest', (args, projectDir, ws) => spikeGetManifest(args, projectDir, ws));
+  registry.register('spike.get-conventions', (args, projectDir, ws) => spikeGetConventions(args, projectDir, ws));
+  registry.register('spike.put-wrap-up', (args, projectDir, ws) => spikePutWrapUp(args, projectDir, ws));
+  registry.register('spike.put-conventions', (args, projectDir, ws) => spikePutConventions(args, projectDir, ws));
+  registry.register('sketch.get-manifest', (args, projectDir, ws) => sketchGetManifest(args, projectDir, ws));
+  registry.register('sketch.get-conventions', (args, projectDir, ws) => sketchGetConventions(args, projectDir, ws));
+  registry.register('sketch.put-wrap-up', (args, projectDir, ws) => sketchPutWrapUp(args, projectDir, ws));
+  // Thread/seed/todo (covers thread 1, plant-seed 1, add-todo 1)
+  registry.register('thread.add', (args, projectDir, ws) => threadAdd(args, projectDir, ws));
+  registry.register('seed.add', (args, projectDir, ws) => seedAdd(args, projectDir, ws));
+  registry.register('todo.add', (args, projectDir, ws) => todoAdd(args, projectDir, ws));
+  // Milestone ops (covers cleanup 1, complete-milestone 1, undo 1, graphify 3-4)
+  registry.register('milestone.archive-phases', (args, projectDir, ws) => milestoneArchivePhases(args, projectDir, ws));
+  registry.register('phase.get-manifest', (args, projectDir, ws) => phaseGetManifest(args, projectDir, ws));
+  registry.register('graphify.store', (args, projectDir, ws) => graphifyStore(args, projectDir, ws));
+  // Tmp docs (covers docs-update 4 leaks)
+  registry.register('tmp.put', (args, projectDir, ws) => tmpPut(args, projectDir, ws));
+  registry.register('tmp.get', (args, projectDir, ws) => tmpGet(args, projectDir, ws));
 
   // Wire event emission for mutation commands
   if (eventStream) {

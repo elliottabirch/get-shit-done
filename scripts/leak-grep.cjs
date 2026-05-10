@@ -45,7 +45,18 @@ const SHELL_PATTERNS = [
   { name: 'mv-shell',     re: /\bmv\b[^\n;]{0,200}\.planning\// },
   { name: 'rm-rf-shell',  re: /\brm\s+-rf\b[^\n;]{0,200}\.planning\// },
   { name: 'append-shell', re: />>\s*\.planning\// },
+  // Phase 4 Plan 01 additions (D-07/D-09): additional shell commands
+  { name: 'mkdir-shell',    re: /\bmkdir\b[^\n;]{0,200}\.planning\// },
+  { name: 'cat-shell',      re: /\bcat\b[^\n;]{0,200}\.planning\// },
+  { name: 'find-shell',     re: /\bfind\b[^\n;]{0,200}\.planning\//, zone: 'workflow' },
+  { name: 'ls-shell',       re: /\bls\b[^\n;]{0,200}\.planning\//,   zone: 'workflow' },
+  { name: 'git-add-shell',  re: /\bgit\s+add\b[^\n;]{0,200}\.planning\// },
 ];
+
+// Zone filter: patterns with zone='workflow' are only reported when the scanned file
+// is under get-shit-done/workflows/, agents/, or commands/gsd/ — they are suppressed
+// in templates/references where these may appear as documentation prose (T-04-02).
+const WORKFLOW_ZONE_RE = /(?:get-shit-done\/workflows\/|agents\/|commands\/gsd\/)/;
 
 // <context>-block @.planning/ frontmatter scan (the new leak class from SYNTHESIS §1 #4)
 // Heuristic: detect .planning/ inside a <context>...</context> block (any syntax, not
@@ -111,15 +122,18 @@ function scanFile(filePath) {
 
   // Per-line scan for TOOL_PATTERNS + SHELL_PATTERNS
   lines.forEach((line, i) => {
-    for (const { name, re } of [...TOOL_PATTERNS, ...SHELL_PATTERNS]) {
-      if (re.test(line)) {
-        matches.push({
-          file: filePath,
-          line: i + 1,
-          category: name,
-          text: line.trim(),
-        });
-      }
+    for (const { name, re, zone } of [...TOOL_PATTERNS, ...SHELL_PATTERNS]) {
+      if (!re.test(line)) continue;
+      // Zone filter (T-04-02): patterns with zone='workflow' only fire in workflow/agent/command zones
+      if (zone === 'workflow' && !WORKFLOW_ZONE_RE.test(filePath)) continue;
+      // Exclusion: skip lines inside `gsd-sdk query` calls (A1: SDK mediates these)
+      if (/\bgsd-sdk\s+query\b/.test(line)) continue;
+      matches.push({
+        file: filePath,
+        line: i + 1,
+        category: name,
+        text: line.trim(),
+      });
     }
   });
 
