@@ -235,7 +235,7 @@ export async function releaseStateLock(lockPath: string): Promise<void> {
  * Strips existing frontmatter, rebuilds from body + disk, and splices back.
  * Preserves existing status when body-derived status is 'unknown'.
  */
-async function syncStateFrontmatter(content: string, projectDir: string): Promise<string> {
+export async function syncStateFrontmatter(content: string, projectDir: string): Promise<string> {
   const existingFm = extractFrontmatter(content);
   const body = stripFrontmatter(content);
   const syncAdapter = await adapterFor(projectDir);

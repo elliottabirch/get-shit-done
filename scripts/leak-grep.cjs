@@ -68,6 +68,21 @@ const SDK_FS_READ_PATTERNS = [
   { name: 'stat-async',     re: /\bawait\s+(?:fsStat|stat)\s*\(/ },
 ];
 
+// SDK fs-write patterns (.ts only; .planning/-scoped via Stage-2 filter)
+// Phase 3: covers the SDK migration's write surface.
+const SDK_FS_WRITE_PATTERNS = [
+  { name: 'writeFile-async',    re: /\bawait\s+writeFile\s*\(/ },
+  { name: 'writeFileSync',      re: /\bwriteFileSync\s*\(/ },
+  { name: 'mkdirSync',          re: /\bmkdirSync\s*\(/ },
+  { name: 'mkdir-async',        re: /\bawait\s+mkdir\s*\(/ },
+  { name: 'unlinkSync',         re: /\bunlinkSync\s*\(/ },
+  { name: 'unlink-async',       re: /\bawait\s+unlink\s*\(/ },
+  { name: 'appendFileSync',     re: /\bappendFileSync\s*\(/ },
+  { name: 'rename-async',       re: /\bawait\s+rename\s*\(/ },
+  { name: 'rm-async',           re: /\bawait\s+rm\s*\(/ },
+  { name: 'fs-write-import',    re: /\bimport\s+\{[^}]*\b(?:writeFile|mkdir|unlink|rename|rm|writeFileSync|mkdirSync|unlinkSync|appendFileSync)\b[^}]*\}\s+from\s+['"]node:fs(?:\/promises)?['"]/ },
+];
+
 // Stage-2 path-scope filter (must appear within ±20-line window for SDK_FS hit to count)
 const PLANNING_SCOPE_RE = /(?:['"`]\.planning\/|planningPaths\s*\(|relPlanningPath\s*\(|planningRelativePath\s*\(|paths\.(state|roadmap|project|config|phases|requirements|planning)\b)/;
 
@@ -110,9 +125,11 @@ function scanFile(filePath) {
 
   // SDK_FS pass — .ts files only, with Stage-2 ±20-line .planning/ scope filter
   // Phase 2 D-04 (Plan 02-01 Task 2): SDK-side fs-read detection.
+  // Phase 3: extended with SDK_FS_WRITE_PATTERNS for write-side coverage.
   if (SDK_FS_EXTS.test(filePath)) {
+    const allSdkPatterns = [...SDK_FS_READ_PATTERNS, ...SDK_FS_WRITE_PATTERNS];
     lines.forEach((line, i) => {
-      for (const { name, re } of SDK_FS_READ_PATTERNS) {
+      for (const { name, re } of allSdkPatterns) {
         if (!re.test(line)) continue;
         const lo = Math.max(0, i - 20);
         const hi = Math.min(lines.length, i + 21);
@@ -235,6 +252,7 @@ module.exports = {
   TOOL_PATTERNS,
   SHELL_PATTERNS,
   SDK_FS_READ_PATTERNS,
+  SDK_FS_WRITE_PATTERNS,
   PLANNING_SCOPE_RE,
   CONTEXT_BLOCK_RE,
   CONTEXT_PATH_RE,
