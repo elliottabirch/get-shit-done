@@ -17,25 +17,20 @@
  * ```
  */
 
-import { existsSync, readdirSync, readFileSync, statSync, type Dirent } from 'node:fs';
-import { readFile, readdir } from 'node:fs/promises';
+import { existsSync, readdirSync, readFileSync, type Dirent } from 'node:fs';
 import { join, relative, basename } from 'node:path';
 import { execSync } from 'node:child_process';
 import { homedir } from 'node:os';
-import { GSDError, ErrorClassification } from '../errors.js';
 
 import { loadConfig, type GSDConfig } from '../config.js';
 import { resolveModel, MODEL_PROFILES } from './config-query.js';
 import { maskIfSecret } from './secrets.js';
 import { findPhase } from './phase.js';
-import { getMilestonePhaseFilter } from './state.js';
 import { roadmapGetPhase, getMilestoneInfo, extractCurrentMilestone, extractPhasesFromSection } from './roadmap.js';
-import { determinePhaseStatus } from './progress.js';
-import { adapterFor, planningPaths, normalizePhaseName, toPosixPath, resolveAgentsDir, detectRuntime } from './helpers.js';
-import { generatePhaseSlug, assertSafeProjectCode } from './phase-lifecycle-policy.js';
+import { normalizePhaseName, toPosixPath, resolveAgentsDir, detectRuntime, planningRelativePath } from './helpers.js';
 import { relPlanningPath } from '../workstream-utils.js';
 import type { QueryResult } from './utils.js';
-import type { StorageAdapter } from '../../../adapters/types.js';
+import type { StorageAdapter, RecordRef } from '../../../adapters/types.js';
 
 // ─── Internal helpers ──────────────────────────────────────────────────────
 
@@ -59,23 +54,6 @@ function generateSlugInternal(text: string): string {
     .substring(0, 60);
 }
 
-function extractPhaseArg(args: string[]): string | undefined {
-  const equalsArg = args.find((arg) => arg.startsWith('--phase='));
-  if (equalsArg) {
-    const value = equalsArg.slice('--phase='.length).trim();
-    return value || undefined;
-  }
-
-  const flagIndex = args.indexOf('--phase');
-  if (flagIndex !== -1) {
-    const value = args[flagIndex + 1];
-    return value && !value.startsWith('--') ? value : undefined;
-  }
-
-  const first = args[0];
-  return first && !first.startsWith('--') ? first : undefined;
-}
-
 /**
  * Check if a path exists on disk.
  */
@@ -84,90 +62,13 @@ function pathExists(base: string, relPath: string): boolean {
 }
 
 /**
- * Bug #3491: detect whether `base` is inside any git worktree, and if so,
- * return the absolute worktree root. Mirrors the CJS `gitWorktreeInfoInternal`
- * in get-shit-done/bin/lib/core.cjs — keep these two implementations behaviour-
- * identical so the SDK and CJS init handlers emit the same has_git semantics.
- *
- * Returns { inside, worktreeRoot } — both fall back to false/null on any error
- * (git unavailable, not a repo, timeout) so callers see the conservative
- * default that preserves pre-fix behaviour for non-git environments.
- */
-function gitWorktreeInfo(base: string): { inside: boolean; worktreeRoot: string | null } {
-  try {
-    const inside = execSync('git rev-parse --is-inside-work-tree', {
-      cwd: base,
-      stdio: ['ignore', 'pipe', 'ignore'],
-      encoding: 'utf-8',
-      timeout: 5000,
-      env: { ...process.env, GIT_TERMINAL_PROMPT: '0' },
-    }).trim();
-    if (inside !== 'true') return { inside: false, worktreeRoot: null };
-    try {
-      const root = execSync('git rev-parse --show-toplevel', {
-        cwd: base,
-        stdio: ['ignore', 'pipe', 'ignore'],
-        encoding: 'utf-8',
-        timeout: 5000,
-        env: { ...process.env, GIT_TERMINAL_PROMPT: '0' },
-      }).trim();
-      return { inside: true, worktreeRoot: root || null };
-    } catch {
-      return { inside: true, worktreeRoot: null };
-    }
-  } catch {
-    return { inside: false, worktreeRoot: null };
-  }
-}
-
-
-/**
- * Compute the canonical phase directory name for a known phase entry from the
- * roadmap when no directory exists yet.  Applies the project_code prefix so
- * the first-touch creation path used by /gsd-discuss-phase and /gsd-plan-phase
- * stays consistent with the prefix produced by `phase.add` / `phase.insert`.
- *
- * Returns null when phaseNumber or phaseName cannot be determined.
- */
-function computeExpectedPhaseDirName(
-  phaseNumber: string | null,
-  phaseName: string | null,
-  projectCode: string,
-): string | null {
-  if (!phaseNumber || !phaseName) return null;
-  const paddedNum = normalizePhaseName(phaseNumber);
-  const slug = generatePhaseSlug(phaseName);
-  if (!slug) return null;
-  const prefix = projectCode ? `${projectCode}-` : '';
-  return `${prefix}${paddedNum}-${slug}`;
-}
-
-async function shouldDropArchivedPhaseMatch(
-  phaseInfo: Record<string, unknown> | null,
-  roadmapPhase: Record<string, unknown> | null,
-  _projectDir: string,
-  _workstream?: string,
-): Promise<boolean> {
-  // Matches CJS cmdInitPlanPhase / cmdInitExecutePhase / cmdInitVerifyWork:
-  //   if (phaseInfo?.archived && roadmapPhase?.found) phaseInfo = null;
-  // Unconditional drop — the ROADMAP is authoritative for the current milestone,
-  // regardless of what archived milestone the on-disk match came from. Do NOT add
-  // a milestone-version equality check (#2391 regression risk).
-  if (!phaseInfo?.archived) return false;
-  if (!roadmapPhase || !roadmapPhase.found) return false;
-  return true;
-}
-
-/**
  * Get the latest completed milestone from MILESTONES.md.
  * Port of getLatestCompletedMilestone from init.cjs lines 10-25.
  */
-function getLatestCompletedMilestone(projectDir: string): { version: string; name: string } | null {
-  const milestonesPath = join(projectDir, '.planning', 'MILESTONES.md');
-  if (!existsSync(milestonesPath)) return null;
-
+async function getLatestCompletedMilestone(adapter: StorageAdapter): Promise<{ version: string; name: string } | null> {
   try {
-    const content = readFileSync(milestonesPath, 'utf-8');
+    const content = await adapter.getRecord('MILESTONES.md');
+    if (!content) return null;
     const match = content.match(/^##\s+(v[\d.]+)\s+(.+?)\s+\(Shipped:/m);
     if (!match) return null;
     return { version: match[1], name: match[2].trim() };
@@ -229,7 +130,7 @@ async function getPhaseInfoWithFallback(
   const roadmapPhase = roadmapResult.data as Record<string, unknown> | null;
 
   // Match init.cjs: drop archived disk match when the phase is listed in the current ROADMAP
-  if (await shouldDropArchivedPhaseMatch(phaseInfo, roadmapPhase, projectDir, workstream)) {
+  if (phaseInfo?.archived && roadmapPhase?.found) {
     phaseInfo = null;
   }
 
@@ -262,20 +163,17 @@ async function getPhaseInfoForVerifyWork(
   adapter: StorageAdapter,
   phase: string,
   projectDir: string,
-  workstream?: string,
 ): Promise<{ phaseInfo: Record<string, unknown> | null }> {
-  // Phase 2 Plan 02-02 transitional: findPhase + roadmapGetPhase migrated to adapter signature.
-  const adapter = await adapterFor(projectDir);
-  const phaseResult = await findPhase(adapter, [phase], projectDir, workstream);
+  const phaseResult = await findPhase(adapter, [phase], projectDir);
   let phaseInfo = phaseResult.data as Record<string, unknown> | null;
   if (phaseInfo && phaseInfo.found === false) {
     phaseInfo = null;
   }
 
-  const roadmapResult = await roadmapGetPhase(adapter, [phase], projectDir, workstream);
+  const roadmapResult = await roadmapGetPhase(adapter, [phase], projectDir);
   const roadmapPhase = roadmapResult.data as Record<string, unknown> | null;
 
-  if (await shouldDropArchivedPhaseMatch(phaseInfo, roadmapPhase, projectDir, workstream)) {
+  if (phaseInfo?.archived && roadmapPhase?.found) {
     phaseInfo = null;
   }
 
@@ -286,7 +184,9 @@ async function getPhaseInfoForVerifyWork(
       directory: null,
       phase_number: roadmapPhase.phase_number,
       phase_name: phaseName,
-      phase_slug: phaseName ? generateSlugInternal(phaseName) : null,
+      phase_slug: phaseName
+        ? phaseName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
+        : null,
       plans: [],
       summaries: [],
       incomplete_plans: [],
@@ -351,10 +251,9 @@ export async function withProjectRoot(
     result.project_code = projectCode;
   }
 
-  const projectMdPath = join(projectDir, '.planning', 'PROJECT.md');
   try {
-    if (existsSync(projectMdPath)) {
-      const content = readFileSync(projectMdPath, 'utf-8');
+    const content = await adapter.getRecord('PROJECT.md');
+    if (content) {
       const h1Match = content.match(/^#\s+(.+)$/m);
       if (h1Match) {
         result.project_title = h1Match[1].trim();
@@ -379,26 +278,17 @@ export const initExecutePhase = async (
   projectDir: string,
   workstream?: string,
 ): Promise<QueryResult> => {
-  const phase = extractPhaseArg(args);
+  const phase = args[0];
   if (!phase) {
     return { data: { error: 'phase required for init execute-phase' } };
   }
 
-  // --tdd is a boolean override of config.workflow.tdd_mode — matches the CJS
-  // path's parseNamedArgs(args, [], ['validate', 'tdd']) projection
-  // (bin/lib/init-command-router.cjs handler block) which passes options.tdd
-  // through to cmdInitExecutePhase. Without parsing here, `gsd-tools init
-  // execute-phase 1 --tdd` would never override a false config value.
-  const tddFlag = args.includes('--tdd');
-
   const config = await loadConfig(projectDir);
-  const paths = planningPaths(projectDir, workstream);
-  const planningDir = paths.planning;
 
   const { phaseInfo, roadmapPhase } = await getPhaseInfoWithFallback(adapter, phase, projectDir, workstream);
   const phase_req_ids = extractReqIds(roadmapPhase);
 
-  const configExists = existsSync(join(planningDir, 'config.json'));
+  const configExists = await adapter.exists(planningRelativePath(workstream, 'config.json'));
   const [executorModel, verifierModel] = await Promise.all([
     getModelAlias('gsd-executor', projectDir),
     getModelAlias('gsd-verifier', projectDir),
@@ -416,7 +306,7 @@ export const initExecutePhase = async (
   const result: Record<string, unknown> = {
     executor_model: executorModel,
     verifier_model: verifierModel,
-    tdd_mode: tddFlag || (config.workflow.tdd_mode ?? false),
+    tdd_mode: config.workflow.tdd_mode ?? false,
     commit_docs: config.commit_docs,
     sub_repos: (config as Record<string, unknown>).sub_repos ?? [],
     parallelization: config.parallelization,
@@ -449,12 +339,12 @@ export const initExecutePhase = async (
     milestone_version: milestone.version,
     milestone_name: milestone.name,
     milestone_slug: generateSlugInternal(milestone.name),
-    state_exists: existsSync(join(planningDir, 'STATE.md')),
-    roadmap_exists: existsSync(join(planningDir, 'ROADMAP.md')),
+    state_exists: await adapter.exists(planningRelativePath(workstream, 'STATE.md')),
+    roadmap_exists: await adapter.exists(planningRelativePath(workstream, 'ROADMAP.md')),
     config_exists: configExists,
-    state_path: toPosixPath(relative(projectDir, join(planningDir, 'STATE.md'))),
-    roadmap_path: toPosixPath(relative(projectDir, join(planningDir, 'ROADMAP.md'))),
-    config_path: toPosixPath(relative(projectDir, join(planningDir, 'config.json'))),
+    state_path: toPosixPath(relPlanningPath(workstream) + '/STATE.md'),
+    roadmap_path: toPosixPath(relPlanningPath(workstream) + '/ROADMAP.md'),
+    config_path: toPosixPath(relPlanningPath(workstream) + '/config.json'),
   };
 
   return { data: await withProjectRoot(adapter, projectDir, result, config as Record<string, unknown>) };
@@ -472,18 +362,12 @@ export const initPlanPhase = async (
   projectDir: string,
   workstream?: string,
 ): Promise<QueryResult> => {
-  const phase = extractPhaseArg(args);
+  const phase = args[0];
   if (!phase) {
     return { data: { error: 'phase required for init plan-phase' } };
   }
 
-  // --tdd boolean override (parity with CJS router's parseNamedArgs + the
-  // legacy cmdInitPlanPhase `options.tdd || config.tdd_mode || false`).
-  const tddFlag = args.includes('--tdd');
-
   const config = await loadConfig(projectDir);
-  const paths = planningPaths(projectDir, workstream);
-  const planningDir = paths.planning;
 
   const { phaseInfo, roadmapPhase } = await getPhaseInfoWithFallback(adapter, phase, projectDir, workstream);
   const phase_req_ids = extractReqIds(roadmapPhase);
@@ -495,38 +379,14 @@ export const initPlanPhase = async (
   ]);
 
   const phaseNumber = (phaseInfo?.phase_number as string) || null;
-  const phaseName = (phaseInfo?.phase_name as string) ?? null;
-  const phaseDir = (phaseInfo?.directory as string) ?? null;
   const plans = (phaseInfo?.plans || []) as string[];
-  const summaries = (phaseInfo?.summaries || []) as string[];
-
-  // #3569: surface phase lifecycle status so /gsd-plan-phase can short-circuit
-  // on closed (Complete) phases instead of silently replanning over shipped
-  // code. Reuses determinePhaseStatus — the project-wide vocabulary used by
-  // `progress` (Pending | Planned | In Progress | Executed | Complete |
-  // Needs Review). When the phase has no directory on disk yet, treat it as
-  // Pending (it has not been started).
-  const phaseStatus = phaseDir
-    ? await determinePhaseStatus(plans.length, summaries.length, join(projectDir, phaseDir))
-    : 'Pending';
-
-  // #3287: compute the canonical directory name with project_code prefix so
-  // the first-touch mkdir in /gsd-plan-phase stays consistent with phase.add.
-  const rawProjectCode = (config as Record<string, unknown>).project_code as string || '';
-  assertSafeProjectCode(rawProjectCode);
-  const expectedPhaseDirName = phaseDir
-    ? null // directory already exists — no need to create
-    : computeExpectedPhaseDirName(phaseNumber, phaseName, rawProjectCode);
-  const expectedPhaseDir = expectedPhaseDirName
-    ? toPosixPath(relative(projectDir, join(paths.phases, expectedPhaseDirName)))
-    : null;
 
   const cfg = config as GSDConfig;
   const result: Record<string, unknown> = {
     researcher_model: researcherModel,
     planner_model: plannerModel,
     checker_model: checkerModel,
-    tdd_mode: tddFlag || (config.workflow.tdd_mode ?? false),
+    tdd_mode: config.workflow.tdd_mode ?? false,
     research_enabled: config.workflow.research,
     plan_checker_enabled: config.workflow.plan_check,
     nyquist_validation_enabled: config.workflow.nyquist_validation,
@@ -536,44 +396,45 @@ export const initPlanPhase = async (
     auto_chain_active: !!config.workflow._auto_chain_active,
     mode: cfg.mode ?? 'interactive',
     phase_found: !!phaseInfo,
-    phase_dir: phaseDir,
-    expected_phase_dir: expectedPhaseDir,
+    phase_dir: (phaseInfo?.directory as string) ?? null,
     phase_number: phaseNumber,
-    phase_name: phaseName,
+    phase_name: (phaseInfo?.phase_name as string) ?? null,
     phase_slug: (phaseInfo?.phase_slug as string) ?? null,
     padded_phase: phaseNumber ? normalizePhaseName(phaseNumber) : null,
     phase_req_ids,
-    phase_status: phaseStatus,
     has_research: (phaseInfo?.has_research as boolean) || false,
     has_context: (phaseInfo?.has_context as boolean) || false,
     has_reviews: (phaseInfo?.has_reviews as boolean) || false,
     has_plans: plans.length > 0,
     plan_count: plans.length,
-    planning_exists: existsSync(planningDir),
-    roadmap_exists: existsSync(join(planningDir, 'ROADMAP.md')),
-    state_path: toPosixPath(relative(projectDir, join(planningDir, 'STATE.md'))),
-    roadmap_path: toPosixPath(relative(projectDir, join(planningDir, 'ROADMAP.md'))),
-    requirements_path: toPosixPath(relative(projectDir, join(planningDir, 'REQUIREMENTS.md'))),
+    planning_exists: await adapter.exists(planningRelativePath(workstream, '.')),
+    roadmap_exists: await adapter.exists(planningRelativePath(workstream, 'ROADMAP.md')),
+    state_path: toPosixPath(relPlanningPath(workstream) + '/STATE.md'),
+    roadmap_path: toPosixPath(relPlanningPath(workstream) + '/ROADMAP.md'),
+    requirements_path: toPosixPath(relPlanningPath(workstream) + '/REQUIREMENTS.md'),
     patterns_path: null,
   };
 
   // Add artifact paths if phase directory exists
-  if (phaseDir) {
-    const phaseDirFull = join(projectDir, phaseDir);
+  if (phaseInfo?.directory) {
     try {
-      const files = readdirSync(phaseDirFull);
+      const phaseAdapterRel = phaseInfo.directory as string;
+      // Strip leading '.planning/' from directory to get adapter-relative path
+      const adapterRel = phaseAdapterRel.replace(/^\.planning\//, '');
+      const refs = await adapter.listCollection(adapterRel);
+      const files = refs.map(r => r.name);
       const contextFile = files.find(f => f.endsWith('-CONTEXT.md') || f === 'CONTEXT.md');
-      if (contextFile) result.context_path = toPosixPath(join(phaseDir, contextFile));
+      if (contextFile) result.context_path = toPosixPath(join(phaseInfo.directory as string, contextFile));
       const researchFile = files.find(f => f.endsWith('-RESEARCH.md') || f === 'RESEARCH.md');
-      if (researchFile) result.research_path = toPosixPath(join(phaseDir, researchFile));
+      if (researchFile) result.research_path = toPosixPath(join(phaseInfo.directory as string, researchFile));
       const verificationFile = files.find(f => f.endsWith('-VERIFICATION.md') || f === 'VERIFICATION.md');
-      if (verificationFile) result.verification_path = toPosixPath(join(phaseDir, verificationFile));
+      if (verificationFile) result.verification_path = toPosixPath(join(phaseInfo.directory as string, verificationFile));
       const uatFile = files.find(f => f.endsWith('-UAT.md') || f === 'UAT.md');
-      if (uatFile) result.uat_path = toPosixPath(join(phaseDir, uatFile));
+      if (uatFile) result.uat_path = toPosixPath(join(phaseInfo.directory as string, uatFile));
       const reviewsFile = files.find(f => f.endsWith('-REVIEWS.md') || f === 'REVIEWS.md');
-      if (reviewsFile) result.reviews_path = toPosixPath(join(phaseDir, reviewsFile));
+      if (reviewsFile) result.reviews_path = toPosixPath(join(phaseInfo.directory as string, reviewsFile));
       const patternsFile = files.find(f => f.endsWith('-PATTERNS.md') || f === 'PATTERNS.md');
-      if (patternsFile) result.patterns_path = toPosixPath(join(phaseDir, patternsFile));
+      if (patternsFile) result.patterns_path = toPosixPath(join(phaseInfo.directory as string, patternsFile));
     } catch { /* intentionally empty */ }
   }
 
@@ -593,23 +454,15 @@ export const initNewMilestone = async (
   _workstream?: string,
 ): Promise<QueryResult> => {
   const config = await loadConfig(projectDir);
-  const planningDir = join(projectDir, '.planning');
   const milestone = await getMilestoneInfo(adapter);
-  const latestCompleted = getLatestCompletedMilestone(projectDir);
+  const latestCompleted = await getLatestCompletedMilestone(adapter);
 
-  const phasesDir = join(planningDir, 'phases');
   let phaseDirCount = 0;
   try {
-    if (existsSync(phasesDir)) {
-      // Bug #2445 parity with CJS `cmdInitNewMilestone`: filter phase dirs
-      // to the current milestone so stale dirs from a prior milestone that
-      // weren't archived don't inflate the count. Without this filter the
-      // SDK returns the full directory count, which the new-milestone
-      // workflow then uses to gate "is this a fresh start" decisions.
-      const isDirInMilestone = await getMilestonePhaseFilter(projectDir);
-      phaseDirCount = readdirSync(phasesDir, { withFileTypes: true })
-        .filter(entry => entry.isDirectory() && isDirInMilestone(entry.name))
-        .length;
+    const phaseRefs = await adapter.listCollection('phases');
+    for (const ref of phaseRefs) {
+      const st = await adapter.stat(ref.path);
+      if (st?.kind === 'dir') phaseDirCount++;
     }
   } catch { /* intentionally empty */ }
 
@@ -631,14 +484,14 @@ export const initNewMilestone = async (
     latest_completed_milestone_name: latestCompleted?.name || null,
     phase_dir_count: phaseDirCount,
     phase_archive_path: latestCompleted
-      ? toPosixPath(relative(projectDir, join(projectDir, '.planning', 'milestones', `${latestCompleted.version}-phases`)))
+      ? `milestones/${latestCompleted.version}-phases`
       : null,
-    project_exists: pathExists(projectDir, '.planning/PROJECT.md'),
-    roadmap_exists: existsSync(join(planningDir, 'ROADMAP.md')),
-    state_exists: existsSync(join(planningDir, 'STATE.md')),
+    project_exists: await adapter.exists('PROJECT.md'),
+    roadmap_exists: await adapter.exists('ROADMAP.md'),
+    state_exists: await adapter.exists('STATE.md'),
     project_path: '.planning/PROJECT.md',
-    roadmap_path: toPosixPath(relative(projectDir, join(planningDir, 'ROADMAP.md'))),
-    state_path: toPosixPath(relative(projectDir, join(planningDir, 'STATE.md'))),
+    roadmap_path: '.planning/ROADMAP.md',
+    state_path: '.planning/STATE.md',
   };
 
   return { data: await withProjectRoot(adapter, projectDir, result, config as Record<string, unknown>) };
@@ -658,7 +511,6 @@ export const initQuick = async (
 ): Promise<QueryResult> => {
   const description = args[0] || null;
   const config = await loadConfig(projectDir);
-  const planningDir = join(projectDir, '.planning');
   const now = new Date();
   const slug = description ? generateSlugInternal(description).substring(0, 40) : null;
 
@@ -700,8 +552,8 @@ export const initQuick = async (
     timestamp: now.toISOString(),
     quick_dir: '.planning/quick',
     task_dir: slug ? `.planning/quick/${quickId}-${slug}` : null,
-    roadmap_exists: existsSync(join(planningDir, 'ROADMAP.md')),
-    planning_exists: existsSync(join(projectDir, '.planning')),
+    roadmap_exists: await adapter.exists('ROADMAP.md'),
+    planning_exists: await adapter.exists('.'),
   };
 
   return { data: await withProjectRoot(adapter, projectDir, result, config as Record<string, unknown>) };
@@ -720,20 +572,20 @@ export const initResume = async (
   _workstream?: string,
 ): Promise<QueryResult> => {
   const config = await loadConfig(projectDir);
-  const planningDir = join(projectDir, '.planning');
 
   let interruptedAgentId: string | null = null;
   try {
-    interruptedAgentId = readFileSync(join(projectDir, '.planning', 'current-agent-id.txt'), 'utf-8').trim();
+    const agentIdContent = await adapter.getRecord('current-agent-id.txt');
+    if (agentIdContent) interruptedAgentId = agentIdContent.trim();
   } catch { /* intentionally empty */ }
 
   const result: Record<string, unknown> = {
-    state_exists: existsSync(join(planningDir, 'STATE.md')),
-    roadmap_exists: existsSync(join(planningDir, 'ROADMAP.md')),
-    project_exists: pathExists(projectDir, '.planning/PROJECT.md'),
-    planning_exists: existsSync(join(projectDir, '.planning')),
-    state_path: toPosixPath(relative(projectDir, join(planningDir, 'STATE.md'))),
-    roadmap_path: toPosixPath(relative(projectDir, join(planningDir, 'ROADMAP.md'))),
+    state_exists: await adapter.exists('STATE.md'),
+    roadmap_exists: await adapter.exists('ROADMAP.md'),
+    project_exists: await adapter.exists('PROJECT.md'),
+    planning_exists: await adapter.exists('.'),
+    state_path: '.planning/STATE.md',
+    roadmap_path: '.planning/ROADMAP.md',
     project_path: '.planning/PROJECT.md',
     has_interrupted_agent: !!interruptedAgentId,
     interrupted_agent_id: interruptedAgentId,
@@ -753,15 +605,15 @@ export const initVerifyWork = async (
   adapter: StorageAdapter,
   args: string[],
   projectDir: string,
-  workstream?: string,
+  _workstream?: string,
 ): Promise<QueryResult> => {
-  const phase = extractPhaseArg(args);
+  const phase = args[0];
   if (!phase) {
     return { data: { error: 'phase required for init verify-work' } };
   }
 
-  const config = await loadConfig(projectDir, workstream);
-  const { phaseInfo } = await getPhaseInfoForVerifyWork(adapter, phase, projectDir, workstream);
+  const config = await loadConfig(projectDir);
+  const { phaseInfo } = await getPhaseInfoForVerifyWork(adapter, phase, projectDir);
 
   const [plannerModel, checkerModel] = await Promise.all([
     getModelAlias('gsd-planner', projectDir),
@@ -794,14 +646,12 @@ export const initPhaseOp = async (
   projectDir: string,
   workstream?: string,
 ): Promise<QueryResult> => {
-  const phase = extractPhaseArg(args);
+  const phase = args[0];
   if (!phase) {
     return { data: { error: 'phase required for init phase-op' } };
   }
 
   const config = await loadConfig(projectDir);
-  const paths = planningPaths(projectDir, workstream);
-  const planningDir = paths.planning;
 
   // findPhase with archived override: if only match is archived, prefer ROADMAP
   const phaseResult = await findPhase(adapter, [phase], projectDir, workstream);
@@ -811,7 +661,7 @@ export const initPhaseOp = async (
   const roadmapPhase = roadmapResult.data as Record<string, unknown> | null;
 
   // If the only match comes from an archived milestone, prefer current ROADMAP
-  if (roadmapPhase?.found && await shouldDropArchivedPhaseMatch(phaseInfo, roadmapPhase, projectDir, workstream)) {
+  if (phaseInfo?.archived && roadmapPhase?.found) {
     const phaseName = roadmapPhase.phase_name as string;
     phaseInfo = {
       found: true,
@@ -850,20 +700,7 @@ export const initPhaseOp = async (
 
   const phaseFound = !!(phaseInfo && phaseInfo.found);
   const phaseNumber = (phaseInfo?.phase_number as string) || null;
-  const phaseName = (phaseInfo?.phase_name as string) ?? null;
-  const phaseDir = (phaseInfo?.directory as string) ?? null;
   const plans = (phaseInfo?.plans || []) as string[];
-
-  // #3287: compute the canonical directory name with project_code prefix so
-  // the first-touch mkdir in /gsd-discuss-phase stays consistent with phase.add.
-  const rawProjectCode = (config as Record<string, unknown>).project_code as string || '';
-  assertSafeProjectCode(rawProjectCode);
-  const expectedPhaseDirName = phaseDir
-    ? null // directory already exists — no need to create
-    : computeExpectedPhaseDirName(phaseNumber, phaseName, rawProjectCode);
-  const expectedPhaseDir = expectedPhaseDirName
-    ? toPosixPath(relative(projectDir, join(paths.phases, expectedPhaseDirName)))
-    : null;
 
   const result: Record<string, unknown> = {
     commit_docs: config.commit_docs,
@@ -876,10 +713,9 @@ export const initPhaseOp = async (
     firecrawl: typeof config.firecrawl === 'string' ? maskIfSecret('firecrawl', config.firecrawl) : config.firecrawl,
     exa_search: typeof config.exa_search === 'string' ? maskIfSecret('exa_search', config.exa_search) : config.exa_search,
     phase_found: phaseFound,
-    phase_dir: phaseDir,
-    expected_phase_dir: expectedPhaseDir,
+    phase_dir: (phaseInfo?.directory as string) ?? null,
     phase_number: phaseNumber,
-    phase_name: phaseName,
+    phase_name: (phaseInfo?.phase_name as string) ?? null,
     phase_slug: (phaseInfo?.phase_slug as string) ?? null,
     padded_phase: phaseNumber ? normalizePhaseName(phaseNumber) : null,
     has_research: (phaseInfo?.has_research as boolean) || false,
@@ -888,28 +724,29 @@ export const initPhaseOp = async (
     has_verification: (phaseInfo?.has_verification as boolean) || false,
     has_reviews: (phaseInfo?.has_reviews as boolean) || false,
     plan_count: plans.length,
-    roadmap_exists: existsSync(join(planningDir, 'ROADMAP.md')),
-    planning_exists: existsSync(planningDir),
-    state_path: toPosixPath(relative(projectDir, join(planningDir, 'STATE.md'))),
-    roadmap_path: toPosixPath(relative(projectDir, join(planningDir, 'ROADMAP.md'))),
-    requirements_path: toPosixPath(relative(projectDir, join(planningDir, 'REQUIREMENTS.md'))),
+    roadmap_exists: await adapter.exists(planningRelativePath(workstream, 'ROADMAP.md')),
+    planning_exists: await adapter.exists(planningRelativePath(workstream, '.')),
+    state_path: toPosixPath(relPlanningPath(workstream) + '/STATE.md'),
+    roadmap_path: toPosixPath(relPlanningPath(workstream) + '/ROADMAP.md'),
+    requirements_path: toPosixPath(relPlanningPath(workstream) + '/REQUIREMENTS.md'),
   };
 
   // Add artifact paths if phase directory exists
-  if (phaseDir) {
-    const phaseDirFull = join(projectDir, phaseDir);
+  if (phaseInfo?.directory) {
     try {
-      const files = readdirSync(phaseDirFull);
+      const phaseAdapterRel = (phaseInfo.directory as string).replace(/^\.planning\//, '');
+      const refs = await adapter.listCollection(phaseAdapterRel);
+      const files = refs.map(r => r.name);
       const contextFile = files.find(f => f.endsWith('-CONTEXT.md') || f === 'CONTEXT.md');
-      if (contextFile) result.context_path = toPosixPath(join(phaseDir, contextFile));
+      if (contextFile) result.context_path = toPosixPath(join(phaseInfo.directory as string, contextFile));
       const researchFile = files.find(f => f.endsWith('-RESEARCH.md') || f === 'RESEARCH.md');
-      if (researchFile) result.research_path = toPosixPath(join(phaseDir, researchFile));
+      if (researchFile) result.research_path = toPosixPath(join(phaseInfo.directory as string, researchFile));
       const verificationFile = files.find(f => f.endsWith('-VERIFICATION.md') || f === 'VERIFICATION.md');
-      if (verificationFile) result.verification_path = toPosixPath(join(phaseDir, verificationFile));
+      if (verificationFile) result.verification_path = toPosixPath(join(phaseInfo.directory as string, verificationFile));
       const uatFile = files.find(f => f.endsWith('-UAT.md') || f === 'UAT.md');
-      if (uatFile) result.uat_path = toPosixPath(join(phaseDir, uatFile));
+      if (uatFile) result.uat_path = toPosixPath(join(phaseInfo.directory as string, uatFile));
       const reviewsFile = files.find(f => f.endsWith('-REVIEWS.md') || f === 'REVIEWS.md');
-      if (reviewsFile) result.reviews_path = toPosixPath(join(phaseDir, reviewsFile));
+      if (reviewsFile) result.reviews_path = toPosixPath(join(phaseInfo.directory as string, reviewsFile));
     } catch { /* intentionally empty */ }
   }
 
@@ -930,18 +767,18 @@ export const initTodos = async (
 ): Promise<QueryResult> => {
   const area = args[0] || null;
   const config = await loadConfig(projectDir);
-  const planningDir = join(projectDir, '.planning');
   const now = new Date();
 
-  const pendingDir = join(planningDir, 'todos', 'pending');
   let count = 0;
   const todos: Array<Record<string, unknown>> = [];
 
   try {
-    const files = readdirSync(pendingDir).filter(f => f.endsWith('.md'));
-    for (const file of files) {
+    const refs = await adapter.listCollection('todos/pending');
+    const mdRefs = refs.filter(r => r.name.endsWith('.md'));
+    for (const ref of mdRefs) {
       try {
-        const content = readFileSync(join(pendingDir, file), 'utf-8');
+        const content = await adapter.getRecord(ref.path);
+        if (!content) continue;
         const createdMatch = content.match(/^created:\s*(.+)$/m);
         const titleMatch = content.match(/^title:\s*(.+)$/m);
         const areaMatch = content.match(/^area:\s*(.+)$/m);
@@ -951,11 +788,11 @@ export const initTodos = async (
 
         count++;
         todos.push({
-          file,
+          file: ref.name,
           created: createdMatch ? createdMatch[1].trim() : 'unknown',
           title: titleMatch ? titleMatch[1].trim() : 'Untitled',
           area: todoArea,
-          path: toPosixPath(relative(projectDir, join(pendingDir, file))),
+          path: `.planning/todos/pending/${ref.name}`,
         });
       } catch { /* intentionally empty */ }
     }
@@ -968,11 +805,11 @@ export const initTodos = async (
     todo_count: count,
     todos,
     area_filter: area,
-    pending_dir: toPosixPath(relative(projectDir, join(planningDir, 'todos', 'pending'))),
-    completed_dir: toPosixPath(relative(projectDir, join(planningDir, 'todos', 'completed'))),
-    planning_exists: existsSync(planningDir),
-    todos_dir_exists: existsSync(join(planningDir, 'todos')),
-    pending_dir_exists: existsSync(pendingDir),
+    pending_dir: '.planning/todos/pending',
+    completed_dir: '.planning/todos/completed',
+    planning_exists: await adapter.exists('.'),
+    todos_dir_exists: await adapter.exists('todos'),
+    pending_dir_exists: await adapter.exists('todos/pending'),
   };
 
   return { data: await withProjectRoot(adapter, projectDir, result, config as Record<string, unknown>) };
@@ -988,14 +825,11 @@ export const initMilestoneOp = async (
   adapter: StorageAdapter,
   _args: string[],
   projectDir: string,
-  workstream?: string,
+  _workstream?: string,
 ): Promise<QueryResult> => {
   const config = await loadConfig(projectDir);
-  const paths = planningPaths(projectDir, workstream);
-  const planningDir = paths.planning;
-  const milestone = await getMilestoneInfo(adapter, workstream);
+  const milestone = await getMilestoneInfo(adapter);
 
-  const phasesDir = join(planningDir, 'phases');
   let phaseCount = 0;
   let completedPhases = 0;
 
@@ -1007,10 +841,11 @@ export const initMilestoneOp = async (
   // gets summaries — even though the roadmap has phases still to do.
   let roadmapPhaseNumbers: string[] = [];
   try {
-    const { readFile } = await import('node:fs/promises');
-    const roadmapRaw = await readFile(join(planningDir, 'ROADMAP.md'), 'utf-8');
-    const currentSection = await extractCurrentMilestone(adapter, roadmapRaw, workstream);
-    roadmapPhaseNumbers = extractPhasesFromSection(currentSection).map(p => p.number);
+    const roadmapRaw = await adapter.getRecord('ROADMAP.md');
+    if (roadmapRaw) {
+      const currentSection = await extractCurrentMilestone(adapter, roadmapRaw);
+      roadmapPhaseNumbers = extractPhasesFromSection(currentSection).map(p => p.number);
+    }
   } catch { /* intentionally empty */ }
 
   // Build the on-disk index keyed by the canonical full phase token (e.g.
@@ -1028,12 +863,13 @@ export const initMilestoneOp = async (
   };
   const diskPhaseDirs: Map<string, string> = new Map();
   try {
-    const entries = readdirSync(phasesDir, { withFileTypes: true });
-    for (const e of entries) {
-      if (!e.isDirectory()) continue;
-      const m = e.name.match(/^(\d+[A-Z]?(?:\.\d+)*)/);
+    const phaseRefs = await adapter.listCollection('phases');
+    for (const ref of phaseRefs) {
+      const st = await adapter.stat(ref.path);
+      if (st?.kind !== 'dir') continue;
+      const m = ref.name.match(/^(\d+[A-Z]?(?:\.\d+)*)/);
       if (!m) continue;
-      diskPhaseDirs.set(canonicalizePhase(m[1]), e.name);
+      diskPhaseDirs.set(canonicalizePhase(m[1]), ref.name);
     }
   } catch { /* intentionally empty */ }
 
@@ -1043,8 +879,8 @@ export const initMilestoneOp = async (
       const dirName = diskPhaseDirs.get(canonicalizePhase(num));
       if (!dirName) continue;
       try {
-        const phaseFiles = readdirSync(join(phasesDir, dirName));
-        const hasSummary = phaseFiles.some(f => f.endsWith('-SUMMARY.md') || f === 'SUMMARY.md');
+        const phaseFileRefs = await adapter.listCollection(`phases/${dirName}`);
+        const hasSummary = phaseFileRefs.some(r => r.name.endsWith('-SUMMARY.md') || r.name === 'SUMMARY.md');
         if (hasSummary) completedPhases++;
       } catch { /* intentionally empty */ }
     }
@@ -1052,25 +888,27 @@ export const initMilestoneOp = async (
     // Fallback: no parseable ROADMAP (e.g. brand-new project). Preserve the
     // legacy on-disk-count behavior so existing no-roadmap tests still pass.
     try {
-      const entries = readdirSync(phasesDir, { withFileTypes: true });
-      const dirs = entries.filter(e => e.isDirectory()).map(e => e.name);
-      phaseCount = dirs.length;
-      for (const dir of dirs) {
+      const phaseRefs = await adapter.listCollection('phases');
+      for (const ref of phaseRefs) {
+        const st = await adapter.stat(ref.path);
+        if (st?.kind !== 'dir') continue;
+        phaseCount++;
         try {
-          const phaseFiles = readdirSync(join(phasesDir, dir));
-          const hasSummary = phaseFiles.some(f => f.endsWith('-SUMMARY.md') || f === 'SUMMARY.md');
+          const phaseFileRefs = await adapter.listCollection(`phases/${ref.name}`);
+          const hasSummary = phaseFileRefs.some(r => r.name.endsWith('-SUMMARY.md') || r.name === 'SUMMARY.md');
           if (hasSummary) completedPhases++;
         } catch { /* intentionally empty */ }
       }
     } catch { /* intentionally empty */ }
   }
 
-  const archiveDir = join(planningDir, 'archive');
   let archivedMilestones: string[] = [];
   try {
-    archivedMilestones = readdirSync(archiveDir, { withFileTypes: true })
-      .filter(e => e.isDirectory())
-      .map(e => e.name);
+    const archiveRefs = await adapter.listCollection('archive');
+    for (const ref of archiveRefs) {
+      const st = await adapter.stat(ref.path);
+      if (st?.kind === 'dir') archivedMilestones.push(ref.name);
+    }
   } catch { /* intentionally empty */ }
 
   const result: Record<string, unknown> = {
@@ -1083,11 +921,11 @@ export const initMilestoneOp = async (
     all_phases_complete: phaseCount > 0 && phaseCount === completedPhases,
     archived_milestones: archivedMilestones,
     archive_count: archivedMilestones.length,
-    project_exists: pathExists(projectDir, '.planning/PROJECT.md'),
-    roadmap_exists: existsSync(join(planningDir, 'ROADMAP.md')),
-    state_exists: existsSync(join(planningDir, 'STATE.md')),
-    archive_exists: existsSync(archiveDir),
-    phases_dir_exists: existsSync(phasesDir),
+    project_exists: await adapter.exists('PROJECT.md'),
+    roadmap_exists: await adapter.exists('ROADMAP.md'),
+    state_exists: await adapter.exists('STATE.md'),
+    archive_exists: await adapter.exists('archive'),
+    phases_dir_exists: await adapter.exists('phases'),
   };
 
   return { data: await withProjectRoot(adapter, projectDir, result, config as Record<string, unknown>) };
@@ -1107,10 +945,10 @@ export const initMapCodebase = async (
 ): Promise<QueryResult> => {
   const config = await loadConfig(projectDir);
   const now = new Date();
-  const codebaseDir = join(projectDir, '.planning', 'codebase');
   let existingMaps: string[] = [];
   try {
-    existingMaps = readdirSync(codebaseDir).filter(f => f.endsWith('.md'));
+    const refs = await adapter.listCollection('codebase');
+    existingMaps = refs.filter(r => r.name.endsWith('.md')).map(r => r.name);
   } catch { /* intentionally empty */ }
 
   const mapperModel = await getModelAlias('gsd-codebase-mapper', projectDir);
@@ -1120,19 +958,14 @@ export const initMapCodebase = async (
     commit_docs: config.commit_docs,
     search_gitignored: config.search_gitignored,
     parallelization: config.parallelization,
-    // subagent_timeout lives at workflow.subagent_timeout per the canonical
-    // Configuration manifest (sdk/shared/config-defaults.manifest.json). Reading
-    // the top-level config.subagent_timeout returned undefined, so the workflow
-    // step that consumes this value had to invent its own fallback. Default to
-    // 300000 (5 min) per the manifest. (#1472)
-    subagent_timeout: (((config as Record<string, unknown>).workflow as Record<string, unknown> | undefined)?.subagent_timeout as number | undefined) ?? 300000,
+    subagent_timeout: (config as Record<string, unknown>).subagent_timeout ?? undefined,
     date: now.toISOString().split('T')[0],
     timestamp: now.toISOString(),
     codebase_dir: '.planning/codebase',
     existing_maps: existingMaps,
     has_maps: existingMaps.length > 0,
-    planning_exists: pathExists(projectDir, '.planning'),
-    codebase_dir_exists: pathExists(projectDir, '.planning/codebase'),
+    planning_exists: await adapter.exists('.'),
+    codebase_dir_exists: await adapter.exists('codebase'),
   };
 
   return { data: await withProjectRoot(adapter, projectDir, result, config as Record<string, unknown>) };
@@ -1262,18 +1095,12 @@ export const initRemoveWorkspace = async (
 ): Promise<QueryResult> => {
   const name = args[0];
   if (!name) {
-    // Throw so the CLI dispatcher projects a non-zero exit + writes the message
-    // to stderr — returning `{ data: { error } }` was treated as success by
-    // the CLI output path, hiding the validation failure from callers.
-    throw new GSDError('workspace name required for init remove-workspace', ErrorClassification.Validation);
+    return { data: { error: 'workspace name required for init remove-workspace' } };
   }
 
   // T-14-01: Reject path traversal attempts
   if (name.includes('/') || name.includes('\\') || name.includes('..')) {
-    throw new GSDError(
-      `Invalid workspace name: ${name} (path separators not allowed)`,
-      ErrorClassification.Validation,
-    );
+    return { data: { error: `Invalid workspace name: ${name} (path separators not allowed)` } };
   }
 
   const home = process.env.HOME || homedir();
@@ -1282,7 +1109,7 @@ export const initRemoveWorkspace = async (
   const manifestPath = join(wsPath, 'WORKSPACE.md');
 
   if (!existsSync(wsPath)) {
-    throw new GSDError(`Workspace not found: ${wsPath}`, ErrorClassification.Validation);
+    return { data: { error: `Workspace not found: ${wsPath}` } };
   }
 
   const repos: Array<Record<string, unknown>> = [];
@@ -1345,15 +1172,9 @@ export const initIngestDocs = async (
 ): Promise<QueryResult> => {
   const config = await loadConfig(projectDir);
   const result: Record<string, unknown> = {
-    project_exists: pathExists(projectDir, '.planning/PROJECT.md'),
-    planning_exists: pathExists(projectDir, '.planning'),
-    // Bug #3491: detect parent worktree to avoid nested .git init.
-    has_git: (() => gitWorktreeInfo(projectDir).inside)(),
-    git_worktree_root: (() => gitWorktreeInfo(projectDir).worktreeRoot)(),
-    in_nested_subdir: (() => {
-      const info = gitWorktreeInfo(projectDir);
-      return info.inside && info.worktreeRoot !== null && info.worktreeRoot !== projectDir;
-    })(),
+    project_exists: await adapter.exists('PROJECT.md'),
+    planning_exists: await adapter.exists('.'),
+    has_git: pathExists(projectDir, '.git'),
     project_path: '.planning/PROJECT.md',
     commit_docs: config.commit_docs,
   };

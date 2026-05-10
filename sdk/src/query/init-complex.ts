@@ -18,30 +18,19 @@
  * ```
  */
 
-import { existsSync, readdirSync, statSync, type Dirent } from 'node:fs';
-import { execSync } from 'node:child_process';
-import { readFile } from 'node:fs/promises';
+import { existsSync, readdirSync, type Dirent } from 'node:fs';
 import { join, relative } from 'node:path';
 import { homedir } from 'node:os';
 
 import { loadConfig } from '../config.js';
 import { resolveModel } from './config-query.js';
-import {
-  adapterFor,
-  detectRuntime,
-  planningPaths,
-  normalizePhaseName,
-  phaseTokenMatches,
-  resolveAgentsDir,
-  toPosixPath,
-} from './helpers.js';
+import { planningPaths, normalizePhaseName, phaseTokenMatches, toPosixPath, planningRelativePath } from './helpers.js';
 import {
   getMilestoneInfo,
   extractCurrentMilestone,
   extractNextMilestoneSection,
   extractPhasesFromSection,
 } from './roadmap.js';
-import { agentSkills } from './skills.js';
 import { withProjectRoot } from './init.js';
 import type { QueryResult } from './utils.js';
 import type { StorageAdapter } from '../../../adapters/types.js';
@@ -54,7 +43,7 @@ import type { StorageAdapter } from '../../../adapters/types.js';
 async function getModelAlias(agentType: string, projectDir: string): Promise<string> {
   const result = await resolveModel([agentType], projectDir);
   const data = result.data as Record<string, unknown>;
-  return typeof data.model === 'string' ? data.model : 'sonnet';
+  return (data.model as string) || 'sonnet';
 }
 
 /**
@@ -62,69 +51,6 @@ async function getModelAlias(agentType: string, projectDir: string): Promise<str
  */
 function pathExists(base: string, relPath: string): boolean {
   return existsSync(join(base, relPath));
-}
-
-/**
- * Bug #3491: detect whether `base` is inside any git worktree, and if so,
- * return the absolute worktree root. Mirrors the CJS `gitWorktreeInfoInternal`
- * in get-shit-done/bin/lib/core.cjs — keep these two implementations behaviour-
- * identical so the SDK and CJS init handlers emit the same has_git semantics.
- *
- * Returns { inside, worktreeRoot } — both fall back to false/null on any error
- * (git unavailable, not a repo, timeout) so callers see the conservative
- * default that preserves pre-fix behaviour for non-git environments.
- */
-function gitWorktreeInfo(base: string): { inside: boolean; worktreeRoot: string | null } {
-  try {
-    const inside = execSync('git rev-parse --is-inside-work-tree', {
-      cwd: base,
-      stdio: ['ignore', 'pipe', 'ignore'],
-      encoding: 'utf-8',
-      timeout: 5000,
-      env: { ...process.env, GIT_TERMINAL_PROMPT: '0' },
-    }).trim();
-    if (inside !== 'true') return { inside: false, worktreeRoot: null };
-    try {
-      const root = execSync('git rev-parse --show-toplevel', {
-        cwd: base,
-        stdio: ['ignore', 'pipe', 'ignore'],
-        encoding: 'utf-8',
-        timeout: 5000,
-        env: { ...process.env, GIT_TERMINAL_PROMPT: '0' },
-      }).trim();
-      return { inside: true, worktreeRoot: root || null };
-    } catch {
-      return { inside: true, worktreeRoot: null };
-    }
-  } catch {
-    return { inside: false, worktreeRoot: null };
-  }
-}
-
-
-const NEW_PROJECT_REQUIRED_AGENTS = [
-  'gsd-project-researcher',
-  'gsd-research-synthesizer',
-  'gsd-roadmapper',
-];
-
-function hasAgentDefinition(agentsDir: string, agent: string): boolean {
-  return existsSync(join(agentsDir, `${agent}.md`)) ||
-    existsSync(join(agentsDir, `${agent}.agent.md`));
-}
-
-async function resolveAgentSkillPayloadAgents(
-  requiredAgents: string[],
-  projectDir: string,
-): Promise<string[]> {
-  const available: string[] = [];
-  for (const agent of requiredAgents) {
-    const result = await agentSkills([agent], projectDir);
-    if (typeof result.data === 'string' && result.data.trim() !== '') {
-      available.push(agent);
-    }
-  }
-  return available;
 }
 
 /**
@@ -143,25 +69,6 @@ function extractCheckboxStates(content: string): Map<string, boolean> {
 }
 
 /**
- * Extract terminal phase markers from ROADMAP phase headings, e.g.
- * `(COMPLETE)`, `(SHIPPED ...)`, `(DEFERRED)`, `(SUPERSEDED ...)`.
- * These labels mean the phase should not be selected as next pending work.
- */
-function extractTerminalStatusLabels(content: string): Set<string> {
-  const terminal = new Set<string>();
-  const headingPattern = /#{2,4}\s*Phase\s+(\d+[A-Z]?(?:\.\d+)*)\s*:\s*([^\n]+)/gi;
-  const terminalRe = /(?:\(|\*\*)\s*(SHIPPED|COMPLETE|DEFERRED|SUPERSEDED|MERGED\s+INTO|FOLDED\s+INTO)\b/i;
-  let m: RegExpExecArray | null;
-  while ((m = headingPattern.exec(content)) !== null) {
-    if (terminalRe.test(m[2])) {
-      terminal.add(m[1]);
-      terminal.add(m[1].replace(/^0+/, '') || '0');
-    }
-  }
-  return terminal;
-}
-
-/**
  * Derive progress-level status from a ROADMAP checkbox when the phase has
  * no on-disk directory. Returns 'complete' for `[x]`, 'not_started' otherwise.
  * Disk status (when present) always wins — it's more recent truth for in-flight work.
@@ -176,16 +83,18 @@ function deriveStatusFromCheckbox(
   return 'not_started';
 }
 
-function listPhasePlanAndSummaryCounts(phasePath: string): { plans: string[]; summaries: string[] } {
-  const phaseFiles = readdirSync(phasePath);
+async function listPhasePlanAndSummaryCounts(adapter: StorageAdapter, phaseAdapterRel: string): Promise<{ plans: string[]; summaries: string[] }> {
+  const refs = await adapter.listCollection(phaseAdapterRel);
+  const phaseFiles = refs.map(r => r.name);
   const rootPlans = phaseFiles.filter(f => f.endsWith('-PLAN.md') || f === 'PLAN.md');
   const rootSummaries = phaseFiles.filter(f => f.endsWith('-SUMMARY.md') || f === 'SUMMARY.md');
 
-  const plansDir = join(phasePath, 'plans');
   let nestedPlans: string[] = [];
   let nestedSummaries: string[] = [];
-  if (existsSync(plansDir)) {
-    const files = readdirSync(plansDir);
+  const plansExists = await adapter.exists(`${phaseAdapterRel}/plans`);
+  if (plansExists) {
+    const nestedRefs = await adapter.listCollection(`${phaseAdapterRel}/plans`);
+    const files = nestedRefs.map(r => r.name);
     nestedPlans = files.filter(f => /^PLAN-\d+.*\.md$/i.test(f));
     nestedSummaries = files.filter(f => /^SUMMARY-\d+.*\.md$/i.test(f));
   }
@@ -288,15 +197,6 @@ export const initNewProject = async (
     getModelAlias('gsd-research-synthesizer', projectDir),
     getModelAlias('gsd-roadmapper', projectDir),
   ]);
-  const runtime = detectRuntime(config as { runtime?: unknown });
-  const agentsDir = resolveAgentsDir(runtime);
-  const missingRequiredAgents = NEW_PROJECT_REQUIRED_AGENTS.filter(
-    agent => !hasAgentDefinition(agentsDir, agent),
-  );
-  const agentSkillPayloadAgents = await resolveAgentSkillPayloadAgents(
-    NEW_PROJECT_REQUIRED_AGENTS,
-    projectDir,
-  );
 
   const result: Record<string, unknown> = {
     researcher_model: researcherModel,
@@ -315,26 +215,13 @@ export const initNewProject = async (
     needs_codebase_map:
       (hasExistingCode || hasPackageFile) && !pathExists(projectDir, '.planning/codebase'),
 
-    // Bug #3491: detect parent worktree to avoid nested .git init.
-    has_git: (() => gitWorktreeInfo(projectDir).inside)(),
-    git_worktree_root: (() => gitWorktreeInfo(projectDir).worktreeRoot)(),
-    in_nested_subdir: (() => {
-      const info = gitWorktreeInfo(projectDir);
-      return info.inside && info.worktreeRoot !== null && info.worktreeRoot !== projectDir;
-    })(),
+    has_git: pathExists(projectDir, '.git'),
 
     brave_search_available: hasBraveSearch,
     firecrawl_available: hasFirecrawl,
     exa_search_available: hasExaSearch,
 
     project_path: '.planning/PROJECT.md',
-    agent_runtime: runtime,
-    agents_dir: agentsDir,
-    required_agents: NEW_PROJECT_REQUIRED_AGENTS,
-    required_agents_installed: missingRequiredAgents.length === 0,
-    missing_required_agents: missingRequiredAgents,
-    agent_skill_payloads_available: agentSkillPayloadAgents.length === NEW_PROJECT_REQUIRED_AGENTS.length,
-    agent_skill_payload_agents: agentSkillPayloadAgents,
   };
 
   return { data: await withProjectRoot(adapter, projectDir, result, config as Record<string, unknown>) };
@@ -367,34 +254,37 @@ export const initProgress = async (
   const roadmapPhaseNames = new Map<string, string>();
   const seenPhaseNums = new Set<string>();
   let checkboxStates = new Map<string, boolean>();
-  let terminalLabels = new Set<string>();
 
   try {
-    const rawRoadmap = await readFile(paths.roadmap, 'utf-8');
-    const roadmapContent = await extractCurrentMilestone(adapter, rawRoadmap, workstream);
-    const headingPattern = /#{2,4}\s*Phase\s+(\d+[A-Z]?(?:\.\d+)*)\s*:\s*([^\n]+)/gi;
-    let hm: RegExpExecArray | null;
-    while ((hm = headingPattern.exec(roadmapContent)) !== null) {
-      const pNum = hm[1];
-      const pName = hm[2].replace(/\(INSERTED\)/i, '').trim();
-      roadmapPhaseNames.set(pNum, pName);
+    const rawRoadmap = await adapter.getRecord(planningRelativePath(workstream, 'ROADMAP.md'));
+    if (rawRoadmap) {
+      const roadmapContent = await extractCurrentMilestone(adapter, rawRoadmap, workstream);
+      const headingPattern = /#{2,4}\s*Phase\s+(\d+[A-Z]?(?:\.\d+)*)\s*:\s*([^\n]+)/gi;
+      let hm: RegExpExecArray | null;
+      while ((hm = headingPattern.exec(roadmapContent)) !== null) {
+        const pNum = hm[1];
+        const pName = hm[2].replace(/\(INSERTED\)/i, '').trim();
+        roadmapPhaseNames.set(pNum, pName);
+      }
+      checkboxStates = extractCheckboxStates(roadmapContent);
     }
-    checkboxStates = extractCheckboxStates(roadmapContent);
-    terminalLabels = extractTerminalStatusLabels(roadmapContent);
   } catch { /* intentionally empty */ }
 
-  // Scan phase directories
+  // Scan phase directories via adapter
+  const phasesAdapterRel = planningRelativePath(workstream, 'phases');
   try {
-    const entries = readdirSync(paths.phases, { withFileTypes: true });
-    const dirs = entries
-      .filter(e => e.isDirectory())
-      .map(e => e.name)
-      .sort((a, b) => {
-        const pa = a.match(/^(\d+[A-Z]?(?:\.\d+)*)/i);
-        const pb = b.match(/^(\d+[A-Z]?(?:\.\d+)*)/i);
-        if (!pa || !pb) return a.localeCompare(b);
-        return parseInt(pa[1], 10) - parseInt(pb[1], 10);
-      });
+    const phaseRefs = await adapter.listCollection(phasesAdapterRel);
+    const dirEntries: string[] = [];
+    for (const ref of phaseRefs) {
+      const st = await adapter.stat(ref.path);
+      if (st?.kind === 'dir') dirEntries.push(ref.name);
+    }
+    const dirs = dirEntries.sort((a, b) => {
+      const pa = a.match(/^(\d+[A-Z]?(?:\.\d+)*)/i);
+      const pb = b.match(/^(\d+[A-Z]?(?:\.\d+)*)/i);
+      if (!pa || !pb) return a.localeCompare(b);
+      return parseInt(pa[1], 10) - parseInt(pb[1], 10);
+    });
 
     for (const dir of dirs) {
       const match = dir.match(/^(\d+[A-Z]?(?:\.\d+)*)-?(.*)/i);
@@ -402,10 +292,11 @@ export const initProgress = async (
       const phaseName = match && match[2] ? match[2] : null;
       seenPhaseNums.add(phaseNumber.replace(/^0+/, '') || '0');
 
-      const phasePath = join(paths.phases, dir);
-      const phaseFiles = readdirSync(phasePath);
+      const phaseAdapterRel = `${phasesAdapterRel}/${dir}`;
+      const phaseFileRefs = await adapter.listCollection(phaseAdapterRel);
+      const phaseFiles = phaseFileRefs.map(r => r.name);
 
-      const { plans, summaries } = listPhasePlanAndSummaryCounts(phasePath);
+      const { plans, summaries } = await listPhasePlanAndSummaryCounts(adapter, phaseAdapterRel);
       const hasResearch = phaseFiles.some(f => f.endsWith('-RESEARCH.md') || f === 'RESEARCH.md');
 
       let status =
@@ -421,9 +312,6 @@ export const initProgress = async (
         checkboxStates.get(phaseNumber) === true ||
         checkboxStates.get(strippedNum) === true;
       if (roadmapComplete && status !== 'complete') {
-        status = 'complete';
-      }
-      if (terminalLabels.has(phaseNumber) || terminalLabels.has(strippedNum)) {
         status = 'complete';
       }
 
@@ -454,18 +342,17 @@ export const initProgress = async (
     const stripped = num.replace(/^0+/, '') || '0';
     if (!seenPhaseNums.has(stripped)) {
       const status = deriveStatusFromCheckbox(num, checkboxStates);
-      const terminalComplete = terminalLabels.has(num) || terminalLabels.has(stripped);
       const phaseInfo: Record<string, unknown> = {
         number: num,
         name: name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, ''),
         directory: null,
-        status: terminalComplete ? 'complete' : status,
+        status,
         plan_count: 0,
         summary_count: 0,
         has_research: false,
       };
       phases.push(phaseInfo);
-      if (!nextPhase && !currentPhase && phaseInfo.status !== 'complete') {
+      if (!nextPhase && !currentPhase && status !== 'complete') {
         nextPhase = phaseInfo;
       }
     }
@@ -476,9 +363,11 @@ export const initProgress = async (
   // Check paused state in STATE.md
   let pausedAt: string | null = null;
   try {
-    const stateContent = await readFile(paths.state, 'utf-8');
-    const pauseMatch = stateContent.match(/\*\*Paused At:\*\*\s*(.+)/);
-    if (pauseMatch) pausedAt = pauseMatch[1].trim();
+    const stateContent = await adapter.getRecord(planningRelativePath(workstream, 'STATE.md'));
+    if (stateContent) {
+      const pauseMatch = stateContent.match(/\*\*Paused At:\*\*\s*(.+)/);
+      if (pauseMatch) pausedAt = pauseMatch[1].trim();
+    }
   } catch { /* intentionally empty */ }
 
   const result: Record<string, unknown> = {
@@ -500,9 +389,9 @@ export const initProgress = async (
     paused_at: pausedAt,
     has_work_in_progress: !!currentPhase,
 
-    project_exists: pathExists(projectDir, '.planning/PROJECT.md'),
-    roadmap_exists: existsSync(paths.roadmap),
-    state_exists: existsSync(paths.state),
+    project_exists: await adapter.exists(planningRelativePath(workstream, 'PROJECT.md')),
+    roadmap_exists: await adapter.exists(planningRelativePath(workstream, 'ROADMAP.md')),
+    state_exists: await adapter.exists(planningRelativePath(workstream, 'STATE.md')),
     state_path: toPosixPath(relative(projectDir, paths.state)),
     roadmap_path: toPosixPath(relative(projectDir, paths.roadmap)),
     project_path: '.planning/PROJECT.md',
@@ -532,21 +421,22 @@ export const initManager = async (
   const milestone = await getMilestoneInfo(adapter, workstream);
   const paths = planningPaths(projectDir, workstream);
 
-  let rawContent: string;
-  try {
-    rawContent = await readFile(paths.roadmap, 'utf-8');
-  } catch {
+  const phasesAdapterRel = planningRelativePath(workstream, 'phases');
+  const rawContent = await adapter.getRecord(planningRelativePath(workstream, 'ROADMAP.md'));
+  if (!rawContent) {
     return { data: { error: 'No ROADMAP.md found. Run /gsd-new-milestone first.' } };
   }
 
   const content = await extractCurrentMilestone(adapter, rawContent, workstream);
 
-  // Pre-compute directory listing once
+  // Pre-compute directory listing once via adapter
   let phaseDirEntries: string[] = [];
   try {
-    phaseDirEntries = readdirSync(paths.phases, { withFileTypes: true })
-      .filter(e => e.isDirectory())
-      .map(e => e.name);
+    const phaseRefs = await adapter.listCollection(phasesAdapterRel);
+    for (const ref of phaseRefs) {
+      const st = await adapter.stat(ref.path);
+      if (st?.kind === 'dir') phaseDirEntries.push(ref.name);
+    }
   } catch { /* intentionally empty */ }
 
   // Pre-extract checkbox states in a single pass (shared helper — #2646)
@@ -584,9 +474,10 @@ export const initManager = async (
     try {
       const dirMatch = phaseDirEntries.find(d => phaseTokenMatches(d, normalized));
       if (dirMatch) {
-        const fullDir = join(paths.phases, dirMatch);
-        const phaseFiles = readdirSync(fullDir);
-        const counts = listPhasePlanAndSummaryCounts(fullDir);
+        const phaseAdapterRel = `${phasesAdapterRel}/${dirMatch}`;
+        const phaseFileRefs = await adapter.listCollection(phaseAdapterRel);
+        const phaseFiles = phaseFileRefs.map(r => r.name);
+        const counts = await listPhasePlanAndSummaryCounts(adapter, phaseAdapterRel);
         planCount = counts.plans.length;
         summaryCount = counts.summaries.length;
         hasContext = phaseFiles.some(f => f.endsWith('-CONTEXT.md') || f === 'CONTEXT.md');
@@ -601,10 +492,13 @@ export const initManager = async (
 
         const now = Date.now();
         let newestMtime = 0;
-        for (const f of phaseFiles) {
+        for (const ref of phaseFileRefs) {
           try {
-            const st = statSync(join(fullDir, f));
-            if (st.mtimeMs > newestMtime) newestMtime = st.mtimeMs;
+            const st = await adapter.stat(ref.path);
+            if (st?.mtime) {
+              const mtimeMs = new Date(st.mtime).getTime();
+              if (mtimeMs > newestMtime) newestMtime = mtimeMs;
+            }
           } catch { /* intentionally empty */ }
         }
         if (newestMtime > 0) {
@@ -659,22 +553,24 @@ export const initManager = async (
     }
   }
 
-  // Bug #2268: mark EVERY undiscussed phase as is_next_to_discuss, not just
-  // the first one.  Multiple independent phases can be discussed in parallel
-  // — the sliding-window pattern made the manager only recommend one
-  // discuss action even when callers had free capacity to discuss several.
+  // Sliding window: only first undiscussed phase is available to discuss
+  let foundNextToDiscuss = false;
   for (const phase of phases) {
     const status = phase.disk_status as string;
-    phase.is_next_to_discuss = (status === 'empty' || status === 'no_directory');
+    if (!foundNextToDiscuss && (status === 'empty' || status === 'no_directory')) {
+      phase.is_next_to_discuss = true;
+      foundNextToDiscuss = true;
+    } else {
+      phase.is_next_to_discuss = false;
+    }
   }
 
   // Check WAITING.json signal
   let waitingSignal: unknown = null;
   try {
-    const waitingPath = join(projectDir, '.planning', 'WAITING.json');
-    if (existsSync(waitingPath)) {
-      const { readFileSync } = await import('node:fs');
-      waitingSignal = JSON.parse(readFileSync(waitingPath, 'utf-8'));
+    const waitingRaw = await adapter.getRecord(planningRelativePath(workstream, 'WAITING.json'));
+    if (waitingRaw) {
+      waitingSignal = JSON.parse(waitingRaw);
     }
   } catch { /* intentionally empty */ }
 
