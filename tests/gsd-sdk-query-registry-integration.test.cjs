@@ -20,6 +20,7 @@ const COMMAND_ALIASES_FILE = path.join(REPO_ROOT, 'get-shit-done', 'bin', 'lib',
 // documentation but aren't real command names.
 const PROSE_ALLOWLIST = new Set([
   'at',
+  'calls.',
   'commands',
   'intel',
   'into',
