@@ -27,10 +27,10 @@ Output: Forensic report saved to `.planning/forensics/`, presented inline, with 
 **Data sources:**
 - `git log` (recent commits, patterns, time gaps)
 - `git status` / `git diff` (uncommitted work, conflicts)
-- `.planning/STATE.md` (current position, session history)
-- `.planning/ROADMAP.md` (phase scope and progress)
-- `.planning/phases/*/` (PLAN.md, SUMMARY.md, VERIFICATION.md, CONTEXT.md)
-- `.planning/reports/SESSION_REPORT.md` (last session outcomes)
+- `gsd-sdk query state.load` (current position, session history)
+- `gsd-sdk query roadmap` (phase scope and progress)
+- `gsd-sdk query phase.list-artifacts` (PLAN.md, SUMMARY.md, VERIFICATION.md, CONTEXT.md)
+- `gsd-sdk query report.get "SESSION_REPORT"` (last session outcomes)
 
 **User input:**
 - Problem description: $ARGUMENTS (optional — will ask if not provided)

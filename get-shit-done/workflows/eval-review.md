@@ -138,8 +138,7 @@ Read the written EVAL-REVIEW.md. Extract:
 
 **If `commit_docs` is true:**
 ```bash
-git add "${EVAL_REVIEW_FILE}"
-git commit -m "docs({phase_slug}): add EVAL-REVIEW.md — score {overall_score}/100 ({verdict})"
+gsd-sdk query commit "docs({phase_slug}): add EVAL-REVIEW.md — score {overall_score}/100 ({verdict})" --files "${EVAL_REVIEW_FILE}"
 ```
 
 </process>

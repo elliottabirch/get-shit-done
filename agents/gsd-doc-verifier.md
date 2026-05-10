@@ -143,7 +143,7 @@ Count:
 - `failures`: array of `{ line, claim, expected, actual }` objects for each failure
 
 **Step 6: Write result JSON**
-Create `.planning/tmp/` directory if it does not exist. Write the result to `.planning/tmp/verify-{doc_filename}.json` where `{doc_filename}` is the basename of `doc_path` with extension (e.g., `README.md` → `verify-README.md.json`).
+Write the result via `gsd-sdk query tmp.put "verify-{doc_filename}.json"` where `{doc_filename}` is the basename of `doc_path` with extension (e.g., `README.md` → `verify-README.md.json`).
 
 Use the exact JSON shape from `<output_format>`.
 </verification_process>

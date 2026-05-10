@@ -168,7 +168,7 @@ Read key files identified during exploration. Use Glob and Grep liberally.
 </step>
 
 <step name="write_documents">
-Write document(s) to `.planning/codebase/` using the templates below.
+Write document(s) via `gsd-sdk query codebase.put "<NAME>"` using the templates below.
 
 **Document naming:** UPPERCASE.md (e.g., STACK.md, ARCHITECTURE.md)
 

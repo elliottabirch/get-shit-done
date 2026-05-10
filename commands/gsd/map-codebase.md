@@ -39,7 +39,7 @@ Parse the first token of $ARGUMENTS:
 - Otherwise: pass all of $ARGUMENTS as focus area to the map-codebase workflow.
 
 **Load project state if exists:**
-Check for .planning/STATE.md - loads context if project already initialized
+Check via `gsd-sdk query state.load` - loads context if project already initialized
 
 **This command can run:**
 - Before /gsd:new-project (brownfield codebases) - creates codebase map first
