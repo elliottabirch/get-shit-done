@@ -209,7 +209,7 @@ export async function releaseStateLock(lockPath: string): Promise<void> {
  * Strips existing frontmatter, rebuilds from body + disk, and splices back.
  * Preserves existing status when body-derived status is 'unknown'.
  */
-async function syncStateFrontmatter(
+export async function syncStateFrontmatter(
   content: string,
   projectDir: string,
   workstream?: string,
