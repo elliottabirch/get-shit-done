@@ -11,6 +11,20 @@ export type RecordFilter = (ref: RecordRef) => boolean;
 
 export type SectionMode = 'overwrite' | 'append' | 'prepend';
 
+/** D-13 (Phase 5): closed union of named-doc categories. Adding a member is a breaking interface change — intentional gate against typo drift. */
+export type NamedDocCategory =
+  | 'research'
+  | 'intel'
+  | 'codebase'
+  | 'archived-milestone'
+  | 'reports'
+  | 'sketches'
+  | 'tmp'
+  | 'root';
+
+/** D-14 (Phase 5): fixed-key discriminator for the 'root' category singletons at .planning/ root. */
+export type RootNamedDocKey = 'HANDOFF' | 'CONTINUE-HERE' | 'DECISIONS-INDEX';
+
 export interface Capabilities {
   // Required core groups (D-05): true literal forces compile-time presence
   record: true;
@@ -56,8 +70,11 @@ export interface StorageAdapter {
   snapshot(): Promise<string>;
   restore(snapshotId: string): Promise<void>;
   withTransaction<T>(fn: () => Promise<T>): Promise<T>;
-  putNamedDoc(category: string, key: string, body: string): Promise<void>;
-  getNamedDoc(category: string, key: string): Promise<string | null>;
+  // D-14 (Phase 5): discriminated overloads — 'root' narrows key to RootNamedDocKey.
+  putNamedDoc(category: 'root', key: RootNamedDocKey, body: string): Promise<void>;
+  putNamedDoc(category: Exclude<NamedDocCategory, 'root'>, key: string, body: string): Promise<void>;
+  getNamedDoc(category: 'root', key: RootNamedDocKey): Promise<string | null>;
+  getNamedDoc(category: Exclude<NamedDocCategory, 'root'>, key: string): Promise<string | null>;
   commitPlanningState(message: string, files?: string[]): Promise<void>;
 
   // Event families (D-01/D-04): grouped by mutation semantics

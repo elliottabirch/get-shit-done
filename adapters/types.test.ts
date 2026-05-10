@@ -1,6 +1,11 @@
 // Type-level tests for StorageAdapter interface (TDD RED phase).
 // These are compile-time assertions; they do NOT run at runtime.
 // Run: npx tsc --noEmit (from adapters/ directory) to validate.
+//
+// Phase 5 Plan 01 extends this file with a runtime describe block covering
+// D-13 (NamedDocCategory) and D-14 (RootNamedDocKey / discriminated overloads).
+
+import { describe, it, expect } from 'vitest';
 
 // Test 1: The module exports exist
 // (will fail until adapters/types.ts is created)
@@ -10,6 +15,8 @@ import type {
   RecordRef,
   RecordFilter,
   SectionMode,
+  NamedDocCategory,
+  RootNamedDocKey,
 } from './types.js';
 import {
   UnsupportedCapabilityError,
@@ -107,3 +114,39 @@ void _testStatNarrow;
 void _caps; void _capKeys; void _err; void _msg; void _cap; void _adapterName;
 void _ref; void _filter; void _mode1; void _mode2; void _mode3;
 void _testTypeGuards;
+
+// ---------------------------------------------------------------------------
+// Phase 5 Plan 01 — D-13 / D-14 runtime assertions
+// ---------------------------------------------------------------------------
+
+describe('NamedDocCategory / RootNamedDocKey (D-13/D-14)', () => {
+  it('NamedDocCategory values compile-check', () => {
+    const cats: NamedDocCategory[] = [
+      'research',
+      'intel',
+      'codebase',
+      'archived-milestone',
+      'reports',
+      'sketches',
+      'tmp',
+      'root',
+    ];
+    expect(cats.length).toBe(8);
+  });
+
+  it('RootNamedDocKey values compile-check', () => {
+    const keys: RootNamedDocKey[] = ['HANDOFF', 'CONTINUE-HERE', 'DECISIONS-INDEX'];
+    expect(keys.length).toBe(3);
+  });
+
+  // Negative test documenting the overload's compile-time rejection. The
+  // @ts-expect-error line MUST be present; removing it breaks this assertion.
+  it('putNamedDoc("root", ARBITRARY_STRING) is rejected at compile time (D-14)', () => {
+    // This block is a type-check-only assertion; no runtime execution.
+    const assertOverloadRejectsArbitraryRootKey = (a: StorageAdapter): void => {
+      // @ts-expect-error — 'root' category rejects arbitrary string keys per D-14
+      a.putNamedDoc('root', 'ARBITRARY_STRING_NOT_IN_UNION', 'body');
+    };
+    expect(typeof assertOverloadRejectsArbitraryRootKey).toBe('function');
+  });
+});
