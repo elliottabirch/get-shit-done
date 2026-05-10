@@ -26,8 +26,8 @@ and ships migration + distribution (Phase 8).
 
 - [x] **Phase 1: Fork bootstrap + StorageAdapter interface skeleton + MarkdownAdapter scaffold** — Define the adapter contract, scaffold MarkdownAdapter, reconcile with recent upstream seam PRs, lock OQ-08. *(this repo)* (completed 2026-05-01)
 - [x] **Phase 2: Wire core read methods to adapter** — Route every SDK read query and skill `<context>` `@.planning/...` reference through the adapter. *(this repo)* (completed 2026-05-01)
-- [ ] **Phase 3: Wire core write methods + recordStateEvent** — Migrate `state-mutation.js` + `phase-lifecycle.js` to adapter writes; introduce the discriminated-union event record; resolve OQ-01. *(this repo)*
-- [ ] **Phase 4: Plug workflow leaks (top-10 + `<context>`-block class)** — Refactor the 10 heaviest leaking workflows + the new frontmatter `@`-reference leak class; ship the leak-grep CI gate; resolve OQ-03 + OQ-04. *(this repo)*
+- [x] **Phase 3: Wire core write methods + recordStateEvent** — Migrate `state-mutation.js` + `phase-lifecycle.js` to adapter writes; introduce the discriminated-union event record; resolve OQ-01. *(this repo)* (completed 2026-05-10)
+- [x] **Phase 4: Plug workflow leaks (top-10 + `<context>`-block class)** — Refactor the 10 heaviest leaking workflows + the new frontmatter `@`-reference leak class; ship the leak-grep CI gate; resolve OQ-03 + OQ-04. *(this repo)* (completed 2026-05-10)
 - [ ] **Phase 5: Foundational primitive lift** — Implement `getSection`/`updateSection`/`snapshot`/`restore`/`putNamedDoc`/`writeBinaryAsset`; hoist `pipeline.js` dry-run off filesystem `cp -r`; resolve OQ-02 + OQ-05 + OQ-07 + OQ-10. *(this repo)*
 - [ ] **Phase 6: BeadsAdapter implementation** — Implement the full StorageAdapter against `bd` in the sibling repo, carrying forward 13 spike findings and the JSONL roundtrip pattern; resolve OQ-06. *(sibling repo `gsd-beads`)*
 - [ ] **Phase 7: Conformance test suite** — Paired tests run every Bin B method against both adapters, asserting equivalent outcomes; property-based round-trips; mid-transaction failure injection. *(both repos)*
@@ -128,7 +128,7 @@ Plans:
 - [x] 04-06-PLAN.md — SDK test fixture migration + verify.fat-skills handler (LEAKS-05)
 
 **Wave 4** *(blocked on all prior — gate activates only at zero-leak state)*
-- [ ] 04-07-PLAN.md — Pre-commit hook CI gate + full verification + OQ-03/OQ-04 decision records
+- [x] 04-07-PLAN.md — Pre-commit hook CI gate + full verification + OQ-03/OQ-04 decision records
 
 ### Phase 5: Foundational primitive lift
 **Repo:** this repo (`feat/storage-adapter`)
