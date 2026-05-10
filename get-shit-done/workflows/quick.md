@@ -782,11 +782,11 @@ After executor returns:
        # Backup STATE.md and ROADMAP.md before merge (main always wins)
        STATE_BACKUP=$(mktemp)
        ROADMAP_BACKUP=$(mktemp)
-       [ -f .planning/STATE.md ] && cp .planning/STATE.md "$STATE_BACKUP" || true
-       [ -f .planning/ROADMAP.md ] && cp .planning/ROADMAP.md "$ROADMAP_BACKUP" || true
+       gsd-sdk query state.load > "$STATE_BACKUP" 2>/dev/null || true
+       gsd-sdk query roadmap > "$ROADMAP_BACKUP" 2>/dev/null || true
 
        # Snapshot files on main to detect resurrections
-       PRE_MERGE_FILES=$(git ls-files .planning/)
+       PRE_MERGE_FILES=$(gsd-sdk query state.list-files 2>/dev/null || git ls-tree --name-only -r HEAD -- .planning/)
 
        # Pre-merge deletion guard: block merges that delete tracked .planning/ files
        DELETIONS=$(git diff --diff-filter=D --name-only HEAD..."$WT_BRANCH" 2>/dev/null || true)
@@ -801,13 +801,13 @@ After executor returns:
          echo "⚠ Merge conflict from worktree $WT_BRANCH — resolve manually"
          echo "  STATE.md backup:   $STATE_BACKUP"
          echo "  ROADMAP.md backup: $ROADMAP_BACKUP"
-         echo "  Restore with: cp \$STATE_BACKUP .planning/STATE.md && cp \$ROADMAP_BACKUP .planning/ROADMAP.md"
+         echo "  Restore with: gsd-sdk query state.restore-snapshot \$STATE_BACKUP && gsd-sdk query roadmap.restore-snapshot \$ROADMAP_BACKUP"
          break
        }
 
        # Restore orchestrator-owned files
-       if [ -s "$STATE_BACKUP" ]; then cp "$STATE_BACKUP" .planning/STATE.md; fi
-       if [ -s "$ROADMAP_BACKUP" ]; then cp "$ROADMAP_BACKUP" .planning/ROADMAP.md; fi
+       if [ -s "$STATE_BACKUP" ]; then gsd-sdk query state.restore-snapshot "$STATE_BACKUP" 2>/dev/null || true; fi
+       if [ -s "$ROADMAP_BACKUP" ]; then gsd-sdk query roadmap.restore-snapshot "$ROADMAP_BACKUP" 2>/dev/null || true; fi
        rm -f "$STATE_BACKUP" "$ROADMAP_BACKUP"
 
        # Remove files deleted on main but re-added by worktree (--no-ff guarantees a merge commit so HEAD~1 is reliable)
@@ -822,7 +822,7 @@ After executor returns:
           [ -n "$DELETED_FILES" ]; then
          COMMIT_DOCS=$(gsd-sdk query config-get commit_docs 2>/dev/null || echo "true")
          if [ "$COMMIT_DOCS" != "false" ]; then
-           git add .planning/STATE.md .planning/ROADMAP.md 2>/dev/null || true
+           gsd-sdk query commit --stage-only state.md roadmap.md 2>/dev/null || true
            git commit --amend --no-edit 2>/dev/null || true
          fi
        fi
