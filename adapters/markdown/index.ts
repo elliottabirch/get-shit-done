@@ -509,6 +509,20 @@ export class MarkdownAdapter implements StorageAdapter {
     return this.activeTxn;
   }
 
+  /**
+   * Pipeline-internal: bypass shadow-dir merge, read the real file.
+   * Used by dry-run to compute before-image of touched paths.
+   */
+  async _realReadForPipeline(relPath: string): Promise<string | null> {
+    const abs = this.resolve(relPath);
+    try {
+      return await readFile(abs, 'utf-8');
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === 'ENOENT') return null;
+      throw err;
+    }
+  }
+
   // Private helpers for snapshot/restore
   private async _copyTreeRecursive(srcBase: string, dstBase: string, skipPrefixes: string[]): Promise<void> {
     let entries: import('node:fs').Dirent[];

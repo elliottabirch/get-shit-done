@@ -518,10 +518,24 @@ export async function planningBaseIsDir(adapter: StorageAdapter): Promise<boolea
  * Lazy import keeps this file free of an `adapters/` static import (which
  * would create a Phase 1-era dependency cycle on the markdown adapter when
  * helpers.ts is imported very early in the registry build).
+ *
+ * Phase 5 Plan 05 note: Returns a cached singleton per projectDir so all SDK
+ * operations in the same execution context share transaction state (required
+ * for pipeline dry-run diff computation).
  */
+
+// Adapter instance cache for transaction sharing (Phase 5 Plan 05)
+// Exported for test cleanup
+export const _adapterCache = new Map<string, StorageAdapter>();
+
 export async function adapterFor(projectDir: string): Promise<StorageAdapter> {
+  const cached = _adapterCache.get(projectDir);
+  if (cached) return cached;
+
   const { MarkdownAdapter } = await import('../../../adapters/markdown/index.js');
-  return new MarkdownAdapter(projectDir);
+  const instance = new MarkdownAdapter(projectDir);
+  _adapterCache.set(projectDir, instance);
+  return instance;
 }
 
 // ─── resolvePathUnderProject ───────────────────────────────────────────────

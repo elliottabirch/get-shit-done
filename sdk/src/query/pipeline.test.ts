@@ -19,21 +19,51 @@ beforeEach(async () => {
   tmpDir = await mkdtemp(join(tmpdir(), 'gsd-pipeline-'));
   await mkdir(join(tmpDir, '.planning'), { recursive: true });
   await writeFile(join(tmpDir, '.planning', 'STATE.md'), '# State\nstatus: idle\n');
+  // Clear adapter cache so each test gets a fresh adapter
+  const { _adapterCache } = await import('./helpers.js');
+  _adapterCache.clear();
 });
 
 afterEach(async () => {
   await rm(tmpDir, { recursive: true, force: true });
 });
 
-// ─── Helper ───────────────────────────────────────────────────────────────
+// ─── Helpers ──────────────────────────────────────────────────────────────
+
+async function hashDirForTest(dir: string): Promise<string> {
+  const crypto = await import('node:crypto');
+  const { readdir, readFile } = await import('node:fs/promises');
+  const { join } = await import('node:path');
+  let entries: import('node:fs').Dirent[];
+  try {
+    entries = await readdir(dir, { withFileTypes: true });
+  } catch {
+    return '<missing>';
+  }
+  entries.sort((a, b) => a.name.localeCompare(b.name));
+  const h = crypto.createHash('sha256');
+  for (const e of entries) {
+    if (e.name.startsWith('.tmp-txn-') || e.name.startsWith('.tmp-snap-') || e.name === '.adapter.lock') continue;
+    const p = join(dir, e.name);
+    h.update(e.name);
+    if (e.isFile()) {
+      const content = await readFile(p);
+      h.update(content);
+    } else if (e.isDirectory()) {
+      h.update(await hashDirForTest(p));
+    }
+  }
+  return h.digest('hex');
+}
 
 function makeRegistry(): QueryRegistry {
   const registry = new QueryRegistry();
   registry.register('read-cmd', async (_args, _dir) => ({ data: { read: true } }));
   registry.register('mut-cmd', async (_args, dir) => {
-    // Simulate a mutation: write a file to the project dir
-    const { writeFile: wf } = await import('node:fs/promises');
-    await wf(join(dir, '.planning', 'MUTATED.md'), '# mutated');
+    // Simulate a mutation: write through adapter (dry-run compatible)
+    const { adapterFor } = await import('./helpers.js');
+    const adapter = await adapterFor(dir);
+    await adapter.putRecord('MUTATED.md', '# mutated');
     return { data: { mutated: true } };
   });
   return registry;
@@ -165,5 +195,37 @@ describe('wrapWithPipeline — unregistered command passthrough', () => {
     const result = await registry.dispatch('other-cmd', [], tmpDir);
     // Since other-cmd is not in MUTATION_SET, it's not wrapped
     expect((result.data as Record<string, unknown>).value).toBe(42);
+  });
+});
+
+describe('wrapWithPipeline — SC#1 byte-identity', () => {
+  it('SC#1: dry-run with mid-txn failure leaves .planning/ byte-identical', async () => {
+    const { mkdir, writeFile } = await import('node:fs/promises');
+    const { readdirSync } = await import('node:fs');
+    await mkdir(join(tmpDir, '.planning'), { recursive: true });
+    await writeFile(join(tmpDir, '.planning', 'STATE.md'), '# pre\n');
+    await writeFile(join(tmpDir, '.planning', 'PROJECT.md'), '# pre-proj\n');
+
+    const preHash = await hashDirForTest(join(tmpDir, '.planning'));
+
+    const registry = makeRegistry();
+    registry.register('throw-mid-txn', async (_args, dir) => {
+      const { adapterFor } = await import('./helpers.js');
+      const a = await adapterFor(dir);
+      await a.putRecord('STATE.md', '# mutated\n');
+      throw new Error('intentional mid-txn failure');
+    });
+    const MUTATIONS = new Set(['throw-mid-txn']);
+    wrapWithPipeline(registry, MUTATIONS, { dryRun: true });
+
+    await expect(registry.dispatch('throw-mid-txn', [], tmpDir))
+      .rejects.toThrow('intentional mid-txn failure');
+
+    const postHash = await hashDirForTest(join(tmpDir, '.planning'));
+    expect(postHash).toBe(preHash);
+
+    const leftovers = readdirSync(join(tmpDir, '.planning'))
+      .filter(n => n.startsWith('.tmp-txn-'));
+    expect(leftovers).toEqual([]);
   });
 });
