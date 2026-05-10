@@ -6,7 +6,7 @@ Analyze ROADMAP.md phases for dependency relationships before execution. Detect 
 
 ## 1. Load ROADMAP.md
 
-Read `.planning/ROADMAP.md`. If it does not exist, error: "No ROADMAP.md found — run `/gsd-new-project` first."
+Load roadmap via `gsd-sdk query roadmap`. If it does not exist, error: "No ROADMAP.md found — run `/gsd-new-project` first."
 
 Extract all phases. For each phase capture:
 - Phase number and name

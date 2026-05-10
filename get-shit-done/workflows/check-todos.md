@@ -128,7 +128,7 @@ Use AskUserQuestion:
 <step name="execute_action">
 **Work on it now:**
 ```bash
-mv ".planning/todos/pending/[filename]" ".planning/todos/completed/"
+gsd-sdk query todo.complete "[filename]"
 ```
 Update STATE.md todo count. Present problem/solution context. Begin work or ask how to proceed.
 
