@@ -5,11 +5,29 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdtemp, rm, mkdir } from 'node:fs/promises';
+import { mkdtemp, rm, mkdir, readdir, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { MarkdownAdapter } from '../../adapters/markdown/index.js';
 import type { StorageAdapter } from '../../adapters/types.js';
+
+async function hashDir(dir: string): Promise<string> {
+  const crypto = await import('node:crypto');
+  const { readdir: rd, readFile: rf } = await import('node:fs/promises');
+  let entries: import('node:fs').Dirent[];
+  try { entries = await rd(dir, { withFileTypes: true }); }
+  catch { return '<missing>'; }
+  entries.sort((a, b) => a.name.localeCompare(b.name));
+  const h = crypto.createHash('sha256');
+  for (const e of entries) {
+    if (e.name.startsWith('.tmp-txn-') || e.name.startsWith('.tmp-snap-') || e.name === '.adapter.lock') continue;
+    const p = join(dir, e.name);
+    h.update(e.name);
+    if (e.isFile()) h.update(await rf(p));
+    else if (e.isDirectory()) h.update(await hashDir(p));
+  }
+  return h.digest('hex');
+}
 
 describe('withTransaction', () => {
   let tmpDir: string;
@@ -107,5 +125,100 @@ describe('withTransaction', () => {
 
     const final = await adapter.getRecord('counter.md');
     expect(final).toBe('2');
+  });
+
+  it('dryRun: true rolls back all writes', async () => {
+    await adapter.putRecord('STATE.md', 'before');
+    await adapter.withTransaction(async () => {
+      await adapter.putRecord('STATE.md', 'inside-txn');
+      const mid = await adapter.getRecord('STATE.md');
+      expect(mid).toBe('inside-txn');  // in-txn reads see their own writes
+    }, { dryRun: true });
+    const after = await adapter.getRecord('STATE.md');
+    expect(after).toBe('before');
+  });
+
+  it('mid-txn failure leaves .planning/ byte-identical to pre-txn state (SC#1)', async () => {
+    await adapter.putRecord('STATE.md', '# pre-state\n');
+    await adapter.putRecord('PROJECT.md', '# pre-project\n');
+    const beforeHash = await hashDir(join(tmpDir, '.planning'));
+
+    await expect(
+      adapter.withTransaction(async () => {
+        await adapter.putRecord('STATE.md', '# mutated\n');
+        await adapter.putRecord('PROJECT.md', '# also mutated\n');
+        throw new Error('intentional mid-txn failure');
+      }),
+    ).rejects.toThrow('intentional mid-txn failure');
+
+    const afterHash = await hashDir(join(tmpDir, '.planning'));
+    expect(afterHash).toBe(beforeHash);
+    expect(await adapter.getRecord('STATE.md')).toBe('# pre-state\n');
+    expect(await adapter.getRecord('PROJECT.md')).toBe('# pre-project\n');
+  });
+
+  it('shadow-dir tmpdir is cleaned up after commit', async () => {
+    await adapter.withTransaction(async () => {
+      await adapter.putRecord('foo.md', 'x');
+    });
+    const entries = await readdir(join(tmpDir, '.planning'), { withFileTypes: true });
+    const leaks = entries.filter(e => e.name.startsWith('.tmp-txn-'));
+    expect(leaks).toEqual([]);
+  });
+
+  it('reentrant withTransaction joins outer txn (no deadlock, no double-lock)', async () => {
+    await adapter.putRecord('counter.md', '0');
+    await adapter.withTransaction(async () => {
+      // Inner withTransaction MUST return without trying to acquire the lock again.
+      await adapter.withTransaction(async () => {
+        const v = parseInt((await adapter.getRecord('counter.md'))!, 10);
+        await adapter.putRecord('counter.md', String(v + 1));
+      });
+      // Outer also writes; both should be visible at commit.
+      const mid = await adapter.getRecord('counter.md');
+      expect(mid).toBe('1');
+    });
+    const final = await adapter.getRecord('counter.md');
+    expect(final).toBe('1');
+  });
+
+  it('nested withTransaction inherits outer dryRun flag (D-05)', async () => {
+    await adapter.putRecord('STATE.md', 'before');
+    await adapter.withTransaction(async () => {
+      await adapter.withTransaction(async () => {
+        await adapter.putRecord('STATE.md', 'inside-nested');
+      });
+      const v = await adapter.getRecord('STATE.md');
+      expect(v).toBe('inside-nested');  // in-txn reads see it
+    }, { dryRun: true });
+    const after = await adapter.getRecord('STATE.md');
+    expect(after).toBe('before');  // outer dryRun rolls back the whole thing
+  });
+
+  it('snapshot() / restore(id) roundtrip reverts state', async () => {
+    await adapter.putRecord('STATE.md', 'v1');
+    const id = await adapter.snapshot();
+    await adapter.putRecord('STATE.md', 'v2');
+    expect(await adapter.getRecord('STATE.md')).toBe('v2');
+    await adapter.restore(id);
+    expect(await adapter.getRecord('STATE.md')).toBe('v1');
+  });
+
+  it('updateSection concurrency: 3 concurrent updateSection calls serialize (PRIMITIVES-06)', async () => {
+    // Seed doc with 3 distinct sections
+    await adapter.putRecord('doc.md', [
+      '## S1', '', 'a', '',
+      '## S2', '', 'a', '',
+      '## S3', '', 'a', '',
+    ].join('\n'));
+    await Promise.all([
+      adapter.updateSection('doc.md', '## S1', 'x1', 'overwrite'),
+      adapter.updateSection('doc.md', '## S2', 'x2', 'overwrite'),
+      adapter.updateSection('doc.md', '## S3', 'x3', 'overwrite'),
+    ]);
+    const final = await adapter.getRecord('doc.md');
+    expect(final).toContain('x1');
+    expect(final).toContain('x2');
+    expect(final).toContain('x3');
   });
 });

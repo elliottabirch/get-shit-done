@@ -165,5 +165,38 @@ describe('section-depth walker (PRIMITIVES-01, PRIMITIVES-02)', () => {
     }
   });
 
-  it.todo('three-author concurrency: 3 concurrent updateSection serialize, final doc has all three bodies (SC#2, PRIMITIVES-06)');
+  it('three-author concurrency: 3 reordered updateSection calls produce valid file (SC#2, PRIMITIVES-06, D-09)', async () => {
+    // Simulates AI-SPEC three-author scenario: gsd-domain-researcher writes
+    // '## Domain', gsd-ai-researcher writes '## AI Strategy', gsd-eval-planner
+    // writes '## Evaluation'. Calls are interleaved arbitrarily by Promise.all.
+    await adapter.putRecord('AI-SPEC.md', [
+      '# AI-SPEC',
+      '',
+      '## Domain',
+      '',
+      'TBD',
+      '',
+      '## AI Strategy',
+      '',
+      'TBD',
+      '',
+      '## Evaluation',
+      '',
+      'TBD',
+      '',
+    ].join('\n'));
+
+    await Promise.all([
+      adapter.updateSection('AI-SPEC.md', '## Domain', 'domain body from researcher', 'overwrite'),
+      adapter.updateSection('AI-SPEC.md', '## AI Strategy', 'ai body from ai-researcher', 'overwrite'),
+      adapter.updateSection('AI-SPEC.md', '## Evaluation', 'eval body from eval-planner', 'overwrite'),
+    ]);
+
+    const final = await adapter.getRecord('AI-SPEC.md');
+    expect(final).toContain('domain body from researcher');
+    expect(final).toContain('ai body from ai-researcher');
+    expect(final).toContain('eval body from eval-planner');
+    // No section body lost — verifies serialization (no lost-update race).
+    expect(final).not.toContain('TBD');
+  });
 });
