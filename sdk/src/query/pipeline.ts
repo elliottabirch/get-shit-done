@@ -20,10 +20,7 @@
  * ```
  */
 
-import { mkdtemp, mkdir, writeFile, readFile, rm } from 'node:fs/promises';
-import { existsSync, readdirSync } from 'node:fs';
-import { join, relative, dirname } from 'node:path';
-import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import type { QueryResult } from './utils.js';
 import type { QueryRegistry } from './registry.js';
 
@@ -49,84 +46,11 @@ export type PipelineStage = 'prepare' | 'execute' | 'finalize';
 // ─── Internal helpers ──────────────────────────────────────────────────────
 
 /**
- * Recursively collect all files under a directory.
- * Returns paths relative to the base directory.
- */
-function collectFiles(dir: string, base: string): string[] {
-  const results: string[] = [];
-  if (!existsSync(dir)) return results;
-  const entries = readdirSync(dir, { withFileTypes: true });
-  for (const entry of entries) {
-    const fullPath = join(dir, entry.name);
-    const relPath = relative(base, fullPath);
-    if (entry.isFile()) {
-      results.push(relPath);
-    } else if (entry.isDirectory()) {
-      results.push(...collectFiles(fullPath, base));
-    }
-  }
-  return results;
-}
-
-/**
- * Copy .planning/ subtree from sourceDir to destDir.
- * Only copies text files relevant to GSD state (skips binaries and logs).
- */
-async function copyPlanningTree(sourceDir: string, destDir: string): Promise<void> {
-  const planningSource = join(sourceDir, '.planning');
-  if (!existsSync(planningSource)) return;
-
-  const files = collectFiles(planningSource, planningSource);
-  for (const relFile of files) {
-    // Skip large or binary-ish files (> 1MB) — only relevant for text state
-    const sourcePath = join(planningSource, relFile);
-    const destPath = join(destDir, '.planning', relFile);
-    await mkdir(dirname(destPath), { recursive: true });
-    try {
-      const content = await readFile(sourcePath, 'utf-8');
-      await writeFile(destPath, content, 'utf-8');
-    } catch {
-      // Skip unreadable files (binary, permission issues, etc.)
-    }
-  }
-}
-
-/**
- * Read all files from .planning/ in a directory into a map of relPath → content.
- * Uses adapter for reading to avoid raw-fs leak within planning scope.
- */
-async function readPlanningState(projectDir: string): Promise<Map<string, string>> {
-  const { adapterFor } = await import('./helpers.js');
-  const adapter = await adapterFor(projectDir);
-  const result = new Map<string, string>();
-  if (!(await adapter.exists('.'))) return result;
-
-  async function walkCollection(relDir: string): Promise<void> {
-    const refs = await adapter.listCollection(relDir);
-    for (const ref of refs) {
-      const st = await adapter.stat(ref.path);
-      if (!st) continue;
-      if (st.kind === 'file') {
-        try {
-          const content = await adapter.getRecord(ref.path);
-          if (content !== null) result.set(ref.path, content);
-        } catch { /* skip unreadable */ }
-      } else if (st.kind === 'dir') {
-        await walkCollection(ref.path);
-      }
-    }
-  }
-
-  await walkCollection('.');
-  return result;
-}
-
-/**
  * Diff two file maps, returning files that changed (with before/after content).
  */
 function diffPlanningState(
-  before: Map<string, string>,
-  after: Map<string, string>,
+  before: Map<string, string | null>,
+  after: Map<string, string | null>,
 ): Record<string, { before: string | null; after: string | null }> {
   const diff: Record<string, { before: string | null; after: string | null }> = {};
   const allKeys = new Set([...before.keys(), ...after.keys()]);
@@ -190,44 +114,52 @@ export function wrapWithPipeline(
       let result: QueryResult;
 
       if (dryRun && isMutation) {
-        // ─── Dry-run: clone → mutate → diff ──────────────────────────
-        let tempDir: string | null = null;
-        try {
-          tempDir = await mkdtemp(join(tmpdir(), 'gsd-dryrun-'));
+        // ─── Dry-run: adapter-backed withTransaction ──────────────────
+        const { adapterFor } = await import('./helpers.js');
+        const adapter = await adapterFor(projectDir);
 
-          // Snapshot state before mutation
-          const beforeState = await readPlanningState(projectDir);
+        let diff: Record<string, { before: string | null; after: string | null }> = {};
+        let changedFiles: string[] = [];
 
-          // Copy .planning/ to temp dir
-          await copyPlanningTree(projectDir, tempDir);
+        // Cast to access MarkdownAdapter's dryRun option (not on interface, discretionary impl)
+        const ext = adapter as unknown as {
+          withTransaction<T>(fn: () => Promise<T>, opts?: { dryRun?: boolean }): Promise<T>;
+          _txnContextForPipeline?: () => { touchedPaths: Set<string>; removedPaths: Set<string> } | undefined;
+          _realReadForPipeline?: (relPath: string) => Promise<string | null>;
+        };
 
-          // Execute mutation against temp dir clone
-          await original(args, tempDir);
+        await ext.withTransaction(async () => {
+          // Run the real mutation against the shadow-dir-aware adapter.
+          await original(args, projectDir);
 
-          // Snapshot state after mutation (from temp dir)
-          const afterState = await readPlanningState(tempDir);
+          // Reach into the adapter for touched paths + real-read escape hatch.
+          // Both are MarkdownAdapter-internal (underscore prefix signals pipeline-only contract).
+          const ctx = ext._txnContextForPipeline?.();
+          const realRead = ext._realReadForPipeline;
+          if (!ctx || !realRead) return;  // non-MarkdownAdapter: leave diff empty
 
-          // Compute diff
-          const diff = diffPlanningState(beforeState, afterState);
-          const changedFiles = Object.keys(diff);
-
-          result = {
-            data: {
-              dry_run: true,
-              command: cmd,
-              args,
-              diff,
-              changes_summary: changedFiles.length > 0
-                ? `${changedFiles.length} file(s) would be modified: ${changedFiles.join(', ')}`
-                : 'No files would be modified',
-            },
-          };
-        } finally {
-          // T-14-06: Always clean up temp dir, even on error
-          if (tempDir) {
-            await rm(tempDir, { recursive: true, force: true }).catch(() => undefined);
+          const allTouched = new Set<string>([...ctx.touchedPaths, ...ctx.removedPaths]);
+          const beforeMap = new Map<string, string | null>();
+          const afterMap = new Map<string, string | null>();
+          for (const p of allTouched) {
+            beforeMap.set(p, await realRead.call(ext, p));
+            afterMap.set(p, ctx.removedPaths.has(p) ? null : await adapter.getRecord(p));
           }
-        }
+          diff = diffPlanningState(beforeMap, afterMap);
+          changedFiles = Object.keys(diff).map(k => k.replace(/^\.planning\//, ''));
+        }, { dryRun: true });
+
+        result = {
+          data: {
+            dry_run: true,
+            command: cmd,
+            args,
+            diff,
+            changes_summary: changedFiles.length > 0
+              ? `${changedFiles.length} file(s) would be modified: ${changedFiles.map(f => '.planning/' + f).join(', ')}`
+              : 'No files would be modified',
+          },
+        };
       } else {
         // ─── Normal execution ─────────────────────────────────────────
         result = await original(args, projectDir);
