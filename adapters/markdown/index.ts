@@ -210,7 +210,7 @@ export class MarkdownAdapter implements StorageAdapter {
     if (!found) {
       // Section does not exist — append a new one at end of file
       const sep = current.endsWith('\n') ? '' : '\n';
-      next = `${current}${sep}\n## ${anchor}\n\n${body}\n`;
+      next = `${current}${sep}\n${anchor}\n\n${body}\n`;
     } else {
       let newBody: string;
       switch (mode) {
@@ -778,80 +778,145 @@ function escapeRegExp(s: string): string {
 }
 
 /**
- * Parse a markdown document line-by-line to find a level-2 (##) section.
- * Returns the trimmed body content and whether the section was found.
- * Heading-level-3+ nested anchors are deferred to Phase 5.
+ * Parse a full ATX heading marker to { depth, text }.
+ * Accepts "## Foo", "### Evidence 2026-05-01", "#### Sub-point".
+ * Throws on non-ATX input (e.g. bare "Foo" or setext).
+ */
+interface ParsedAnchor { depth: number; text: string; }
+function parseAnchor(anchor: string): ParsedAnchor {
+  const m = anchor.match(/^(#{1,6})[ \t]+(.+?)[ \t]*$/);
+  if (!m) {
+    throw new Error(
+      `Invalid anchor (not an ATX heading marker): ${JSON.stringify(anchor)}. ` +
+      `Anchor must be of the form "## Foo" or "### Nested Foo".`,
+    );
+  }
+  return { depth: m[1].length, text: m[2] };
+}
+
+/**
+ * Phase 5 D-06: depth-aware section extraction.
+ * - Anchor is the FULL ATX heading marker (e.g. "## Foo", "### Evidence").
+ * - Section terminates at the next heading of depth <= anchor depth.
+ * - Skips headings inside fenced code blocks (``` fences) and HTML comments.
+ * - Setext-style headings (Foo\n===) emit console.warn (D-08) and are treated
+ *   as non-headings (the bar-line does not become an anchor).
+ * - Duplicate anchors resolve to document-order first-match (D-07).
  */
 function extractSection(
   text: string,
   anchor: string,
 ): { found: boolean; body: string | null } {
-  const anchorRe = new RegExp('^##[ \\t]+' + escapeRegExp(anchor) + '[ \\t]*$');
-  const nextH2Re = /^##[ \t]/;
+  const { depth, text: anchorText } = parseAnchor(anchor);
+  const anchorRe = new RegExp(`^#{${depth}}[ \\t]+${escapeRegExp(anchorText)}[ \\t]*$`);
+  const headingRe = /^(#{1,6})[ \t]+/;
 
   const lines = text.split('\n');
   let inSection = false;
+  let inFence = false;
+  let inComment = false;
   const bodyLines: string[] = [];
+  let prevNonBlank: string | null = null;
 
   for (const line of lines) {
+    // Fenced-code toggle (CommonMark: up to 3 leading spaces, ``` or ~~~).
+    const fenceMatch = /^[ ]{0,3}(`{3,}|~{3,})/.test(line);
+    if (fenceMatch) { inFence = !inFence; prevNonBlank = line; if (inSection) bodyLines.push(line); continue; }
+
+    // Setext detection (D-08 warning): prior non-blank line followed by ==== or ----.
+    if (!inFence && prevNonBlank !== null && prevNonBlank.trim() !== '' && /^(=+|-+)[ \t]*$/.test(line)) {
+      // eslint-disable-next-line no-console
+      console.warn(`MarkdownAdapter: setext-style heading detected (unsupported; use ATX). Line: ${JSON.stringify(prevNonBlank)}`);
+      // Continue treating the text line as a normal body line; do NOT split.
+    }
+
+    // HTML-comment range tracking.
+    if (!inFence) {
+      if (!inComment && /<!--/.test(line) && !/-->/.test(line)) inComment = true;
+      else if (inComment && /-->/.test(line)) { inComment = false; if (inSection) bodyLines.push(line); prevNonBlank = line; continue; }
+    }
+
     if (!inSection) {
-      if (anchorRe.test(line)) {
+      if (!inFence && !inComment && anchorRe.test(line)) {
         inSection = true;
       }
-    } else {
-      if (nextH2Re.test(line)) {
-        // Hit the next ## heading — section ends here
-        break;
-      }
-      bodyLines.push(line);
+      prevNonBlank = line.trim() === '' ? prevNonBlank : line;
+      continue;
     }
+
+    // Inside the section: detect terminator.
+    if (!inFence && !inComment) {
+      const hm = line.match(headingRe);
+      if (hm && hm[1].length <= depth) break;
+    }
+    bodyLines.push(line);
+    prevNonBlank = line.trim() === '' ? prevNonBlank : line;
   }
 
   if (!inSection) return { found: false, body: null };
-
   const raw = bodyLines.join('\n');
-  // Use /g flag to replace both leading and trailing newlines in a single pass
   const trimmed = raw.replace(/^\n+/g, '').replace(/\n+$/g, '');
   return { found: true, body: trimmed };
 }
 
 /**
- * Replace the body of a level-2 section in a markdown document.
- * Leaves all other sections and content intact.
+ * Phase 5 D-06: depth-aware section replacement.
+ * Same walker mechanics as extractSection; replaces body up to the
+ * same-or-shallower terminator.
  */
 function replaceSection(text: string, anchor: string, newBody: string): string {
-  const anchorRe = new RegExp('^##[ \\t]+' + escapeRegExp(anchor) + '[ \\t]*$');
-  const nextH2Re = /^##[ \t]/;
+  const { depth, text: anchorText } = parseAnchor(anchor);
+  const anchorRe = new RegExp(`^#{${depth}}[ \\t]+${escapeRegExp(anchorText)}[ \\t]*$`);
+  const headingRe = /^(#{1,6})[ \t]+/;
 
   const lines = text.split('\n');
   const out: string[] = [];
   let i = 0;
+  let inFence = false;
+  let inComment = false;
+  let replaced = false;
 
-  // Pass through everything before the target section
+  // Walk until anchor, preserving fence/comment state on the pre-section path.
   while (i < lines.length) {
-    if (anchorRe.test(lines[i])) {
-      // Emit the heading itself
-      out.push(lines[i]);
+    const line = lines[i];
+    const fenceMatch = /^[ ]{0,3}(`{3,}|~{3,})/.test(line);
+    if (fenceMatch) inFence = !inFence;
+    if (!inFence) {
+      if (!inComment && /<!--/.test(line) && !/-->/.test(line)) inComment = true;
+      else if (inComment && /-->/.test(line)) inComment = false;
+    }
+
+    if (!replaced && !inFence && !inComment && anchorRe.test(line)) {
+      // Emit heading, skip old body up to terminator, emit newBody.
+      out.push(line);
       i++;
-      // Skip original body lines
-      while (i < lines.length && !nextH2Re.test(lines[i])) {
-        i++;
+      while (i < lines.length) {
+        const innerLine = lines[i];
+        const innerFence = /^[ ]{0,3}(`{3,}|~{3,})/.test(innerLine);
+        if (innerFence) { inFence = !inFence; i++; continue; }
+        if (!inFence) {
+          if (!inComment && /<!--/.test(innerLine) && !/-->/.test(innerLine)) inComment = true;
+          else if (inComment && /-->/.test(innerLine)) { inComment = false; i++; continue; }
+        }
+        if (!inFence && !inComment) {
+          const hm = innerLine.match(headingRe);
+          if (hm && hm[1].length <= depth) break;  // terminator
+        }
+        i++;  // discard old body line
       }
-      // Emit the new body
       out.push('');
       out.push(newBody);
       out.push('');
-      break;
+      replaced = true;
+      continue;
     }
-    out.push(lines[i]);
+
+    out.push(line);
     i++;
   }
 
-  // Pass through everything after the replaced section
-  while (i < lines.length) {
-    out.push(lines[i]);
-    i++;
-  }
+  // Emit remaining lines (post-section) unchanged.
+  while (i < lines.length) { out.push(lines[i]); i++; }
 
   return out.join('\n');
 }
