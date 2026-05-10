@@ -116,6 +116,11 @@ import { spikeGetManifest, spikeGetConventions, spikePutWrapUp, spikePutConventi
 import { threadAdd, seedAdd, todoAdd } from './thread-seed.js';
 import { milestoneArchivePhases, phaseGetManifest, graphifyStore } from './milestone-ops.js';
 import { tmpPut, tmpGet } from './tmp-docs.js';
+import { nextCallCountGetHandler, nextCallCountIncrHandler } from './sidecar.js';
+import {
+  discussCheckpointPut, discussCheckpointGet, discussCheckpointDelete,
+  discussQuestionsPut, discussQuestionsGet, discussQuestionsDelete,
+} from './scratch.js';
 import { GSDEventStream } from '../event-stream.js';
 import type { StorageAdapter } from '../../../adapters/types.js';
 import { MarkdownAdapter } from '../../../adapters/markdown/index.js';
@@ -753,6 +758,16 @@ export function createRegistry(opts?: {
   // Tmp docs (covers docs-update 4 leaks)
   registry.register('tmp.put', (args, projectDir, ws) => tmpPut(args, projectDir, ws));
   registry.register('tmp.get', (args, projectDir, ws) => tmpGet(args, projectDir, ws));
+  // Sidecar verbs (Phase 5 D-19, D-21 — PRIMITIVES-08)
+  registry.register('next-call-count.get', (args, projectDir, ws) => nextCallCountGetHandler(args, projectDir, ws));
+  registry.register('next-call-count.incr', (args, projectDir, ws) => nextCallCountIncrHandler(args, projectDir, ws));
+  // Scratch verbs (Phase 5 D-20 — PRIMITIVES-09)
+  registry.register('discuss.checkpoint.put', (args, projectDir, ws) => discussCheckpointPut(args, projectDir, ws));
+  registry.register('discuss.checkpoint.get', (args, projectDir, ws) => discussCheckpointGet(args, projectDir, ws));
+  registry.register('discuss.checkpoint.delete', (args, projectDir, ws) => discussCheckpointDelete(args, projectDir, ws));
+  registry.register('discuss.questions.put', (args, projectDir, ws) => discussQuestionsPut(args, projectDir, ws));
+  registry.register('discuss.questions.get', (args, projectDir, ws) => discussQuestionsGet(args, projectDir, ws));
+  registry.register('discuss.questions.delete', (args, projectDir, ws) => discussQuestionsDelete(args, projectDir, ws));
 
   // Wire event emission for mutation commands
   if (eventStream) {
