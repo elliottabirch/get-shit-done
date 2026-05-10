@@ -31,6 +31,11 @@ reports/
 RAILROAD_ARCHITECTURE.md
 .planning/
 !/.planning/
+
+# Phase 5: shadow-dir transaction scratch (MarkdownAdapter)
+.planning/.tmp-txn-*
+.planning/.tmp-snap-*
+
 analysis/
 docs/GSD-MASTER-ARCHITECTURE.md
 docs/GSD-RUST-IMPLEMENTATION-GUIDE.md

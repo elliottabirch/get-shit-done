@@ -21,7 +21,7 @@
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { existsSync, constants, mkdirSync, writeFileSync, unlinkSync } from 'node:fs';
-import { readFile, writeFile, unlink, readdir, mkdir, stat as fsStat, open } from 'node:fs/promises';
+import { readFile, writeFile, unlink, readdir, mkdir, stat as fsStat, open, rename, rm, mkdtemp } from 'node:fs/promises';
 import { join, dirname } from 'node:path';
 import { homedir } from 'node:os';
 import type {
@@ -75,6 +75,17 @@ interface CoreCjs {
   atomicWriteFileSync(filePath: string, content: string, encoding?: string): void;
 }
 
+// ─── Transaction Context ──────────────────────────────────────────────────────
+
+/** Phase 5 D-01/D-04: transaction context tracked per-adapter-instance. */
+interface TxnCtx {
+  tmpDir: string;
+  touchedPaths: Set<string>;
+  removedPaths: Set<string>;
+  dryRun: boolean;
+  depth: number;
+}
+
 // ─── MarkdownAdapter ──────────────────────────────────────────────────────────
 
 export class MarkdownAdapter implements StorageAdapter {
@@ -87,7 +98,7 @@ export class MarkdownAdapter implements StorageAdapter {
     section: true,
     frontmatter: true,
     binaryAsset: false,
-    snapshot: false,
+    snapshot: true,
     transaction: true,
     namedDoc: false,
     markdownLockfile: true,
@@ -101,6 +112,8 @@ export class MarkdownAdapter implements StorageAdapter {
   private readonly libPaths: Record<string, string>;
   /** Track held locks for cleanup on release */
   private readonly lockSet = new Set<string>();
+  /** Phase 5 D-01: per-transaction shadow-dir state. undefined when no txn active. */
+  private activeTxn: TxnCtx | undefined;
 
   /** D-03: Sync constructor — no async init */
   constructor(projectDir: string) {
@@ -124,10 +137,34 @@ export class MarkdownAdapter implements StorageAdapter {
     return join(this.planningBase, relPath);
   }
 
+  /** D-01: write-path resolver — shadow tmpdir when txn active, real path otherwise. */
+  private resolveWrite(relPath: string): string {
+    if (this.activeTxn) {
+      this.activeTxn.touchedPaths.add(relPath);
+      this.activeTxn.removedPaths.delete(relPath);  // a write un-removes
+      return join(this.activeTxn.tmpDir, relPath);
+    }
+    return this.resolve(relPath);
+  }
+
+  /** D-01: read-path resolver — tmpdir-over-real merge. Async to stat the shadow. */
+  private async resolveRead(relPath: string): Promise<string> {
+    if (this.activeTxn) {
+      if (this.activeTxn.removedPaths.has(relPath)) {
+        // The caller removed this in-txn; reads should see it as absent. Point at a
+        // guaranteed-missing path so the caller's catch(ENOENT) branch fires.
+        return join(this.activeTxn.tmpDir, '.__REMOVED__', relPath);
+      }
+      const shadowPath = join(this.activeTxn.tmpDir, relPath);
+      if (existsSync(shadowPath)) return shadowPath;
+    }
+    return this.resolve(relPath);
+  }
+
   // ─── Bin A: record group (D-05, required) ─────────────────────────────────
 
   async getRecord(path: string): Promise<string | null> {
-    const abs = this.resolve(path);
+    const abs = await this.resolveRead(path);
     try {
       return await readFile(abs, 'utf-8');
     } catch (err) {
@@ -137,12 +174,20 @@ export class MarkdownAdapter implements StorageAdapter {
   }
 
   async putRecord(path: string, body: string): Promise<void> {
-    const abs = this.resolve(path);
+    const abs = this.resolveWrite(path);
     await mkdir(dirname(abs), { recursive: true });
     await writeFile(abs, body, 'utf-8');
   }
 
   async removeRecord(path: string): Promise<void> {
+    if (this.activeTxn) {
+      this.activeTxn.removedPaths.add(path);
+      this.activeTxn.touchedPaths.delete(path);  // a remove un-touches
+      // Remove from shadow if previously written this txn.
+      const shadowAbs = join(this.activeTxn.tmpDir, path);
+      try { await unlink(shadowAbs); } catch { /* not written this txn */ }
+      return;
+    }
     const abs = this.resolve(path);
     try {
       await unlink(abs);
@@ -153,27 +198,40 @@ export class MarkdownAdapter implements StorageAdapter {
   }
 
   async listCollection(prefix: string, filter?: RecordFilter): Promise<RecordRef[]> {
-    const abs = this.resolve(prefix);
-    let entries: import('node:fs').Dirent[];
+    const realAbs = this.resolve(prefix);
+    let entries: import('node:fs').Dirent[] = [];
     try {
-      entries = await readdir(abs, { withFileTypes: true });
+      entries = await readdir(realAbs, { withFileTypes: true });
     } catch (err) {
-      if ((err as NodeJS.ErrnoException).code === 'ENOENT') return [];
-      throw err;
+      if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
     }
-    const refs: RecordRef[] = entries.map(e => ({
-      path: join(prefix, e.name),
-      name: e.name,
-    }));
+    let refs: RecordRef[] = entries.map(e => ({ path: join(prefix, e.name), name: e.name }));
+
+    if (this.activeTxn) {
+      // Filter out in-txn removals.
+      refs = refs.filter(r => !this.activeTxn!.removedPaths.has(r.path));
+      // Add in-txn shadow-only entries.
+      try {
+        const shadowAbs = join(this.activeTxn.tmpDir, prefix);
+        const shadowEntries = await readdir(shadowAbs, { withFileTypes: true });
+        const seen = new Set(refs.map(r => r.name));
+        for (const e of shadowEntries) {
+          if (!seen.has(e.name)) refs.push({ path: join(prefix, e.name), name: e.name });
+        }
+      } catch { /* no shadow dir at prefix */ }
+    }
     return filter ? refs.filter(filter) : refs;
   }
 
   async exists(path: string): Promise<boolean> {
-    return existsSync(this.resolve(path));
+    if (this.activeTxn?.removedPaths.has(path)) return false;
+    const resolved = await this.resolveRead(path);
+    return existsSync(resolved);
   }
 
   async stat(path: string): Promise<{ kind: 'file' | 'dir'; mtime?: string } | null> {
-    const abs = this.resolve(path);
+    if (this.activeTxn?.removedPaths.has(path)) return null;
+    const abs = await this.resolveRead(path);
     try {
       const st = await fsStat(abs);
       return {
@@ -203,41 +261,43 @@ export class MarkdownAdapter implements StorageAdapter {
     body: string,
     mode: SectionMode,
   ): Promise<void> {
-    const current = (await this.getRecord(path)) ?? '';
-    const { body: existingBody, found } = extractSection(current, anchor);
+    await this.withTransaction(async () => {
+      const current = (await this.getRecord(path)) ?? '';
+      const { body: existingBody, found } = extractSection(current, anchor);
 
-    let next: string;
-    if (!found) {
-      // Section does not exist — append a new one at end of file
-      const sep = current.endsWith('\n') ? '' : '\n';
-      next = `${current}${sep}\n${anchor}\n\n${body}\n`;
-    } else {
-      let newBody: string;
-      switch (mode) {
-        case 'overwrite':
-          newBody = body;
-          break;
-        case 'append':
-          newBody =
-            existingBody !== null && existingBody.length > 0
-              ? `${existingBody}\n\n${body}`
-              : body;
-          break;
-        case 'prepend':
-          newBody =
-            existingBody !== null && existingBody.length > 0
-              ? `${body}\n\n${existingBody}`
-              : body;
-          break;
-        default: {
-          const _exhaustive: never = mode;
-          throw new Error(`Unknown SectionMode: ${String(_exhaustive)}`);
+      let next: string;
+      if (!found) {
+        // Section does not exist — append a new one at end of file
+        const sep = current.endsWith('\n') ? '' : '\n';
+        next = `${current}${sep}\n${anchor}\n\n${body}\n`;
+      } else {
+        let newBody: string;
+        switch (mode) {
+          case 'overwrite':
+            newBody = body;
+            break;
+          case 'append':
+            newBody =
+              existingBody !== null && existingBody.length > 0
+                ? `${existingBody}\n\n${body}`
+                : body;
+            break;
+          case 'prepend':
+            newBody =
+              existingBody !== null && existingBody.length > 0
+                ? `${body}\n\n${existingBody}`
+                : body;
+            break;
+          default: {
+            const _exhaustive: never = mode;
+            throw new Error(`Unknown SectionMode: ${String(_exhaustive)}`);
+          }
         }
+        next = replaceSection(current, anchor, newBody);
       }
-      next = replaceSection(current, anchor, newBody);
-    }
 
-    await this.putRecord(path, next);
+      await this.putRecord(path, next);
+    });
   }
 
   // ─── Bin A: frontmatter group (D-05, required) ────────────────────────────
@@ -284,6 +344,7 @@ export class MarkdownAdapter implements StorageAdapter {
   // ─── commitPlanningState (D-08 / D-10, implemented since cap=true) ────────
 
   async commitPlanningState(message: string, files?: string[]): Promise<void> {
+    if (this.activeTxn?.dryRun) return;  // D-05: no-op during dry-run
     const { execFileSync } = await import('node:child_process');
     const targets = files && files.length > 0 ? files : ['.planning'];
     try {
@@ -309,26 +370,70 @@ export class MarkdownAdapter implements StorageAdapter {
     throw new UnsupportedCapabilityError('binaryAsset', this.name);
   }
 
+  /** D-03: snapshot the current .planning/ tree into an opaque tmpdir; returns its path as the id. */
   async snapshot(): Promise<string> {
-    throw new UnsupportedCapabilityError('snapshot', this.name);
+    const snapDir = await mkdtemp(join(this.planningBase, '.tmp-snap-'));
+    await this._copyTreeRecursive(this.planningBase, snapDir, ['.tmp-txn-', '.tmp-snap-', '.adapter.lock']);
+    return snapDir;
   }
 
-  async restore(_snapshotId: string): Promise<void> {
-    // restore() is gated by the same 'snapshot' capability
-    throw new UnsupportedCapabilityError('snapshot', this.name);
+  /** D-03: restore a previously-captured snapshot. Rolls back .planning/ to snapshot state. */
+  async restore(snapshotId: string): Promise<void> {
+    if (!existsSync(snapshotId)) throw new Error(`Snapshot not found: ${snapshotId}`);
+    // Replace .planning/ contents (except .tmp-* scratch and .adapter.lock) with snapshot contents.
+    await this._wipePlanning(['.tmp-txn-', '.tmp-snap-', '.adapter.lock']);
+    await this._copyTreeRecursive(snapshotId, this.planningBase, []);
+    // Remove the snapshot on successful restore (single-use).
+    try { await rm(snapshotId, { recursive: true, force: true }); } catch { /* best effort */ }
   }
 
-  async withTransaction<T>(fn: () => Promise<T>): Promise<T> {
+  async withTransaction<T>(fn: () => Promise<T>, opts?: { dryRun?: boolean }): Promise<T> {
+    // D-04: reentrant — join outer txn, execute fn without acquiring a new lock or tmpdir.
+    const existing = this.activeTxn;
+    if (existing) {
+      existing.depth++;
+      try {
+        return await fn();
+      } finally {
+        existing.depth--;
+      }
+    }
+
+    // Fresh txn: acquire lock + create shadow tmpdir.
     const lockPath = join(this.planningBase, '.adapter.lock');
     await this.acquireAdapterLock(lockPath);
+    // D-03 discretion: tmpdir lives under .planning/ to guarantee same-mount atomic rename (A1, Pitfall 1).
+    const tmpDir = await mkdtemp(join(this.planningBase, '.tmp-txn-'));
+    const ctx: TxnCtx = {
+      tmpDir,
+      touchedPaths: new Set(),
+      removedPaths: new Set(),
+      dryRun: opts?.dryRun ?? false,
+      depth: 1,
+    };
+    this.activeTxn = ctx;
+
+    let succeeded = false;
     try {
-      return await fn();
+      const result = await fn();
+      succeeded = true;
+      if (!ctx.dryRun) await this._commitShadowDir(ctx);
+      return result;
     } finally {
+      // Rollback path: dryRun always rolls back; error (succeeded=false) rolls back.
+      try { await rm(tmpDir, { recursive: true, force: true }); } catch { /* best effort */ }
+      this.activeTxn = undefined;
       await this.releaseAdapterLock(lockPath);
+      void succeeded;  // no-op use to satisfy strict mode
     }
   }
 
   private async acquireAdapterLock(lockPath: string): Promise<void> {
+    // D-10: reentrant guard — if this adapter instance already holds a txn,
+    // same-PID reentry would deadlock on O_EXCL. Return immediately; the outer
+    // txn owns the lock. No fs-lock acquired.
+    if (this.activeTxn) return;
+
     const maxRetries = 10;
     const retryDelay = 200;
 
@@ -372,6 +477,63 @@ export class MarkdownAdapter implements StorageAdapter {
       if (!Number.isFinite(pid) || pid <= 0) return true;
       try { process.kill(pid, 0); return false; } catch { return true; }
     } catch { return true; }
+  }
+
+  /** D-01: apply shadow-dir changes to real planning tree. Idempotent on dir creation. */
+  private async _commitShadowDir(ctx: TxnCtx): Promise<void> {
+    // 1) Apply removes first (so touchedPaths can recreate if needed).
+    for (const relPath of ctx.removedPaths) {
+      const realAbs = this.resolve(relPath);
+      try { await unlink(realAbs); } catch (err) {
+        if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
+      }
+    }
+    // 2) Apply writes via rename, sorted parent-first.
+    const paths = Array.from(ctx.touchedPaths).sort();
+    for (const relPath of paths) {
+      const src = join(ctx.tmpDir, relPath);
+      const dst = this.resolve(relPath);
+      if (!existsSync(src)) continue;  // removed after write in same txn; already handled
+      await mkdir(dirname(dst), { recursive: true });
+      await rename(src, dst);  // POSIX same-mount atomic
+    }
+  }
+
+  /** Pipeline-internal escape hatch (RESEARCH OQ #1). NOT on StorageAdapter interface. */
+  _txnContextForPipeline(): TxnCtx | undefined {
+    return this.activeTxn;
+  }
+
+  // Private helpers for snapshot/restore
+  private async _copyTreeRecursive(srcBase: string, dstBase: string, skipPrefixes: string[]): Promise<void> {
+    let entries: import('node:fs').Dirent[];
+    try { entries = await readdir(srcBase, { withFileTypes: true }); }
+    catch (err) {
+      if ((err as NodeJS.ErrnoException).code === 'ENOENT') return;
+      throw err;
+    }
+    for (const e of entries) {
+      if (skipPrefixes.some(p => e.name.startsWith(p))) continue;
+      const src = join(srcBase, e.name);
+      const dst = join(dstBase, e.name);
+      if (e.isDirectory()) {
+        await mkdir(dst, { recursive: true });
+        await this._copyTreeRecursive(src, dst, skipPrefixes);
+      } else if (e.isFile()) {
+        const body = await readFile(src);
+        await mkdir(dirname(dst), { recursive: true });
+        await writeFile(dst, body);
+      }
+    }
+  }
+
+  private async _wipePlanning(skipPrefixes: string[]): Promise<void> {
+    const entries = await readdir(this.planningBase, { withFileTypes: true });
+    for (const e of entries) {
+      if (skipPrefixes.some(p => e.name.startsWith(p))) continue;
+      const target = join(this.planningBase, e.name);
+      await rm(target, { recursive: true, force: true });
+    }
   }
 
   // ─── Event family methods (Phase 3 Plan 02) ────────────────────────────────
