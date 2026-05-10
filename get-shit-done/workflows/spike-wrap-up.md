@@ -22,7 +22,7 @@ Read all files referenced by the invoking prompt's execution_context before star
 <step name="gather">
 ## Gather Spike Inventory
 
-1. Read `.planning/spikes/MANIFEST.md` for the overall idea context and requirements
+1. `gsd-sdk query spike.get-manifest` — load the overall idea context and requirements
 2. Glob `.planning/spikes/*/README.md` and parse YAML frontmatter from each
 3. Check if `./.claude/skills/spike-findings-*/SKILL.md` exists for this project
    - If yes: read its `processed_spikes` list from the metadata section and filter those out
@@ -175,7 +175,7 @@ Original spike source files are preserved in `sources/` for complete reference.
 <step name="write_summary">
 ## Write Planning Summary
 
-Write `.planning/spikes/WRAP-UP-SUMMARY.md` for project history:
+`gsd-sdk query spike.put-wrap-up` — write the wrap-up summary for project history:
 
 ```markdown
 # Spike Wrap-Up Summary
@@ -217,7 +217,7 @@ Analyze all processed spikes for recurring patterns and write `.planning/spikes/
    - **Recurring approaches** — How auth is handled, how styling is done, how data is served
    - **Tools & libraries** — Packages that showed up repeatedly with versions that worked
 
-2. Write or update `.planning/spikes/CONVENTIONS.md`:
+2. `gsd-sdk query spike.put-conventions` — write or update conventions:
 
 ```markdown
 # Spike Conventions
