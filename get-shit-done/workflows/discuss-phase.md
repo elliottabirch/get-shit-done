@@ -234,7 +234,7 @@ gsd-sdk query roadmap
 gsd-sdk query init.plan-phase
 ```
 
-Read at most **3** prior CONTEXT.md files (most recent 3 phases before current). If a decisions index exists, load that instead — it is a bounded rolling summary that supersedes per-phase reads.
+Read at most **3** prior CONTEXT.md files (most recent 3 phases — load prior CONTEXT.md from those phases). If a decisions index exists, load that instead — it is a bounded rolling summary that supersedes per-phase reads.
 
 ```bash
 gsd-sdk query decisions-index.get

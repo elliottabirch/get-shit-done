@@ -822,7 +822,7 @@ After executor returns:
           [ -n "$DELETED_FILES" ]; then
          COMMIT_DOCS=$(gsd-sdk query config-get commit_docs 2>/dev/null || echo "true")
          if [ "$COMMIT_DOCS" != "false" ]; then
-           gsd-sdk query commit --stage-only state.md roadmap.md 2>/dev/null || true
+           gsd-sdk query commit "docs: update tracking" --files state.md roadmap.md 2>/dev/null || true
            git commit --amend --no-edit 2>/dev/null || true
          fi
        fi

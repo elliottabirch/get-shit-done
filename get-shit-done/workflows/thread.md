@@ -144,7 +144,7 @@ If $ARGUMENTS is a new description (no matching thread file):
    SLUG=$(gsd-sdk query generate-slug "$ARGUMENTS" --raw)
    ```
 
-2. Create the thread via SDK:
+2. Create the thread file (Write tool mediated via SDK):
    ```bash
    gsd-sdk query thread.add "{SLUG}" --stdin
    ```
