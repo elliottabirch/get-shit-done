@@ -10,8 +10,8 @@ progress:
   total_phases: 8
   completed_phases: 4
   total_plans: 29
-  completed_plans: 25
-  percent: 86
+  completed_plans: 26
+  percent: 90
 ---
 
 # Project State
@@ -19,9 +19,9 @@ progress:
 ## Current Position
 
 Phase: 05 (foundational-primitive-lift) — EXECUTING
-Plan: 5 of 7 complete (Wave 5 merged)
-Status: Executing Phase 05 — Wave 6 (Plan 05-06) next
-Last activity: 2026-05-10 -- Wave 5 (Plan 05-05) complete
+Plan: 6 of 7 complete (Waves 5 + 6 merged)
+Status: Executing Phase 05 — Wave 7 (Plan 05-07, final) next
+Last activity: 2026-05-10 -- Wave 6 (Plan 05-06) complete
 
 ## Reference
 
@@ -128,15 +128,19 @@ These are NOT blocking for Phase 1; resolved as relevant phases approach:
 
 ## Session Continuity
 
-Last session: 2026-05-10T19:10:41.997Z
-Stopped at: Phase 5 context gathered
-`.planning/REQUIREMENTS.md` Traceability filled; `.planning/STATE.md`
-`progress.total_phases` set to 8.
+Last session: 2026-05-10T21:00:23.743Z
+Stopped at: Wave 5 (Plan 05-05) and Wave 6 (Plan 05-06) merged;
+Phase 5 at 6/7 plans complete. Plan 05-07 (final wave — 5 ADRs for
+OQ-02/05/07/10 + shadow-dir journal + Phase 5 exit checkpoint) is the
+only remaining work in Phase 5.
 
-Next action: `/gsd-discuss-phase 1` to lock Phase 1 design (capabilities
-flag shape, module layout, OQ-08 resolution, upstream PR reconciliation
-per ADAPTER-05).
+Uncommitted: `sdk/src/query/route-next-action.ts` has a JSDoc-only
+addition around `toAdapterDir` — low-risk, unrelated to Plan 05-07.
+
+Next action: Execute Plan 05-07 via `/gsd-execute-phase 5` to close out
+Phase 5. After Phase 5 ships, unblocks sibling repo `gsd-beads` v1.0
+Phase 6 (BeadsAdapter implementation) per SYNTHESIS §9 high-severity
+dry-run risk.
 
 Sibling repo state: `gsd-beads` v0.2 milestone is superseded; v1.0
-Phase 6 (BeadsAdapter implementation) waits for Phase 5 of this repo
-to ship before activating (per SYNTHESIS §9 high-severity dry-run risk).
+Phase 6 activates once this repo's Phase 5 ships.
