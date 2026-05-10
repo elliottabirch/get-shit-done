@@ -295,8 +295,8 @@ SPIKE_SKILL=$(ls ./.claude/skills/spike-findings-*/SKILL.md 2>/dev/null | head -
 SKETCH_SKILL=$(ls ./.claude/skills/sketch-findings-*/SKILL.md 2>/dev/null | head -1 || true)
 
 # Check for raw spikes/sketches in .planning/
-HAS_SPIKES=$(ls .planning/spikes/MANIFEST.md 2>/dev/null)
-HAS_SKETCHES=$(ls .planning/sketches/MANIFEST.md 2>/dev/null)
+HAS_SPIKES=$(gsd-sdk query spike.get-manifest --exists 2>/dev/null)
+HAS_SKETCHES=$(gsd-sdk query sketch.get-manifest --exists 2>/dev/null)
 ```
 
 If any of these exist, surface them before questioning:
@@ -414,7 +414,7 @@ All Active requirements are hypotheses until shipped and validated.
 
 Infer Validated requirements from existing code:
 
-1. Read `.planning/codebase/ARCHITECTURE.md` and `STACK.md`
+1. Load codebase docs via `gsd-sdk query codebase.get "ARCHITECTURE"` and `gsd-sdk query codebase.get "STACK"`
 2. Identify what the codebase already does
 3. These become the initial Validated set
 
@@ -777,7 +777,7 @@ Researching [domain] ecosystem...
 Create research directory:
 
 ```bash
-mkdir -p .planning/research
+gsd-sdk query tmp.ensure-dir "research"
 ```
 
 **Determine milestone context:**
@@ -1330,7 +1330,7 @@ Use AskUserQuestion:
 - Present revised roadmap
 - Loop until user approves
 
-**If "Review full file":** Display raw `cat .planning/ROADMAP.md`, then re-ask.
+**If "Review full file":** Display raw `gsd-sdk query roadmap`, then re-ask.
 
 **Generate or refresh project instruction file before final commit:**
 

@@ -14,17 +14,12 @@ Read all files referenced by the invoking prompt's execution_context before star
 Determine what kind of work is being paused and set the handoff destination accordingly:
 
 ```bash
-# Check for active phase
-phase=$(( ls -lt .planning/phases/*/PLAN.md 2>/dev/null || true ) | head -1 | grep -oP 'phases/\K[^/]+' || true)
-
-# Check for active spike
-spike=$(( ls -lt .planning/spikes/*/SPIKE.md .planning/spikes/*/DESIGN.md .planning/spikes/*/README.md 2>/dev/null || true ) | head -1 | grep -oP 'spikes/\K[^/]+' || true)
-
-# Check for active sketch
-sketch=$(( ls -lt .planning/sketches/*/README.md .planning/sketches/*/index.html 2>/dev/null || true ) | head -1 | grep -oP 'sketches/\K[^/]+' || true)
-
-# Check for active deliberation
-deliberation=$(ls .planning/deliberations/*.md 2>/dev/null | head -1 || true)
+# Detect active work context via SDK
+WORK_CONTEXT=$(gsd-sdk query state.detect-active-context --raw)
+phase=$(echo "$WORK_CONTEXT" | jq -r '.phase // empty')
+spike=$(echo "$WORK_CONTEXT" | jq -r '.spike // empty')
+sketch=$(echo "$WORK_CONTEXT" | jq -r '.sketch // empty')
+deliberation=$(echo "$WORK_CONTEXT" | jq -r '.deliberation // empty')
 ```
 
 - **Phase work**: active phase directory → handoff to `.planning/phases/XX-name/.continue-here.md`
@@ -63,7 +58,7 @@ Report any summaries with placeholder content as incomplete items.
 </step>
 
 <step name="write_structured">
-**Write structured handoff to `.planning/HANDOFF.json`:**
+**Write structured handoff via `gsd-sdk query handoff.put`:**
 
 ```bash
 timestamp=$(gsd-sdk query current-timestamp full --raw)
@@ -106,7 +101,7 @@ timestamp=$(gsd-sdk query current-timestamp full --raw)
 </step>
 
 <step name="write">
-**Write handoff to the path determined in the detect step** (e.g. `.planning/phases/XX-name/.continue-here.md`, `.planning/spikes/SPIKE-NNN/.continue-here.md`, or `.planning/.continue-here.md`):
+**Write continue-here via `gsd-sdk query continue-here.put`** (the SDK routes to the correct path based on active context):
 
 ```markdown
 ---

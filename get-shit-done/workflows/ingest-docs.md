@@ -162,7 +162,7 @@ On Revise: exit with guidance to re-run with `--manifest` or a narrower path.
 Create staging directory:
 
 ```bash
-mkdir -p .planning/intel/classifications/
+gsd-sdk query tmp.ensure-dir "intel/classifications"
 ```
 
 For each discovered doc, spawn `gsd-doc-classifier` in parallel. In Claude Code, issue all Task calls in a single message with multiple tool uses so the harness runs them concurrently. For Copilot / sequential runtimes, fall back to sequential dispatch.
@@ -212,7 +212,7 @@ The synthesizer writes:
 
 <step name="conflict_gate">
 
-Read `.planning/INGEST-CONFLICTS.md`. Count entries in each bucket (the synthesizer always writes the three-bucket header; parse the `### BLOCKERS ({N})`, `### WARNINGS ({N})`, `### INFO ({N})` lines).
+Load conflicts via `gsd-sdk query report.get "INGEST-CONFLICTS"`. Count entries in each bucket (the synthesizer always writes the three-bucket header; parse the `### BLOCKERS ({N})`, `### WARNINGS ({N})`, `### INFO ({N})` lines).
 
 Apply the safety semantics from `references/doc-conflict-engine.md`. Operation noun: `ingest`.
 

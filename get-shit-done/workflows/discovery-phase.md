@@ -203,7 +203,7 @@ Run the discovery:
 </step>
 
 <step name="create_discovery_output">
-Write `.planning/phases/XX-name/DISCOVERY.md`:
+Write DISCOVERY.md via `gsd-sdk query phase.put-doc "${phase_dir}" "DISCOVERY"` with content:
 - Summary with recommendation
 - Key findings with sources
 - Code examples if applicable

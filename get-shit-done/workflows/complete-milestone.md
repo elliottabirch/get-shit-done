@@ -132,7 +132,7 @@ If user selects "Proceed anyway": note incomplete requirements in MILESTONES.md 
 <config-check>
 
 ```bash
-cat .planning/config.json 2>/dev/null || true
+gsd-sdk query config-get "." 2>/dev/null || true
 ```
 
 </config-check>
@@ -231,7 +231,7 @@ Full PROJECT.md evolution review at milestone completion.
 Read all phase summaries:
 
 ```bash
-cat .planning/phases/*-*/*-SUMMARY.md
+gsd-sdk query phase.list-summaries
 ```
 
 **Full review checklist:**
@@ -435,9 +435,7 @@ AskUserQuestion(header="Archive Phases", question="Archive phase directories to 
 
 If "Yes": move phase directories to the milestone archive:
 ```bash
-mkdir -p .planning/milestones/v[X.Y]-phases
-# For each phase directory in .planning/phases/:
-mv .planning/phases/{phase-dir} .planning/milestones/v[X.Y]-phases/
+gsd-sdk query milestone.archive-phases "v[X.Y]"
 ```
 Verify: `✅ Phase directories archived to .planning/milestones/v[X.Y]-phases/`
 
@@ -513,7 +511,7 @@ git rm .planning/REQUIREMENTS.md
 
 Check for existing retrospective:
 ```bash
-ls .planning/RETROSPECTIVE.md 2>/dev/null || true
+gsd-sdk query report.get "RETROSPECTIVE" 2>/dev/null || true
 ```
 
 **If exists:** Read the file, append new milestone section before the "## Cross-Milestone Trends" section.

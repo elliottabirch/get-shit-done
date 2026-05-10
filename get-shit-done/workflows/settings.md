@@ -383,7 +383,7 @@ Merge new settings into existing config.json:
 
 **Safe merge:** Apply each chosen value via `gsd-sdk query config-set <key.path> <value>` so unrelated keys are never clobbered. `code_review_depth` is written only if the code_review question was answered `on`; otherwise leave the existing value in place.
 
-Write updated config to `$GSD_CONFIG_PATH` (the workstream-aware path resolved in `ensure_and_load_config`). Never hardcode `.planning/config.json` — workstream installs route to `.planning/workstreams/<slug>/config.json`.
+Config is already written via `gsd-sdk query config-set` calls above. Never hardcode config paths — the SDK resolves the workstream-aware path internally.
 </step>
 
 <step name="save_as_defaults">

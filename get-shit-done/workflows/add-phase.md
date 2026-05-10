@@ -61,7 +61,7 @@ Extract from result: `phase_number`, `padded`, `name`, `slug`, `directory`.
 <step name="update_project_state">
 Update STATE.md to reflect the new phase:
 
-1. Read `.planning/STATE.md`
+1. Load state via `gsd-sdk query state.load`
 2. Under "## Accumulated Context" → "### Roadmap Evolution" add entry:
    ```
    - Phase {N} added: {description}

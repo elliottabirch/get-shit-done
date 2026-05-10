@@ -75,7 +75,7 @@ Parse the user's selection into COMMITS list.
 
 **MODE=phase:**
 
-Read `.planning/.phase-manifest.json` if it exists.
+Load phase manifest via `gsd-sdk query phase.get-manifest`.
 
 If the file exists and `manifest.phases?.[TARGET_PHASE]?.commits` is a non-empty array:
   - Use `manifest.phases[TARGET_PHASE].commits` entries as COMMITS (each entry is a commit hash)
@@ -119,7 +119,7 @@ Skip this step entirely for MODE=last.
 
 **MODE=phase:**
 
-Read `.planning/ROADMAP.md` inline.
+Load roadmap via `gsd-sdk query roadmap`.
 
 Search for phases that list a dependency on the target phase. Look for patterns like:
 - "Depends on: Phase ${TARGET_PHASE}"

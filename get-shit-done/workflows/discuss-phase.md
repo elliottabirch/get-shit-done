@@ -103,7 +103,7 @@ Phase: "API documentation"       → Structure/navigation, Code examples depth, 
 
 <process>
 
-**Express path available:** If you already have a PRD or acceptance criteria document, use `/gsd:plan-phase {phase} --prd path/to/prd.md` to skip this discussion and go straight to planning.
+**Express path available:** If you already have a PRD or acceptance criteria document, use `/gsd-plan-phase {phase} --prd path/to/prd.md` to skip this discussion and go straight to planning.
 
 <step name="initialize" priority="first">
 Phase number from argument (required).
@@ -121,7 +121,7 @@ Parse JSON for: `commit_docs`, `phase_found`, `phase_dir`, `phase_number`, `phas
 **If `phase_found` is false:**
 ```
 Phase [X] not found in roadmap.
-Use /gsd:progress ${GSD_WS} to see available phases.
+Use /gsd-progress ${GSD_WS} to see available phases.
 ```
 Exit workflow.
 
@@ -172,7 +172,7 @@ Write these answers inline before continuing. If a blocking anti-pattern cannot 
 </step>
 
 <step name="check_spec">
-Check if a SPEC.md (from `/gsd:spec-phase`) exists for this phase. SPEC.md locks requirements before implementation decisions.
+Check if a SPEC.md (from `/gsd-spec-phase`) exists for this phase. SPEC.md locks requirements before implementation decisions.
 
 ```bash
 ls ${phase_dir}/*-SPEC.md 2>/dev/null | grep -v AI-SPEC | head -1 || true
@@ -187,7 +187,7 @@ ls ${phase_dir}/*-SPEC.md 2>/dev/null | grep -v AI-SPEC | head -1 || true
 
 **If no SPEC.md is found:** Continue with `spec_loaded = false`.
 
-**Note:** SPEC.md files named `AI-SPEC.md` (from `/gsd:ai-integration-phase`) are excluded — different purpose.
+**Note:** SPEC.md files named `AI-SPEC.md` (from `/gsd-ai-integration-phase`) are excluded — different purpose.
 </step>
 
 <step name="check_existing">
@@ -229,15 +229,15 @@ Check `has_plans` and `plan_count` from init. **If `has_plans` is true:**
 Read project-level and prior phase context to avoid re-asking decided questions.
 
 ```bash
-cat .planning/PROJECT.md 2>/dev/null || true
-cat .planning/REQUIREMENTS.md 2>/dev/null || true
-cat .planning/STATE.md 2>/dev/null || true
+gsd-sdk query state.load
+gsd-sdk query roadmap
+gsd-sdk query init.plan-phase
 ```
 
-Read at most **3** prior CONTEXT.md files (most recent 3 phases before current). If `.planning/DECISIONS-INDEX.md` exists, read that instead — it is a bounded rolling summary that supersedes per-phase reads.
+Read at most **3** prior CONTEXT.md files (most recent 3 phases before current). If a decisions index exists, load that instead — it is a bounded rolling summary that supersedes per-phase reads.
 
 ```bash
-(find .planning/phases -name "*-CONTEXT.md" 2>/dev/null || true) | sort -r
+gsd-sdk query decisions-index.get
 ```
 
 For each CONTEXT.md read: extract `<decisions>` (locked preferences), `<specifics>` (particular references), and patterns (e.g., "user prefers minimal UI", "user rejected single-key shortcuts").
@@ -246,13 +246,13 @@ For each CONTEXT.md read: extract `<decisions>` (locked preferences), `<specific
 ```bash
 SPIKE_FINDINGS=$(ls ./.claude/skills/spike-findings-*/SKILL.md 2>/dev/null | head -1 || true)
 SKETCH_FINDINGS=$(ls ./.claude/skills/sketch-findings-*/SKILL.md 2>/dev/null | head -1 || true)
-RAW_SPIKES=$(ls .planning/spikes/MANIFEST.md 2>/dev/null)
-RAW_SKETCHES=$(ls .planning/sketches/MANIFEST.md 2>/dev/null)
+RAW_SPIKES=$(gsd-sdk query spike.get-manifest --exists 2>/dev/null)
+RAW_SKETCHES=$(gsd-sdk query sketch.get-manifest --exists 2>/dev/null)
 ```
 
 If findings skills exist, read SKILL.md and reference files; extract validated patterns, landmines, constraints, design decisions. Add them to `<prior_decisions>`.
 
-If raw spikes/sketches exist but no findings skill, note: `⚠ Unpackaged spikes/sketches detected — run /gsd:spike --wrap-up or /gsd:sketch --wrap-up to make findings available.`
+If raw spikes/sketches exist but no findings skill, note: `⚠ Unpackaged spikes/sketches detected — run /gsd-spike --wrap-up or /gsd-sketch --wrap-up to make findings available.`
 
 Build internal `<prior_decisions>` with sections for Project-Level (from PROJECT.md / REQUIREMENTS.md), From Prior Phases (per-phase decisions), and From Spike/Sketch Findings (validated patterns, landmines, design decisions).
 
@@ -281,7 +281,7 @@ Parse JSON for: `todo_count`, `matches[]` (each with `file`, `title`, `area`, `s
 Lightweight scan of existing code to inform gray area identification (~10% context).
 
 Read `@~/.claude/get-shit-done/references/scout-codebase.md` — it contains the phase-type→map selection table, single-read rule, no-maps fallback, and `<codebase_context>` output schema. Then execute:
-1. `ls .planning/codebase/*.md` to find existing maps
+1. `gsd-sdk query codebase.list` to find existing maps
 2. Select 2–3 maps via the reference's table; or grep fallback if none exist
 3. Build internal `<codebase_context>` per the reference's output schema
 </step>
@@ -373,12 +373,10 @@ DISCUSSION-LOG.md is for human reference only (audits, retrospectives) and is NO
 
 **Find or create phase directory:**
 
-Use values from init: `phase_dir`, `expected_phase_dir`, `phase_slug`, `padded_phase`. If `phase_dir` is null:
+Use values from init: `phase_dir`, `phase_slug`, `padded_phase`. If `phase_dir` is null:
 ```bash
-mkdir -p "${expected_phase_dir}"
+gsd-sdk query phase.scaffold "${padded_phase}-${phase_slug}"
 ```
-
-Set `phase_dir="${expected_phase_dir}"` after creation.
 
 **File location:** `${phase_dir}/${padded_phase}-CONTEXT.md`
 
@@ -420,11 +418,11 @@ Created: .planning/phases/${PADDED_PHASE}-${SLUG}/${PADDED_PHASE}-CONTEXT.md
 
 `/clear` then:
 
-`/gsd:plan-phase ${PHASE} ${GSD_WS}`
+`/gsd-plan-phase ${PHASE} ${GSD_WS}`
 
 ---
 
-**Also available:** `--chain` for auto plan+execute after; `/gsd:plan-phase ${PHASE} --skip-research ${GSD_WS}` to plan without research; `/gsd:ui-phase ${PHASE} ${GSD_WS}` for UI design contracts; review/edit CONTEXT.md before continuing.
+**Also available:** `--chain` for auto plan+execute after; `/gsd-plan-phase ${PHASE} --skip-research ${GSD_WS}` to plan without research; `/gsd-ui-phase ${PHASE} ${GSD_WS}` for UI design contracts; review/edit CONTEXT.md before continuing.
 ```
 </step>
 
