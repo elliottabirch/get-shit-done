@@ -82,7 +82,7 @@ Plans:
 **Requirements:** WRITES-01, WRITES-02, WRITES-03, WRITES-04
 **Resolves open questions:** OQ-01 (`commitPlanningState` semantics across adapters)
 **Success Criteria** (what must be TRUE):
-  1. A grep for `Write`/`Edit`/`fs.writeFile`/`fs.appendFile` against `.planning/` in `state-mutation.js`, `phase-lifecycle.js`, and the SDK write surface returns zero matches; every write goes through `adapter.*`.
+  1. A grep for `Write`/`Edit`/`fs.writeFile`/`fs.appendFile` against `.planning/` in `state-mutation.js`, `phase-lifecycle.js`, and the SDK write surface returns zero matches; every write goes through `adapter.*`. <!-- leak-grep-ignore -->
   2. Recording a STATE.md event from a workflow uses exactly one call shape — `recordStateEvent({type, payload})` with `type` ∈ `roadmap_evolution | decision | blocker_added | blocker_resolved | metric | session | todo_count_update | deferred_items | forensic_session | quick_task` — and the same call shape works against any adapter that satisfies the interface.
   3. A user running any workflow that performs a write (e.g. `addPhase`, `completePhaseAndCascade`, `recordVerification`, `addSummary`, `createUat`/`updateUat`) observes byte-identical `.planning/` output to upstream when MarkdownAdapter is mounted (golden-file diff = empty).
   4. OQ-01 is resolved: `commitPlanningState` semantics for non-git backends are documented (no-op vs checkpoint snapshot) and adapter implementations match the documented behavior; the conformance harness has a stub test that will be filled in Phase 7.
@@ -108,8 +108,8 @@ Plans:
 **Requirements:** LEAKS-01, LEAKS-02, LEAKS-03, LEAKS-04, LEAKS-05
 **Resolves open questions:** OQ-03 (raw-git outliers), OQ-04 (`<context>`-block leak mitigation strategy)
 **Success Criteria** (what must be TRUE):
-  1. Running the workflow-level leak-grep (extended per Rubric R5: `Read`, `Write`, `Edit`, `cp ... .planning/`, `mv ... .planning/`, `rm -rf .planning/`, `>> .planning/`) over `plan-phase`, `execute-phase`, `spike`, `forensics`, `progress`, `verify-phase`, `sketch`, `discuss-phase`, `execute-plan`, `gsd-debugger` returns zero matches.
-  2. The leak-grep CI gate fails on a deliberately-introduced regression PR that adds a single direct `Write` against `.planning/` from any workflow or agent (the gate is observable to PR authors, not just maintainers).
+  1. Running the workflow-level leak-grep (extended per Rubric R5: `Read`, `Write`, `Edit`, `cp ... .planning/`, `mv ... .planning/`, `rm -rf .planning/`, `>> .planning/`) over `plan-phase`, `execute-phase`, `spike`, `forensics`, `progress`, `verify-phase`, `sketch`, `discuss-phase`, `execute-plan`, `gsd-debugger` returns zero matches. <!-- leak-grep-ignore -->
+  2. The leak-grep CI gate fails on a deliberately-introduced regression PR that adds a single direct `Write` against `.planning/` from any workflow or agent (the gate is observable to PR authors, not just maintainers). <!-- leak-grep-ignore -->
   3. OQ-04 is resolved: every skill frontmatter `<context>` `@.planning/...` reference is either rewritten through the adapter, intercepted at install time by a documented hook, or explicitly declared in an exceptions register — and the resolution strategy is uniform across the affected skills (no per-skill ad-hoc handling).
   4. OQ-03 is resolved: `spec-phase.md` Step 7 and `eval-review.md` end use `gsd-sdk query commit` instead of raw `git add`/`git commit`; an upstream issue is filed referencing the inconsistency.
   5. The `verify.fat-skills` SDK query lists every non-router skill with line-count + leak-count and is wired into CI as an authoritative list (Rule 4 demotion tooling per SYNTHESIS §9 risk).
@@ -145,10 +145,10 @@ Plans:
 **Plans:** 7 plans
 Plans:
 **Wave 1**
-- [ ] 05-01-PLAN.md — NamedDocCategory + RootNamedDocKey type exports + discriminated putNamedDoc overloads + 5 Wave-0 test scaffolds
+- [x] 05-01-PLAN.md — NamedDocCategory + RootNamedDocKey type exports + discriminated putNamedDoc overloads + 5 Wave-0 test scaffolds
 
 **Wave 2** *(blocked on Wave 1 completion)*
-- [ ] 05-02-PLAN.md — Heading-depth walker (L2/L3/L4) + fenced-code/HTML-comment skip + setext warning + section-depth tests
+- [x] 05-02-PLAN.md — Heading-depth walker (L2/L3/L4) + fenced-code/HTML-comment skip + setext warning + section-depth tests
 
 **Wave 3** *(blocked on Wave 2 completion)*
 - [ ] 05-03-PLAN.md — Shadow-dir journal withTransaction + snapshot/restore + reentrant-lock + updateSection D-09 wrap + capabilities.snapshot flip + dryRun guard
