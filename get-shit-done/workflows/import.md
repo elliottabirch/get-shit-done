@@ -70,19 +70,19 @@ File not found: {FILEPATH}
 
 Load project context for conflict detection:
 
-1. Read `.planning/ROADMAP.md` — extract phase structure, phase numbers, dependencies
-2. Read `.planning/PROJECT.md` — extract project constraints, tech stack, scope boundaries.
-   **If PROJECT.md does not exist:** skip constraint checks that rely on it and display:
+1. `gsd-sdk query roadmap` — extract phase structure, phase numbers, dependencies
+2. `gsd-sdk query project.get` — extract project constraints, tech stack, scope boundaries.
+   **If project data is empty:** skip constraint checks that rely on it and display:
    ```
    GSD > Note: No PROJECT.md found. Conflict checks against project constraints will be skipped.
    ```
-3. Read `.planning/REQUIREMENTS.md` — extract existing requirements for overlap and contradiction checks.
-   **If REQUIREMENTS.md does not exist:** skip requirement conflict checks and continue.
-4. Glob for all CONTEXT.md files across phase directories:
+3. `gsd-sdk query requirements.get` — extract existing requirements for overlap and contradiction checks.
+   **If requirements data is empty:** skip requirement conflict checks and continue.
+4. Load all CONTEXT.md decisions via the SDK:
    ```bash
-   find .planning/phases/ -name "*-CONTEXT.md" -o -name "CONTEXT.md" 2>/dev/null
+   gsd-sdk query phase.list-contexts 2>/dev/null
    ```
-   Read each CONTEXT.md found — extract locked decisions (any decision in a `<decisions>` block)
+   Extract locked decisions (any decision in a `<decisions>` block) from the returned context data
 
 Store loaded context for conflict detection in the next step.
 
@@ -178,9 +178,9 @@ Determine the target directory:
 .planning/phases/{NN}-{slug}/
 ```
 
-If the directory does not exist, create it:
+If the directory does not exist, create it via the SDK:
 ```bash
-mkdir -p ".planning/phases/{NN}-{slug}/"
+gsd-sdk query phase.scaffold "{NN}" "{slug}"
 ```
 
 Write the PLAN.md file to the target directory.
@@ -242,7 +242,7 @@ Do NOT:
 - Violate the shared conflict-engine contract in `references/doc-conflict-engine.md` (no markdown tables, no new severity labels, no bypass of the BLOCKER gate)
 - Write PLAN.md files as `PLAN-01.md` or `plan-01.md` — always use `{NN}-{MM}-PLAN.md`
 - Use `pbr:plan-checker` or `pbr:planner` — use `gsd-plan-checker` and `gsd-planner`
-- Write `.planning/.active-skill` — this is a PBR pattern with no GSD equivalent
+- Create an `.active-skill` file in the planning directory — this is a PBR pattern with no GSD equivalent
 - Reference `pbr-tools`, `pbr:`, or `PLAN-BUILD-RUN` anywhere
 - Write any PLAN.md file when blockers exist — the safety gate must hold
 - Skip path validation on the --from file argument

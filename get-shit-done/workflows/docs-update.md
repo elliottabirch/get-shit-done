@@ -292,11 +292,9 @@ Track the resolved mode and file path for each queued doc. For update-mode docs,
 
 After resolve_modes completes, write ALL work items to `.planning/tmp/docs-work-manifest.json`. This is the single source of truth for every subsequent step — the orchestrator MUST read this file at each step instead of relying on memory.
 
-```bash
-mkdir -p .planning/tmp
-```
+The SDK handles temp directory creation internally when writing temp artifacts via `gsd-sdk query tmp.put`.
 
-Write the manifest using the Write tool:
+Write the manifest using `gsd-sdk query tmp.put`:
 
 ```json
 {
@@ -838,7 +836,7 @@ For each doc in `canonical_queue` that was successfully written to disk:
    </verify_assignment>
    ```
 
-2. After the verifier completes, read the result JSON from `.planning/tmp/verify-{doc_filename}.json`.
+2. After the verifier completes, read the result JSON via `gsd-sdk query tmp.get "verify-{doc_filename}"`.
 
 3. Update the manifest: set `status: "verified"` for each canonical doc processed.
 
@@ -849,7 +847,7 @@ This is NOT optional. Every doc in `review_queue` MUST be verified.
 For each doc in `review_queue` from the manifest:
 
 1. Spawn the `gsd-doc-verifier` agent with the same `<verify_assignment>` block as above.
-2. Read the result JSON from `.planning/tmp/verify-{doc_filename}.json`.
+2. Load the result JSON via `gsd-sdk query tmp.get "verify-{doc_filename}"`.
 3. Update the manifest: set `status: "verified"` for each review_queue doc processed.
 
 Non-canonical docs with failures ARE eligible for the fix_loop. When a non-canonical doc has `claims_failed > 0`, dispatch it to gsd-doc-writer in `fix` mode with the failures array — the writer's fix mode does surgical corrections on specific lines regardless of doc type (no template needed). The writer MUST NOT restructure, rephrase, or reformat any content beyond the failing claims.
@@ -885,7 +883,7 @@ If any doc (canonical OR non-canonical) has `claims_failed > 0`: continue to fix
 </step>
 
 <step name="fix_loop">
-**Read the work manifest first:** `Read .planning/tmp/docs-work-manifest.json` — identify ALL docs (canonical AND non-canonical) with `claims_failed > 0` from the verification results in `.planning/tmp/verify-*.json`. Both queues are eligible for fixes.
+**Read the work manifest first:** `gsd-sdk query tmp.get "docs-work-manifest"` — identify ALL docs (canonical AND non-canonical) with `claims_failed > 0` from the verification results via `gsd-sdk query tmp.get "verify-{doc_filename}"`. Both queues are eligible for fixes.
 
 Correct flagged inaccuracies by re-sending failing docs to the doc-writer in fix mode. Per D-06, max 2 iterations. Per D-05, halt immediately on regression.
 
@@ -919,7 +917,7 @@ Correct flagged inaccuracies by re-sending failing docs to the doc-writer in fix
 
 2. After all fix agents complete, re-verify ALL docs (not just the ones that were fixed):
    - Re-run the same verification process as verify_docs step.
-   - Read updated result JSONs from `.planning/tmp/verify-{doc_filename}.json`.
+   - Read updated result JSONs via `gsd-sdk query tmp.get "verify-{doc_filename}"`.
 
 3. **Regression detection (D-05):**
    For each doc in the new verification_results:
@@ -966,7 +964,7 @@ Invoke the gsd-doc-verifier agent in read-only mode for each file in `existing_d
       project_root: {project_root from init JSON}
       </verify_assignment>
       ```
-   b. Read the result JSON from `.planning/tmp/verify-{doc_filename}.json`.
+   b. Read the result JSON via `gsd-sdk query tmp.get "verify-{doc_filename}"`.
 
 2. Also count VERIFY markers in each doc: grep for `<!-- VERIFY:` in the file content.
 
