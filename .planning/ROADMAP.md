@@ -157,7 +157,7 @@ Plans:
 - [x] 05-04-PLAN.md — putNamedDoc/getNamedDoc/writeBinaryAsset real bodies + capabilities.namedDoc/binaryAsset flips + named-doc/binary-asset live tests
 
 **Wave 5** *(blocked on Wave 4 completion)*
-- [ ] 05-05-PLAN.md — pipeline.ts dry-run refactor + sidecar.ts + scratch.ts + 8 new SDK verbs + SC#1 byte-identity pipeline test
+- [x] 05-05-PLAN.md — pipeline.ts dry-run refactor + sidecar.ts + scratch.ts + 8 new SDK verbs + SC#1 byte-identity pipeline test
 
 **Wave 6** *(blocked on Wave 5 completion)*
 - [ ] 05-06-PLAN.md — 8 SDK handler migrations to putNamedDoc/getNamedDoc + route-next-action.ts nextCallCountGet (D-21)
