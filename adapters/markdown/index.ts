@@ -10,8 +10,9 @@
  *  D-04  Methods accept .planning/-relative paths; adapter resolves via planningDir()
  *  D-05  capabilities.record/section/frontmatter = true (literal)
  *  D-06  name = 'markdown'
- *  D-08  Optional capabilities: binaryAsset/snapshot/transaction/namedDoc = false;
- *        commitPlanningState/markdownLockfile = true
+ *  D-08  Optional capabilities: binaryAsset/snapshot/namedDoc = false;
+ *        transaction/markdownLockfile = true
+ *  D-12  commitPlanningState promoted to required (no longer in Capabilities)
  *  D-09  replaceInCurrentMilestone + readModifyWriteRoadmapMd implemented (markdownLockfile=true)
  *  D-10  Remaining foundational primitives throw UnsupportedCapabilityError (Phase 5 fills them)
  *  D-11  Defensive throws use correct capability key + adapterName
@@ -19,8 +20,8 @@
 
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
-import { existsSync } from 'node:fs';
-import { readFile, writeFile, unlink, readdir, mkdir, stat as fsStat } from 'node:fs/promises';
+import { existsSync, constants } from 'node:fs';
+import { readFile, writeFile, unlink, readdir, mkdir, stat as fsStat, open } from 'node:fs/promises';
 import { join, dirname } from 'node:path';
 import { homedir } from 'node:os';
 import type {
@@ -31,6 +32,7 @@ import type {
   SectionMode,
 } from '../types.js';
 import { UnsupportedCapabilityError } from '../types.js';
+import type { AppendEvent, MutationEvent, SignalEvent } from '../state-event-types.js';
 
 // ─── CJS path resolution ───────────────────────────────────────────────────────
 // Mirrors the three-candidate probe from sdk/src/query/state-project-load.ts.
@@ -86,9 +88,8 @@ export class MarkdownAdapter implements StorageAdapter {
     frontmatter: true,
     binaryAsset: false,
     snapshot: false,
-    transaction: false,
+    transaction: true,
     namedDoc: false,
-    commitPlanningState: true,
     markdownLockfile: true,
   };
 
@@ -98,6 +99,8 @@ export class MarkdownAdapter implements StorageAdapter {
   private readonly req: NodeRequire;
   /** Pre-resolved CJS paths (validated in constructor — fail fast, not on first call) */
   private readonly libPaths: Record<string, string>;
+  /** Track held locks for cleanup on release */
+  private readonly lockSet = new Set<string>();
 
   /** D-03: Sync constructor — no async init */
   constructor(projectDir: string) {
@@ -315,8 +318,74 @@ export class MarkdownAdapter implements StorageAdapter {
     throw new UnsupportedCapabilityError('snapshot', this.name);
   }
 
-  async withTransaction(_fn: () => Promise<void>): Promise<void> {
-    throw new UnsupportedCapabilityError('transaction', this.name);
+  async withTransaction<T>(fn: () => Promise<T>): Promise<T> {
+    const lockPath = join(this.planningBase, '.adapter.lock');
+    await this.acquireAdapterLock(lockPath);
+    try {
+      return await fn();
+    } finally {
+      await this.releaseAdapterLock(lockPath);
+    }
+  }
+
+  private async acquireAdapterLock(lockPath: string): Promise<void> {
+    const maxRetries = 10;
+    const retryDelay = 200;
+
+    for (let i = 0; i < maxRetries; i++) {
+      try {
+        const fd = await open(lockPath, constants.O_CREAT | constants.O_EXCL | constants.O_WRONLY);
+        await fd.writeFile(String(process.pid));
+        await fd.close();
+        this.lockSet.add(lockPath);
+        return;
+      } catch (err: unknown) {
+        if (err instanceof Error && (err as NodeJS.ErrnoException).code === 'EEXIST') {
+          const dead = await this.isLockStale(lockPath);
+          if (dead) {
+            try { await unlink(lockPath); } catch { /* race OK */ }
+            continue;
+          }
+          if (i === maxRetries - 1) {
+            // Force-break on last retry (matches CJS state.cjs behavior)
+            try { await unlink(lockPath); } catch { /* ignore */ }
+            return;
+          }
+          await new Promise<void>(r => setTimeout(r, retryDelay + Math.floor(Math.random() * 50)));
+        } else {
+          // Graceful degradation on non-EEXIST errors (match CJS state.cjs:889)
+          return;
+        }
+      }
+    }
+  }
+
+  private async releaseAdapterLock(lockPath: string): Promise<void> {
+    this.lockSet.delete(lockPath);
+    try { await unlink(lockPath); } catch { /* already gone */ }
+  }
+
+  private async isLockStale(lockPath: string): Promise<boolean> {
+    try {
+      const raw = await readFile(lockPath, 'utf-8');
+      const pid = parseInt(raw.trim(), 10);
+      if (!Number.isFinite(pid) || pid <= 0) return true;
+      try { process.kill(pid, 0); return false; } catch { return true; }
+    } catch { return true; }
+  }
+
+  // ─── Event family stubs (Phase 3 Plan 02 fills these) ─────────────────────
+
+  async recordStateAppend(_event: AppendEvent): Promise<void> {
+    throw new Error('recordStateAppend not yet implemented (Phase 3 Plan 02)');
+  }
+
+  async recordStateMutation(_event: MutationEvent): Promise<void> {
+    throw new Error('recordStateMutation not yet implemented (Phase 3 Plan 02)');
+  }
+
+  async recordStateSignal(_event: SignalEvent): Promise<void> {
+    throw new Error('recordStateSignal not yet implemented (Phase 3 Plan 02)');
   }
 
   async putNamedDoc(
