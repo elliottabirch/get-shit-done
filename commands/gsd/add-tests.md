@@ -9,13 +9,12 @@ allowed-tools:
   - Bash
   - Glob
   - Grep
-  - Agent
+  - Task
   - AskUserQuestion
 argument-instructions: |
   Parse the argument as a phase number (integer, decimal, or letter-suffix), plus optional free-text instructions.
-  Example: /gsd:add-tests 12
-  Example: /gsd:add-tests 12 focus on edge cases in the pricing module
-requires: [phase]
+  Example: /gsd-add-tests 12
+  Example: /gsd-add-tests 12 focus on edge cases in the pricing module
 ---
 <objective>
 Generate unit and E2E tests for a completed phase, using its SUMMARY.md, CONTEXT.md, and VERIFICATION.md as specifications.
@@ -29,12 +28,13 @@ Output: Test files committed with message `test(phase-{N}): add unit and E2E tes
 @~/.claude/get-shit-done/workflows/add-tests.md
 </execution_context>
 
+<project_context>
+<!-- Injected by orchestrator via: gsd-sdk query init.execute-phase -->
+<!-- Provides: STATE.md content, ROADMAP.md content -->
+</project_context>
+
 <context>
 Phase: $ARGUMENTS
-
-# Project state injected by orchestrator via:
-# gsd-sdk query state.load
-# gsd-sdk query roadmap
 </context>
 
 <process>

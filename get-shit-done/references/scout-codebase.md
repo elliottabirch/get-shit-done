@@ -2,8 +2,8 @@
 
 > Lazy-loaded reference for the `scout_codebase` step in
 > `workflows/discuss-phase.md` (extracted via #2551 progressive-disclosure
-> refactor). Read this only when prior `.planning/codebase/*.md` maps exist
-> and the workflow needs to pick which 2–3 to load.
+> refactor). Load this when prior codebase maps exist (check via
+> `gsd-sdk query init map-codebase`) and the workflow needs to pick which 2-3 to load.
 
 ## Phase-type → recommended maps
 
@@ -31,7 +31,7 @@ than a single full read.
 
 ## No-maps fallback
 
-If `.planning/codebase/*.md` does not exist:
+If no codebase maps exist (i.e., `gsd-sdk query init map-codebase` returns empty):
 1. Extract key terms from the phase goal (e.g., "feed" → "post", "card",
    "list"; "auth" → "login", "session", "token")
 2. `grep -rlE "{term1}|{term2}" src/ app/ --include="*.ts" ...` (use `-E`

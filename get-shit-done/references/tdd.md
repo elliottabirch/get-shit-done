@@ -49,9 +49,12 @@ Purpose: [Design benefit of TDD for this feature]
 Output: [Working, tested feature]
 </objective>
 
+<project_context>
+<!-- Injected by orchestrator via: gsd-sdk query init.plan-phase -->
+<!-- Provides: PROJECT.md, ROADMAP.md content -->
+</project_context>
+
 <context>
-@.planning/PROJECT.md
-@.planning/ROADMAP.md
 @relevant/source/files.ts
 </context>
 
