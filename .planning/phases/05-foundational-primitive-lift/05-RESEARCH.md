@@ -777,29 +777,29 @@ private async acquireAdapterLock(lockPath: string): Promise<void> {
 | A6 | [ASSUMED] `writeBinaryAsset` Bin-A-primitive style (no path validation) matches text primitive style. `putRecord` doesn't validate against `..` either; SDK handlers do via `validateName`. | Pitfall 6 | If security requires validation in the primitive, add it — but that's inconsistent with `putRecord`. Recommend consistency: no primitive-level validation; SDK-handler-level where needed. |
 | A7 | [ASSUMED] There are no active spike branches or worktrees currently modifying `adapters/markdown/index.ts`. `git status` shows clean working tree; `.claude/worktrees/` contains vitest configs but their git state is unclear. | Runtime State Inventory | If a worktree has uncommitted changes to index.ts, Phase 5 plans may conflict. Verify before starting Plan 1. |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Should `withTransaction` callback receive a `TxnCtx` parameter, or should pipeline.ts use an internal `__getTxnContext()` method to fetch touched paths?**
    - What we know: Pipeline needs touched-paths set to compute diff in dry-run mode. Phase 3 locked `withTransaction(fn)` signature with no ctx param.
    - What's unclear: Breaking Phase 3's signature widens risk of downstream test churn; internal method is ugly but contained.
-   - Recommendation: Internal `__getTxnContext()` or `adapter.__currentTxn` property (underscore-prefix = pipeline-only). Ship in Plan 2; revisit if Phase 6 BeadsAdapter needs the ctx.
+   - **RESOLVED:** Internal `__getTxnContext()` or `adapter.__currentTxn` property (underscore-prefix = pipeline-only). Ship in Plan 2; revisit if Phase 6 BeadsAdapter needs the ctx.
 
 2. **Does `putNamedDoc` take a workstream parameter, or do SDK handlers pre-compose `workstreams/<ws>/<category>` as the category string?**
    - What we know: D-13 union is `'research'|'intel'|...|'root'`. Current SDK handlers call `planningRelativePath(workstream, path)`.
    - What's unclear: Adapter's `putNamedDoc('reports', name, body)` where workstream is active — path must include workstream prefix. Either (a) adapter accepts workstream as optional third arg, or (b) SDK handler passes `('workstreams/<ws>/reports' as any)` which defeats the union type.
-   - Recommendation: Plan 1 locks this. Preferred: (a) `putNamedDoc(category, key, body, opts?: { workstream?: string })`. Keeps category typed; workstream is an adapter-internal path concern.
+   - **RESOLVED:** Plan 1 locks this. Preferred: (a) `putNamedDoc(category, key, body, opts?: { workstream?: string })`. Keeps category typed; workstream is an adapter-internal path concern.
 
 3. **Should `.planning/.tmp-txn/` be created lazily on first txn, or eagerly at adapter construction?**
    - What we know: Adapter constructor is sync (D-03 from Phase 1). `mkdtemp` is async. Lazy creation on first `withTransaction` call avoids pre-creating when not needed.
-   - Recommendation: Lazy. Add `.planning/.tmp-txn/` to `.gitignore` eagerly.
+   - **RESOLVED:** Lazy. Add `.planning/.tmp-txn/` to `.gitignore` eagerly.
 
 4. **Is setext heading detection in D-08 a hard warning or just documented-behavior?**
    - What we know: D-08 says "detected setext raises a warning." Unclear whether that's `console.warn` or a thrown GSDError.
-   - Recommendation: `console.warn` (warn without interrupting). GSD repo content is author-controlled; drift to setext unlikely.
+   - **RESOLVED:** `console.warn` (warn without interrupting). GSD repo content is author-controlled; drift to setext unlikely.
 
 5. **How are existing Phase-3 `write-transaction.test.ts` cases affected by the reentrancy guard?**
    - What we know: Current test "concurrent transactions serialize" uses two separate `withTransaction` calls. Phase 5's reentrancy guard operates on same-instance; two calls from the same test are sequential, not concurrent.
-   - Recommendation: Verify current test still passes after D-10 addition. The test's second `withTransaction` starts AFTER the first resolves — not a reentrancy case. Should be green without modification.
+   - **RESOLVED:** Verify current test still passes after D-10 addition. The test's second `withTransaction` starts AFTER the first resolves — not a reentrancy case. Should be green without modification.
 
 ## Environment Availability
 
