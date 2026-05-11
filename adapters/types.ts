@@ -46,6 +46,14 @@ export interface StorageAdapter {
   getRecord(path: string): Promise<string | null>;
   putRecord(path: string, body: string): Promise<void>;
   removeRecord(path: string): Promise<void>;
+  /**
+   * Recursively remove a collection (directory in MarkdownAdapter terms).
+   * Removes all records and sub-collections beneath `prefix`, then the
+   * collection marker itself. No-op when the prefix does not exist.
+   * BeadsAdapter maps this to cascading issue-delete; other backends
+   * implement per their collection semantics.
+   */
+  removeCollection(prefix: string): Promise<void>;
   listCollection(prefix: string, filter?: RecordFilter): Promise<RecordRef[]>;
   exists(path: string): Promise<boolean>;
   // Returns null on missing path (matches getRecord null-on-miss semantics).
