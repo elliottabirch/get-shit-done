@@ -96,7 +96,8 @@ one commit.
 8. **Task 8:** Write ADR `D-2026-05-10-08` in `DECISIONS.md`.
 9. **Task 9:** Update `ROADMAP.md` Phase 3 Wave 5 entry + atomic commit of Tasks 1-9.
 
-**Plan metadata + all task content:** committed in the single Task 9 atomic commit.
+**Plan metadata + all task content:** committed as `bcbb1e49` in a single
+Task 9 atomic commit (`feat(adapter): land StateWriteOutcome three-state contract (03-06 gap)`).
 
 ## Files Created/Modified
 
@@ -253,7 +254,8 @@ Files verified to exist:
 - FOUND: `.planning/phases/03-wire-core-write-methods-recordstateevent/03-06-SUMMARY.md` (this file)
 - FOUND: `.planning/phases/03-wire-core-write-methods-recordstateevent/deferred-items.md` (created)
 
-Commits to verify (will be set by Task 9's atomic commit — recorded as `PENDING-TASK-9-COMMIT` at self-check time; the post-commit hash is recorded in the next section once the commit lands).
+Commits verified:
+- FOUND: `bcbb1e49` (`feat(adapter): land StateWriteOutcome three-state contract (03-06 gap)`) via `git log --oneline | grep bcbb1e49`.
 
 ---
 *Phase: 03-wire-core-write-methods-recordstateevent*
