@@ -20,8 +20,16 @@
     "sdk/package.json",
     "sdk/package-lock.json",
     "sdk/tsconfig.json",
-    "adapters"
+    "adapters",
+    "tests/conformance"
   ],
+  "exports": {
+    "./conformance": "./tests/conformance/dist/tests/conformance/adapter.conformance.js",
+    "./adapters/types.js": "./adapters/dist/types.js",
+    "./adapters/state-event-types.js": "./adapters/dist/state-event-types.js",
+    "./adapters/markdown": "./adapters/dist/markdown/index.js",
+    "./package.json": "./package.json"
+  },
   "keywords": [
     "claude",
     "claude-code",
@@ -57,8 +65,9 @@
   "scripts": {
     "build:hooks": "node scripts/build-hooks.js",
     "build:sdk": "cd sdk && npm ci && npm run build",
+    "build:conformance": "cd tests/conformance && ../../sdk/node_modules/.bin/tsc -p tsconfig.json && node -e \"require('fs').writeFileSync('dist/package.json', '{\\n  \\\"type\\\": \\\"module\\\"\\n}\\n')\"",
     "check:alias-drift": "cd sdk && npm run check:alias-drift",
-    "prepublishOnly": "npm run build:hooks && npm run build:sdk",
+    "prepublishOnly": "npm run build:hooks && npm run build:sdk && npm run build:conformance",
     "pretest": "npm run build:sdk",
     "pretest:coverage": "npm run build:sdk",
     "lint:descriptions": "node scripts/lint-descriptions.cjs",

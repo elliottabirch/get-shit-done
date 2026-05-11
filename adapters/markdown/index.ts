@@ -127,6 +127,7 @@ export class MarkdownAdapter implements StorageAdapter {
     transaction: true,
     namedDoc: true,        // D-16: Phase 5 Plan 04
     markdownLockfile: true,
+    graphEdges: { semantic: true, dependency: false },  // D-OQ06 — MarkdownAdapter owns semantic edges via graphify.cjs
   };
 
   private readonly projectDir: string;

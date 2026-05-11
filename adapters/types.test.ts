@@ -35,7 +35,8 @@ import {
 //   markdownLockfile: false };
 // ^ Intentionally commented out — if uncommented, TypeScript must error.
 
-// Test 3: Capabilities has exactly 8 keys (commitPlanningState promoted to required per D-12)
+// Test 3: Capabilities has exactly 9 keys (commitPlanningState promoted to required per D-12;
+// graphEdges added in Phase 6 Plan 01 per D-OQ06-CAPS)
 const _caps: Capabilities = {
   record: true,
   section: true,
@@ -45,10 +46,12 @@ const _caps: Capabilities = {
   transaction: false,
   namedDoc: false,
   markdownLockfile: false,
+  graphEdges: { semantic: false, dependency: false },
 };
 const _capKeys: (keyof Capabilities)[] = [
   'record', 'section', 'frontmatter',
   'binaryAsset', 'snapshot', 'transaction', 'namedDoc', 'markdownLockfile',
+  'graphEdges',
 ];
 // If Capabilities had more or fewer than 9 keys, the above would not be exhaustive.
 
@@ -148,5 +151,31 @@ describe('NamedDocCategory / RootNamedDocKey (D-13/D-14)', () => {
       a.putNamedDoc('root', 'ARBITRARY_STRING_NOT_IN_UNION', 'body');
     };
     expect(typeof assertOverloadRejectsArbitraryRootKey).toBe('function');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 6 Plan 01 — D-OQ06-CAPS graphEdges assertion
+// ---------------------------------------------------------------------------
+
+describe('Capabilities graphEdges (D-OQ06-CAPS)', () => {
+  it('has graphEdges: { semantic: boolean; dependency: boolean }', () => {
+    // Compile-time gate: the literal MUST satisfy the Capabilities interface
+    // with the full 9-key shape including the nested graphEdges object.
+    const caps: Capabilities = {
+      record: true,
+      section: true,
+      frontmatter: true,
+      binaryAsset: true,
+      snapshot: true,
+      transaction: true,
+      namedDoc: true,
+      markdownLockfile: true,
+      graphEdges: { semantic: true, dependency: false },
+    };
+    expect(typeof caps.graphEdges.semantic).toBe('boolean');
+    expect(typeof caps.graphEdges.dependency).toBe('boolean');
+    expect(caps.graphEdges.semantic).toBe(true);
+    expect(caps.graphEdges.dependency).toBe(false);
   });
 });
