@@ -21,6 +21,8 @@
  *   Mutation/todo_count_update → applied:true + created_section
  *   Mutation/deferred_items    → applied:false + reason:'nothing_to_remove' (remove missing item)
  *   Mutation/deferred_items    → applied:true bare (add against existing section)
+ *   Mutation/deferred_items    → applied:false + reason:'duplicate' (IN-02: add all-existing items)
+ *   Mutation/deferred_items    → applied:true + created_section (add to STATE.md without section)
  *   Signal/waiting             → applied:true bare
  *   Signal/resume              → applied:true bare
  *   Signal/resume              → applied:false + reason:'nothing_to_remove'
@@ -353,6 +355,48 @@ describe('recordStateMutation outcomes', () => {
     });
 
     expect(outcome).toEqual({ applied: true, created_section: '## Deferred Ideas' });
+  });
+
+  // IN-02: deferred_items add dedupes on exact-line match (parity with
+  // appendToRoadmapEvolution). When EVERY requested item is already in the
+  // Deferred Ideas section, the helper reports
+  // {applied: false, reason: 'duplicate'}.
+  it('deferred_items add: applied:false + reason:duplicate when all items already present', async () => {
+    await seedStateMd(
+      adapter,
+      '# State\n\n## Deferred Ideas\n\n- Plugin system\n- Multi-tenant\n',
+    );
+
+    const outcome = await adapter.recordStateMutation({
+      type: 'deferred_items',
+      payload: { items: ['Plugin system', 'Multi-tenant'], action: 'add' },
+    });
+
+    expect(outcome).toEqual({ applied: false, reason: 'duplicate' });
+  });
+
+  // IN-02: when SOME items are duplicates and some are new, the helper
+  // appends ONLY the new ones and surfaces applied:true. The
+  // StateWriteOutcome contract doesn't encode a partial-duplicate signal;
+  // this test locks the "drop dupes, accept the rest" semantics so future
+  // refactors don't accidentally change them.
+  it('deferred_items add: applied:true when some items are duplicates (only new items appended)', async () => {
+    await seedStateMd(
+      adapter,
+      '# State\n\n## Deferred Ideas\n\n- Plugin system\n',
+    );
+
+    const outcome = await adapter.recordStateMutation({
+      type: 'deferred_items',
+      payload: { items: ['Plugin system', 'Multi-tenant'], action: 'add' },
+    });
+
+    expect(outcome).toEqual({ applied: true });
+    const content = await adapter.getRecord('STATE.md');
+    // The existing item must not be duplicated in the file.
+    expect((content as string).match(/- Plugin system/g) ?? []).toHaveLength(1);
+    // The new item landed.
+    expect(content).toContain('- Multi-tenant');
   });
 });
 

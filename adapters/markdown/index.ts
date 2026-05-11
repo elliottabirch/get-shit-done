@@ -1182,21 +1182,41 @@ export class MarkdownAdapter implements StorageAdapter {
     };
   }
 
-  /** Mutate Deferred Ideas section: add or remove items. */
+  /**
+   * Mutate Deferred Ideas section: add or remove items.
+   *
+   * IN-02: the `add` path dedupes on exact-line match (parity with
+   * `appendToRoadmapEvolution`). When EVERY requested item already exists
+   * in the section, returns `{applied: false, reason: 'duplicate'}`. When
+   * SOME items are duplicates and some are new, silently drops the
+   * duplicates and appends only the genuinely new ones as applied:true.
+   * The "some new" case intentionally does not surface a partial-duplicate
+   * signal — StateWriteOutcome's two-reason contract does not encode it,
+   * and callers that care can pre-filter before calling.
+   */
   private mutateDeferredItems(content: string, items: string[], action: 'add' | 'remove'): HelperResult {
     const sectionPattern = /(###?\s*(?:Deferred Ideas|Deferred)\s*\n)([\s\S]*?)(?=\n###?|\n##[^#]|$)/i;
     const match = content.match(sectionPattern);
 
     if (action === 'add') {
-      const entries = items.map(i => `- ${i}`).join('\n');
       if (match) {
         let sectionBody = match[2];
+        // IN-02 dedupe: exact-line match against the existing Deferred Ideas
+        // body. Mirrors appendToRoadmapEvolution's dedupe scope (subsection-
+        // only, not whole-file; see D-2026-05-10-08 "Consequences").
+        const existingLines = sectionBody.split('\n').map(l => l.trim());
+        const newItems = items.filter(i => !existingLines.includes(`- ${i}`.trim()));
+        if (newItems.length === 0) {
+          return { applied: false, reason: 'duplicate' };
+        }
+        const entries = newItems.map(i => `- ${i}`).join('\n');
         sectionBody = sectionBody.replace(/^None\.?\s*\n?/gim, '').replace(/None yet\.?\s*\n?/gi, '');
         sectionBody = sectionBody.trimEnd() + '\n' + entries + '\n';
         const newBody = content.replace(sectionPattern, (_m, header: string) => `${header}${sectionBody}`);
         return { body: newBody, applied: true };
       }
       // Create section if missing
+      const entries = items.map(i => `- ${i}`).join('\n');
       return {
         body: content.trimEnd() + `\n\n## Deferred Ideas\n\n${entries}\n`,
         applied: true,
