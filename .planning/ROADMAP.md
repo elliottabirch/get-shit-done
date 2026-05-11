@@ -101,8 +101,8 @@ Plans:
 **Wave 4** *(blocked on Wave 3 completion)*
 - [x] 03-05-PLAN.md — Conformance tests + OQ-01 ADR + leak-grep verification
 
-**Wave 5** *(gap closure — post Phase 3 ship; unblocks Phase 6 BeadsAdapter)*
-- [ ] 03-06-PLAN.md — StateWriteOutcome three-state contract (HANDOFF decisions[3]; ADR D-2026-05-10-08 to be filed)
+**Wave 5** *(gap closure — post Phase 3 ship, unblocks Phase 6 BeadsAdapter)*
+- [x] 03-06-PLAN.md — StateWriteOutcome three-state contract (ADR D-2026-05-10-08)
 
 ### Phase 4: Plug workflow leaks (top-10 + `<context>`-block class)
 **Repo:** this repo (`feat/storage-adapter`)
