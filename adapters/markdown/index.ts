@@ -1034,12 +1034,16 @@ export class MarkdownAdapter implements StorageAdapter {
     let anyReplaced = false;
 
     // Track whether each field-replacement attempt actually modified content.
-    const lastSession = this.replaceFieldInBody(working, 'Last session', now)
-      ?? this.replaceFieldInBody(working, 'Last Date', now);
-    if (lastSession !== null) {
-      working = lastSession;
-      anyReplaced = true;
-    }
+    // Independent updates (WR-01): refresh BOTH `Last session` AND `Last Date`
+    // when both are present — a `??` short-circuit would leave the second
+    // stale. The parallel `Stopped At`/`Stopped at` and `Resume File`/`Resume
+    // file` pairs below are left with `??` because they are known-variant
+    // spellings of the SAME field (only one exists on a given STATE.md), not
+    // two independent fields that legacy layouts may both carry.
+    let candidate = this.replaceFieldInBody(working, 'Last session', now);
+    if (candidate !== null) { working = candidate; anyReplaced = true; }
+    candidate = this.replaceFieldInBody(working, 'Last Date', now);
+    if (candidate !== null) { working = candidate; anyReplaced = true; }
 
     if (stoppedAt) {
       const stopped = this.replaceFieldInBody(working, 'Stopped At', stoppedAt)
