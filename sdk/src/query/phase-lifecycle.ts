@@ -997,24 +997,25 @@ export const phaseComplete: QueryHandler = async (args, projectDir, workstream) 
 
     await updatePerformanceMetrics(adapter, workstream, phaseNum, { planCount, summaryCount }, projectDir);
 
-    // Update frontmatter: increment completed_phases and recalculate percent
+    // Update frontmatter: increment completed_phases and recalculate percent.
+    // mergeFrontmatter is a shallow Object.assign, so we rebuild a nested
+    // `progress` subtree from the current frontmatter to avoid clobbering
+    // untouched fields.
     const statePath = planningRelativePath(workstream, 'STATE.md');
-    const rawState = (await adapter.getRecord(statePath)) ?? '';
-    const completedFmMatch = rawState.match(/completed_phases:\s*(\d+)/);
-    if (completedFmMatch) {
-      const newCompleted = parseInt(completedFmMatch[1], 10) + 1;
-      const totalFmMatch = rawState.match(/total_phases:\s*(\d+)/);
-      const patch: Record<string, unknown> = {
-        'progress.completed_phases': newCompleted,
-        status: isLastPhase ? 'milestone_complete' : 'ready_to_plan',
-      };
-      if (totalFmMatch) {
-        const totalPhases = parseInt(totalFmMatch[1], 10);
-        if (totalPhases > 0) {
-          patch['progress.percent'] = Math.round((newCompleted / totalPhases) * 100);
-        }
+    const existingFm = (await adapter.getFrontmatter(statePath)) as Record<string, unknown> | null;
+    const existingProgress = ((existingFm && (existingFm.progress as Record<string, unknown>)) ?? {}) as Record<string, unknown>;
+    const rawCompleted = Number(existingProgress.completed_phases ?? 0);
+    const rawTotal = Number(existingProgress.total_phases ?? 0);
+    if (Number.isFinite(rawCompleted)) {
+      const newCompleted = rawCompleted + 1;
+      const progress: Record<string, unknown> = { ...existingProgress, completed_phases: newCompleted };
+      if (rawTotal > 0) {
+        progress.percent = Math.round((newCompleted / rawTotal) * 100);
       }
-      await adapter.mergeFrontmatter(statePath, patch);
+      await adapter.mergeFrontmatter(statePath, {
+        progress,
+        status: isLastPhase ? 'milestone_complete' : 'ready_to_plan',
+      });
     }
   });
 

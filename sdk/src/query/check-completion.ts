@@ -83,7 +83,12 @@ async function checkPhaseCompletion(phaseArg: string, projectDir: string): Promi
   let uatContent: string | null = null;
 
   if (found && pdata.directory) {
-    const phaseDirRel = pdata.directory as string;
+    // findPhase returns a display-relative path (e.g. '.planning/phases/04-ui').
+    // The adapter is rooted at .planning/, so strip the leading prefix.
+    const displayDir = pdata.directory as string;
+    const phaseDirRel = displayDir.startsWith('.planning/')
+      ? displayDir.slice('.planning/'.length)
+      : displayDir;
     try {
       const phaseRefs = await adapter.listCollection(phaseDirRel);
       const fileNames = phaseRefs.map(r => r.name).sort((a, b) => a.localeCompare(b));
