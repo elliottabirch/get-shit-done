@@ -3,6 +3,15 @@
  *
  * Covers docs-update (4 leaks) — temp verification/processing artifacts.
  * All paths route through StorageAdapter; no node:fs imports (D-09).
+ *
+ * Phase 5 D-12 exception: tmp keys embed subdir + extension (e.g.
+ * `subdir/file.json`), which the adapter's `putNamedDoc('tmp', key, ...)`
+ * path formula does not support — the primitive unconditionally appends
+ * `.md`. tmpPut / tmpGet therefore continue to call `adapter.putRecord`
+ * directly with the raw `tmp/{name}` path. Acceptable per D-12 "handlers
+ * remain thin wrappers over the uniform primitive call" — the tmp wrapper's
+ * concern is the extension-free, subdir-permissive path scheme. Revisit if
+ * the primitive gains a `preserveKeyAsPath` option in a future phase.
  */
 
 import { GSDError, ErrorClassification } from '../errors.js';
