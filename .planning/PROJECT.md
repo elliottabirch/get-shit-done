@@ -43,7 +43,7 @@ only durable solution. This fork adds that seam.
 
 ## Current Milestone: v1.0 — StorageAdapter interface + MarkdownAdapter
 
-**Status:** planning (roadmap pending; bootstrapped on `feat/storage-adapter` branch)
+**Status:** in-flight (Phases 1–5 complete on `feat/storage-adapter` branch; Phase 6 BeadsAdapter next in sibling `gsd-beads` repo). Phase 3 gap-closure `StateWriteOutcome` three-state contract landed 2026-05-11 (ADR D-2026-05-10-08) — unblocks BeadsAdapter with clean contract target.
 
 **Goal:** Ship a fork of upstream GSD that adds a `StorageAdapter`
 interface (10 Bin A primitives + 6 foundational primitives + ~58 Bin B
@@ -174,5 +174,5 @@ this fork archives.
 
 ---
 
-*Last updated: 2026-04-30 — fork bootstrap; v1.0 milestone scoping pending.*
+*Last updated: 2026-05-11 — Phase 3 complete (6/6 plans including 03-06 gap closure); Phases 1–5 done; Phase 6 BeadsAdapter pending in sibling repo.*
 *Decision log: `.planning/DECISIONS.md`. Investigation input: `.planning/research/fork-investigation/SYNTHESIS.md`.*
