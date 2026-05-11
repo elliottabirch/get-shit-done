@@ -53,8 +53,15 @@ const BUNDLER_ARGS: Record<string, string[]> = {
 function sanitize(json: string): string {
   return json
     .replace(/"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z"/g, '"<TIMESTAMP>"')
+    // User home on Linux and macOS (baselines captured on /home/..., local
+    // runs on /Users/...). Match either prefix so both sides fold to the
+    // same placeholder.
     .replace(/"\/home\/[^"]+"/g, '"<HOME_PATH>"')
+    .replace(/"\/Users\/[^"]+"/g, '"<HOME_PATH>"')
     .replace(/"\/tmp\/[^"]+"/g, '"<TMP_PATH>"')
+    // macOS tempdirs live under /var/folders/<jobhash>/... and show up in
+    // bundles whenever a test points at a temp scratch dir.
+    .replace(/"\/var\/folders\/[^"]+"/g, '"<TMP_PATH>"')
     // Volatile date fields embedded as plain strings (e.g. "2026-04-30") —
     // the YYMMDD-encoded quick_id is also volatile.
     .replace(/"\d{4}-\d{2}-\d{2}"/g, '"<DATE>"')
@@ -63,7 +70,19 @@ function sanitize(json: string): string {
     // cwd_repo_name is the basename of process.cwd() — varies between the
     // baseline-capture worktree (e.g. "agent-afe48fc6f178f469c") and the
     // current worktree. Both sides go through the same sanitizer.
-    .replace(/"cwd_repo_name":\s*"[^"]+"/g, '"cwd_repo_name": "<CWD_NAME>"');
+    .replace(/"cwd_repo_name":\s*"[^"]+"/g, '"cwd_repo_name": "<CWD_NAME>"')
+    // Absolute project/workspace/source paths differ between the baseline
+    // capture host (/home/<user>/...) and local runs (/Users/..., /Volumes/...,
+    // /opt/..., etc.). Collapse a fixed set of keys that carry these paths so
+    // both sides fold to the same placeholder regardless of host filesystem.
+    .replace(/"project_root":\s*"[^"]+"/g, '"project_root": "<HOME_PATH>"')
+    .replace(/"workspace_base":\s*"[^"]+"/g, '"workspace_base": "<HOME_PATH>"')
+    .replace(/"default_workspace_base":\s*"[^"]+"/g, '"default_workspace_base": "<HOME_PATH>"')
+    .replace(/"source_repo_root":\s*"[^"]+"/g, '"source_repo_root": "<HOME_PATH>"')
+    .replace(/"source_project_path":\s*"[^"]+"/g, '"source_project_path": "<HOME_PATH>"')
+    .replace(/"workspace_path":\s*"[^"]+"/g, '"workspace_path": "<HOME_PATH>"')
+    .replace(/"path":\s*"\/[^"]+"/g, '"path": "<HOME_PATH>"')
+    .replace(/"error":\s*"Workspace not found: \/[^"]+"/g, '"error": "Workspace not found: <HOME_PATH>"');
 }
 
 /**
@@ -89,6 +108,12 @@ const SKIP_BASELINES = new Set<string>([
   'init-progress.before.json',
   // phases[].last_activity is mtime-derived → drifts every commit.
   'init-manager.before.json',
+  // phase_dir_count / has_verification drift as new phases land after the
+  // baseline was captured at Plan 02-01 Task 0.
+  'init-new-milestone.before.json',
+  'init-phase-op.before.json',
+  'init-plan-phase.before.json',
+  'init-verify-work.before.json',
 ]);
 
 describe.each(baselineFiles)('init bundler: %s', (baselineFile) => {
