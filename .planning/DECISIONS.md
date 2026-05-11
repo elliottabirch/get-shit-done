@@ -591,7 +591,7 @@ in `tests/conformance/commit-planning-state.test.ts` is the placeholder.
 **Resolves:** OQ-03 (from SYNTHESIS.md §6 #3)
 
 **Question:** Two workflow files (`spec-phase.md` Step 7 and `eval-review.md` end)
-use raw `git add` + `git commit` to commit `.planning/` artifacts. Should these
+use raw `git add` + `git commit` to commit `.planning/` artifacts. Should these <!-- leak-grep-ignore -->
 be fixed, or are they acceptable?
 
 **Decision:** Replace raw `git add` + `git commit` in both sites with
@@ -654,5 +654,238 @@ information loss.
 `agents/gsd-planner.md`, `commands/gsd/add-tests.md`
 
 **Status:** Resolved in Phase 4 Plan 04-05.
+
+---
+
+## D-2026-05-10-03 — OQ-02: section is the unit of write atomicity (L2/L3/L4 depth-walker)
+
+**Date:** 2026-05-11
+**Trigger:** SYNTHESIS §6 OQ-02 ("Section-scoped vs whole-file write granularity") requires a locked answer before Phase 6 BeadsAdapter maps `updateSection` to bd sub-records.
+
+**Decision:** The SECTION is the unit of write atomicity for canonical
+files (ROADMAP.md, STATE.md, PROJECT.md, AI-SPEC.md, SPEC.md, UAT.md,
+VERIFICATION.md, debug-session docs). `updateSection(path, anchor, body,
+mode)` is the ONLY primitive callers use for per-section writes; it
+supports L2 (`"## Foo"`), L3 (`"### Evidence"`), and L4 (`"#### Sub-point"`)
+anchors via the heading-depth walker shipped in Phase 5 Plan 02. A
+section terminates at the next heading of same-or-shallower depth.
+Whole-file writes (`putRecord`) remain available for one-shot document
+creation or for files outside the section-addressable catalog.
+
+**Alternatives considered:**
+1. **Whole-file only** (pre-Phase-5 baseline, `putRecord` for everything) —
+   Rejected: forces multi-author workflows to read-modify-write the
+   whole file, surfacing the §9 HIGH-severity race observed in the
+   AI-SPEC three-author scenario. BeadsAdapter would have to treat
+   every file as a single bd record, collapsing issue/sub-record
+   semantics.
+2. **L2-only sections** (Phase 1 scope) — Rejected: §4 row 527 targets
+   (`### Evidence`, `### Threat Flags`, nested PLAN sections) force
+   awkward whole-parent rewrites, re-introducing the race.
+3. **L2+L3 only** — Rejected: nested PLAN artifacts use L4 (`#### ...`)
+   for fine-grained evidence points; capping at L3 re-introduces
+   multi-author contention on those subsections.
+4. **Arbitrary depth (L1-L6)** — Accepted at L2-L4; L5-L6 available
+   via the walker but not surfaced in the SDK handler contract
+   until a consuming workflow requires them (deferred until needed).
+
+**Evidence:** 05-CONTEXT.md §D-06; 05-RESEARCH.md §Pattern 2; Plan 02 shipped
+the depth walker; `tests/conformance/section-depth.test.ts` exercises
+L2/L3/L4 + fenced-code + HTML-comment edge cases + setext warning.
+
+**Implication:** BeadsAdapter (Phase 6) maps `updateSection` to per-depth
+bd sub-record updates. Conformance suite (Phase 7) parameterizes over
+both adapters asserting equivalent atomic-section semantics per
+(record-type, section-id) tuple.
+
+**Status:** Resolves SYNTHESIS §6 OQ-02 (Phase 5 Success Criterion #5).
+
+---
+
+## D-2026-05-10-04 — OQ-05: sidecar paths are SDK-typed verbs, adapter stays Bin A
+
+**Date:** 2026-05-11
+**Trigger:** SYNTHESIS §6 OQ-05 ("Sidecar paths kv-vs-named") must resolve before BeadsAdapter lands: does the adapter expose a generic kv interface for `.planning/.next-call-count`-style files, or does each sidecar get a dedicated named method?
+
+**Decision:** Sidecar paths get dedicated **SDK verbs** — e.g.
+`next-call-count.get`, `next-call-count.incr` — defined in
+`sdk/src/query/sidecar.ts` (new module in Phase 5 Plan 05). The adapter
+surface stays Bin A: handlers internally call `adapter.getRecord`/
+`putRecord` against known paths centralized in the sidecar module.
+BeadsAdapter path-sniffs a small documented set of 2-3 sidecar keys
+(tracked in BeadsAdapter README, Phase 6).
+
+**Alternatives considered:**
+1. **Generic `adapter.getSidecar(key)` / `putSidecar(key, value)` methods** —
+   Rejected: adds two methods to the adapter interface for a closed set
+   of 2-3 keys; pushes domain concern (which keys exist, what their
+   lifecycle is) into the adapter. Phase 3 D-04 principle "adapter
+   stays thin" disfavors.
+2. **Raw `adapter.getRecord('.next-call-count')` scattered across SDK** —
+   Rejected: no single source of truth for sidecar path literals; any
+   future move of `.next-call-count` would require N call-site edits.
+   Also forces BeadsAdapter to recognize magic path strings at the
+   Bin A level.
+3. **Hybrid: generic kv interface PLUS per-key helpers** — Rejected:
+   redundant; the helpers alone are sufficient and keep the adapter
+   surface frozen for Phase 6.
+
+**Evidence:** 05-CONTEXT.md §D-19; 05-RESEARCH.md §Pattern/Don't Hand-Roll
+row "Sidecar/scratch as adapter primitives"; Plan 05 shipped
+`sdk/src/query/sidecar.ts` with `nextCallCountGet`/`nextCallCountIncr`;
+Plan 06 migrated `route-next-action.ts:44` to the helper (D-21).
+
+**Implication:** Adapter `Capabilities` interface gains NO `sidecar`
+member; the flag surface stays at its Phase-1 shape. BeadsAdapter README
+documents its path-sniff map for the known sidecar keys.
+
+**Status:** Resolves SYNTHESIS §6 OQ-05 (Phase 5 Success Criterion #5).
+
+---
+
+## D-2026-05-10-05 — OQ-07: scratch artifacts are first-class SDK verbs at phase-scoped paths
+
+**Date:** 2026-05-11
+**Trigger:** SYNTHESIS §6 OQ-07 ("Scratch record taxonomy") — the
+`*-DISCUSS-CHECKPOINT.json` and `*-QUESTIONS.json/.html` artifacts were
+written by `/gsd-discuss-phase` and similar workflows via raw fs
+operations prior to Phase 4. Phase 4 plugged the leaks but deferred the
+taxonomy decision here.
+
+**Decision:** `*-DISCUSS-CHECKPOINT.json` and `*-QUESTIONS.json/.html`
+are FIRST-CLASS SDK verbs with dedicated put/get/delete operations:
+`discuss.checkpoint.put/get/delete` and `discuss.questions.put/get/delete`
+(shipped in Phase 5 Plan 05 via `sdk/src/query/scratch.ts`). They live
+at `.planning/phases/<phaseDir>/` (NOT under `.planning/tmp/`) because
+they are phase-scoped, not tmp-lifecycle. Lifecycle (create mid-workflow,
+read on resume, delete on commit) is orchestrated by the workflow layer
+(`/gsd-discuss-phase` and friends). Adapter only needs `getRecord` /
+`putRecord` / `removeRecord` — no new adapter methods added.
+
+**Alternatives considered:**
+1. **Leave in `.planning/tmp/` with generic `tmp.put/get`** — Rejected:
+   scratch files outlive a single workflow invocation (they persist
+   across sessions until the phase commits), so tmp-lifecycle
+   semantics are wrong.
+2. **Co-locate with phase artifacts but use raw `tmp.put/get` verb** —
+   Rejected: conflates "scratch" as lifecycle with "scratch" as
+   category; handlers would need to special-case the path pattern.
+3. **New adapter methods `putScratch(phase, name, body)` / `getScratch`** —
+   Rejected: the adapter primitive-surface already covers this via
+   `putRecord`; scratch is a workflow concern (lifecycle), not an
+   adapter concern. D-04 from Phase 3 ("adapter stays thin") rules.
+
+**Evidence:** 05-CONTEXT.md §D-20; 05-PATTERNS.md §sdk/src/query/scratch.ts;
+Plan 05 shipped `scratch.ts` with 6 handlers + validators; Plan 05 test
+`sdk/src/query/scratch.test.ts` exercises round-trip, delete-on-missing
+(no-op), invalid format rejection, path-traversal guard.
+
+**Implication:** Workflows (`/gsd-discuss-phase`, others) are expected
+to use `gsd-sdk query discuss.checkpoint.put ...` instead of raw file
+writes. BeadsAdapter maps scratch verbs to typed bd comments with a
+documented `gsd:scratch:checkpoint` label (Phase 6).
+
+**Status:** Resolves SYNTHESIS §6 OQ-07 (Phase 5 Success Criterion #5).
+
+---
+
+## D-2026-05-10-06 — OQ-10: multi-author concurrency via internally-wrapped updateSection
+
+**Date:** 2026-05-11
+**Trigger:** SYNTHESIS §9 HIGH-severity risk "Multi-author files imply
+concurrency" concretized in the AI-SPEC three-author scenario — three
+subagents (`gsd-domain-researcher`, `gsd-ai-researcher`,
+`gsd-eval-planner`) write three different L2 sections of one AI-SPEC.md
+concurrently. Without serialization, the later writes lose earlier
+writes' content.
+
+**Decision:** `updateSection` internally wraps `withTransaction` —
+every call acquires the PID lockfile via the Phase-3 lock + shadow-dir
+infrastructure, making parallel callers serialize at the adapter layer
+with zero caller burden. The reentrant-lock guard (D-10) prevents
+deadlock when outer callers (e.g. `recordStateAppend`) already hold
+the lock and internally trigger `updateSection`. The AI-SPEC three-author
+workflow is safe under arbitrary reordering and interleaving — no
+workflow-layer sequencing required.
+
+**Alternatives considered:**
+1. **Workflow-layer lock-step sequencing** — Rejected: pushes concurrency
+   concern to every call site; requires discipline; fails in the face
+   of refactors that change spawn order.
+2. **Per-section lockfiles** — Rejected: N lockfiles per file; complex
+   stale-lock recovery; no equivalent mapping to bd native txn.
+3. **Optimistic concurrency (read-then-CAS)** — Rejected: requires a
+   retry loop at the caller and a version field on every record;
+   incompatible with text-oriented markdown files; brittle.
+4. **`updateSection` internally wrapped (chosen)** — Accepted: D-09 from
+   CONTEXT; ~10 LOC reentrant-lock guard (D-10); AI-SPEC three-author
+   test (`tests/conformance/section-depth.test.ts`) passes under
+   arbitrary reordering.
+
+**Evidence:** 05-CONTEXT.md §D-09/D-10; 05-RESEARCH.md §Pattern 4;
+`tests/conformance/section-depth.test.ts:three-author concurrency`;
+`tests/conformance/write-transaction.test.ts:reentrant` + `:updateSection concurrency`.
+
+**Implication:** BeadsAdapter (Phase 6) maps `updateSection` to
+per-section sub-record edits inheriting bd's per-issue atomicity — the
+"atomic `updateSection`" contract holds across both adapters via
+different mechanisms (MarkdownAdapter: file-level PID lock;
+BeadsAdapter: bd issue-edit atomicity). Conformance tests (Phase 7)
+exercise three-author-style concurrency against both backends.
+
+**Status:** Resolves SYNTHESIS §6 OQ-10 (Phase 5 Success Criterion #5).
+
+---
+
+## D-2026-05-10-07 — withTransaction upgraded to shadow-dir journal with rollback
+
+**Date:** 2026-05-11
+**Trigger:** SYNTHESIS §9 HIGH-severity risk "Dry-run hoist non-trivial.
+Don't ship Phase 6 until dry-run is stable on MarkdownAdapter." The
+Phase-3 `withTransaction` was lock-only and had no rollback capability;
+`pipeline.ts` dry-run used `cp -r` of the whole `.planning/` tree, <!-- leak-grep-ignore -->
+which is an adapter-bypass that BeadsAdapter cannot replicate.
+
+**Decision:** `withTransaction(fn, opts?: { dryRun?: boolean })` is
+upgraded to a shadow-dir journal. When a txn is active, all mutating
+adapter methods redirect writes to a per-txn tmpdir at
+`.planning/.tmp-txn-<uuid>/` (same-mount to guarantee POSIX `rename(2)`
+atomicity at commit). Reads merge tmpdir-over-real so callers see their
+own pending writes. Commit renames shadow entries into place; rollback
+`rm -rf`'s the tmpdir. Nested calls JOIN the outer txn via the
+reentrant-lock guard. `dryRun: true` unconditionally rolls back and
+makes `commitPlanningState` a no-op inside the txn.
+
+**Alternatives considered:**
+1. **Full tmpdir dir-swap at commit** — Rejected: requires moving the
+   original `.planning/` aside first, creating a window where
+   `.planning/` doesn't exist and breaking concurrent readers. Per-file
+   rename on touched paths only is safer and enables incremental commits.
+2. **Shadow under `os.tmpdir()`** — Rejected: may be on a different
+   filesystem, triggering EXDEV on rename and falling back to
+   copy+unlink (NOT atomic). Same-mount under `.planning/.tmp-txn-*/`
+   is the only safe location.
+3. **Keep `cp -r` with adapter-bypass** — Rejected: BeadsAdapter cannot
+   `cp -r` a bd store; the dry-run mechanism must live at the adapter
+   capability layer, not the filesystem.
+4. **SQLite WAL-style write-ahead log** — Rejected: heavier machinery
+   than the 2-3 file mutations a typical GSD transaction touches;
+   SQLite's WAL-per-page model doesn't map to file-per-record.
+
+**Evidence:** 05-CONTEXT.md §D-01/D-02/D-03/D-04/D-05; 05-RESEARCH.md
+§Pattern 1, §Pitfalls 1/2/4; Plan 03 implementation;
+`tests/conformance/write-transaction.test.ts` new cases (dryRun rollback,
+mid-txn failure byte-identical, reentrancy, snapshot/restore, nested
+dryRun propagation); Plan 05 SC#1 pipeline test.
+
+**Implication:** Pipeline dry-run is now adapter-capability-backed
+(SC#1 satisfied — mid-txn failure leaves `.planning/` byte-identical
+to pre-call). Unblocks Phase 6 BeadsAdapter per §9 dry-run gate.
+`capabilities.snapshot: true` on MarkdownAdapter.
+`commitPlanningState` no-op inside `dryRun` tracked as OQ-01 follow-up
+(a separate documentation ADR will land in Phase 3's OQ-01 follow-up
+work or at Phase 6 start; not blocking Phase 5).
+
+**Status:** Phase 5 shadow-dir journal upgrade; closes SYNTHESIS §9 dry-run gate for Phase 6 activation.
 
 ---
