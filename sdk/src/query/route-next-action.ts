@@ -18,6 +18,7 @@ import {
 import { stateJson } from './state.js';
 import { roadmapAnalyze } from './roadmap.js';
 import { findPhase } from './phase.js';
+import { nextCallCountGet } from './sidecar.js';
 import type { QueryResult } from './utils.js';
 import type { StorageAdapter } from '../../../adapters/types.js';
 
@@ -41,9 +42,8 @@ async function readConsecutiveCallCount(
   adapter: StorageAdapter,
   workstream: string | undefined,
 ): Promise<number> {
-  const raw = await adapter.getRecord(planningRelativePath(workstream, '.next-call-count'));
-  if (raw === null) return 0;
-  return parseInt(raw.trim(), 10) || 0;
+  // D-21: path literal centralized in sdk/src/query/sidecar.ts.
+  return nextCallCountGet(adapter, workstream);
 }
 
 /** Unresolved FAIL rows in phase VERIFICATION.md (lightweight gate). */
