@@ -766,9 +766,13 @@ export class MarkdownAdapter implements StorageAdapter {
         case 'blocker_added': {
           const { text } = event.payload;
           const entry = `- ${text}`;
-          modified = this.appendToSection(
+          // Create-if-missing (Phase 3 UAT Bug 1 family): the prior
+          // appendToSection silently dropped writes when no Blockers
+          // heading existed. Broadened heading match + auto-create.
+          modified = this.appendToOrCreateSection(
             body,
-            /(###?\s*(?:Blockers|Blockers\/Concerns|Concerns)\s*\n)([\s\S]*?)(?=\n###?|\n##[^#]|$)/i,
+            /(###?\s*[^\n]*\b[Bb]lockers?(?:\/[Cc]oncerns)?\b[^\n]*\n)([\s\S]*?)(?=\n###?|\n##[^#]|$)/,
+            '## Blockers',
             entry,
           );
           break;
@@ -886,18 +890,27 @@ export class MarkdownAdapter implements StorageAdapter {
     return content.replace(pattern, (_m, header: string) => `${header}${sectionBody}`);
   }
 
-  /** Append a row to the Performance Metrics table (handles the table pattern). */
+  /**
+   * Append a row to the Performance Metrics table (handles the table pattern).
+   * Create-if-missing (Phase 3 UAT Bug 1 family): when the Performance
+   * Metrics section + table don't exist, create both and append the first
+   * row. Prior behavior silently dropped the write.
+   */
   private appendToMetricsTable(content: string, entry: string): string {
     const metricsPattern = /(##\s*Performance Metrics[\s\S]*?\n\|[^\n]+\n\|[-|\s]+\n)([\s\S]*?)(?=\n##|\n$|$)/i;
     const match = content.match(metricsPattern);
-    if (!match) return content;
-    let tableBody = match[2].trimEnd();
-    if (tableBody.trim() === '' || tableBody.includes('None yet')) {
-      tableBody = entry;
-    } else {
-      tableBody = tableBody + '\n' + entry;
+    if (match) {
+      let tableBody = match[2].trimEnd();
+      if (tableBody.trim() === '' || tableBody.includes('None yet')) {
+        tableBody = entry;
+      } else {
+        tableBody = tableBody + '\n' + entry;
+      }
+      return content.replace(metricsPattern, (_m, header: string) => `${header}${tableBody}\n`);
     }
-    return content.replace(metricsPattern, (_m, header: string) => `${header}${tableBody}\n`);
+    // Section + table missing — scaffold both at end of file.
+    const scaffold = '\n\n## Performance Metrics\n\n| Phase/Plan | Duration | Tasks | Files |\n|-----------|----------|-------|-------|\n';
+    return content.trimEnd() + `${scaffold}${entry}\n`;
   }
 
   /** Format a Roadmap Evolution entry line. */
@@ -1022,15 +1035,20 @@ export class MarkdownAdapter implements StorageAdapter {
     return content.replace(sectionPattern, (_m, header: string) => `${header}${newBody}`);
   }
 
-  /** Update the Pending todos section with a new count. */
+  /**
+   * Update the Pending todos section with a new count.
+   * Create-if-missing (Phase 3 UAT Bug 1 family): scaffold a Pending todos
+   * section when none exists. Prior behavior silently dropped the update.
+   */
   private updateTodoCount(content: string, count: number): string {
     const todoPattern = /(##\s*Pending todos\s*\n)([\s\S]*?)(?=\n##|$)/i;
     const match = content.match(todoPattern);
+    const replacement = count > 0 ? `(${count} items)\n` : '(none)\n';
     if (match) {
-      const replacement = count > 0 ? `(${count} items)\n` : '(none)\n';
       return content.replace(todoPattern, (_m, header: string) => `${header}\n${replacement}`);
     }
-    return content;
+    // Section missing — append at end.
+    return content.trimEnd() + `\n\n## Pending todos\n\n${replacement}`;
   }
 
   /** Mutate Deferred Ideas section: add or remove items. */

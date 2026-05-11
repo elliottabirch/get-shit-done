@@ -141,6 +141,38 @@ milestone: v1.0
     expect(content).toContain('5 files');
   });
 
+  // Regression: before the fix, a metric event against a STATE.md without
+  // a Performance Metrics section silently no-op'd — the handler reported
+  // {recorded: true} while the row was dropped. Create-if-missing scaffolds
+  // both the section and the table header.
+  it('creates Performance Metrics section when none exists', async () => {
+    await adapter.putRecord(
+      'STATE.md',
+      `---
+milestone: v1.0
+---
+
+# State
+
+## Current Position
+
+Phase: 1
+`,
+    );
+
+    await adapter.recordStateAppend({
+      type: 'metric',
+      payload: { phase: '03', plan: '05', duration: '12m', tasks: '3', files: '5' },
+    });
+
+    const content = await adapter.getRecord('STATE.md');
+    expect(content).toContain('## Performance Metrics');
+    expect(content).toContain('Phase 03 P05');
+    expect(content).toContain('12m');
+    // Pre-existing content preserved.
+    expect(content).toContain('## Current Position');
+  });
+
   it('appends roadmap evolution entry', async () => {
     await adapter.putRecord(
       'STATE.md',
@@ -285,6 +317,36 @@ None
 
     const content = await adapter.getRecord('STATE.md');
     expect(content).toContain('- Need API key');
+  });
+
+  // Regression: before the fix, a blocker_added event against a STATE.md
+  // without a Blockers section silently no-op'd — the handler reported
+  // {added: true} while the entry was dropped.
+  it('creates Blockers section when none exists (blocker_added)', async () => {
+    await adapter.putRecord(
+      'STATE.md',
+      `---
+milestone: v1.0
+---
+
+# State
+
+## Current Position
+
+Phase: 1
+`,
+    );
+
+    await adapter.recordStateMutation({
+      type: 'blocker_added',
+      payload: { text: 'Missing env var' },
+    });
+
+    const content = await adapter.getRecord('STATE.md');
+    expect(content).toContain('## Blockers');
+    expect(content).toContain('- Missing env var');
+    // Pre-existing content preserved.
+    expect(content).toContain('## Current Position');
   });
 
   it('resolves blocker (removes from list)', async () => {
