@@ -108,12 +108,6 @@ const SKIP_BASELINES = new Set<string>([
   'init-progress.before.json',
   // phases[].last_activity is mtime-derived → drifts every commit.
   'init-manager.before.json',
-  // phase_dir_count / has_verification drift as new phases land after the
-  // baseline was captured at Plan 02-01 Task 0.
-  'init-new-milestone.before.json',
-  'init-phase-op.before.json',
-  'init-plan-phase.before.json',
-  'init-verify-work.before.json',
 ]);
 
 describe.each(baselineFiles)('init bundler: %s', (baselineFile) => {
