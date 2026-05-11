@@ -160,10 +160,10 @@ Plans:
 - [x] 05-05-PLAN.md — pipeline.ts dry-run refactor + sidecar.ts + scratch.ts + 8 new SDK verbs + SC#1 byte-identity pipeline test
 
 **Wave 6** *(blocked on Wave 5 completion)*
-- [ ] 05-06-PLAN.md — 8 SDK handler migrations to putNamedDoc/getNamedDoc + route-next-action.ts nextCallCountGet (D-21)
+- [x] 05-06-PLAN.md — 8 SDK handler migrations to putNamedDoc/getNamedDoc + route-next-action.ts nextCallCountGet (D-21)
 
 **Wave 7** *(blocked on Wave 6 completion)*
-- [ ] 05-07-PLAN.md — 5 ADRs for OQ-02/05/07/10 + shadow-dir journal + Phase 5 exit checkpoint
+- [x] 05-07-PLAN.md — 5 ADRs for OQ-02/05/07/10 + shadow-dir journal + Phase 5 exit checkpoint
 
 ### Phase 6: BeadsAdapter implementation
 **Repo:** sibling `~/code/gsd-beads`
