@@ -160,10 +160,14 @@ Phase: 1
 `,
     );
 
-    await adapter.recordStateAppend({
+    const outcome = await adapter.recordStateAppend({
       type: 'metric',
       payload: { phase: '03', plan: '05', duration: '12m', tasks: '3', files: '5' },
     });
+
+    // Phase 3 UAT scar (commit 08b4054a): create-if-missing surfaces via typed
+    // created_section field per D-2026-05-10-08.
+    expect(outcome).toEqual({ applied: true, created_section: '## Performance Metrics' });
 
     const content = await adapter.getRecord('STATE.md');
     expect(content).toContain('## Performance Metrics');
@@ -337,10 +341,14 @@ Phase: 1
 `,
     );
 
-    await adapter.recordStateMutation({
+    const outcome = await adapter.recordStateMutation({
       type: 'blocker_added',
       payload: { text: 'Missing env var' },
     });
+
+    // Phase 3 UAT scar (commit 08b4054a): create-if-missing surfaces via typed
+    // created_section field per D-2026-05-10-08.
+    expect(outcome).toEqual({ applied: true, created_section: '## Blockers' });
 
     const content = await adapter.getRecord('STATE.md');
     expect(content).toContain('## Blockers');
