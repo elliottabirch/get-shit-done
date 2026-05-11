@@ -865,37 +865,25 @@ Spike INCOMPLETE if any §2–§7 question is unanswered. Blocks Plans 06-04+.
 | A10 | BeadsAdapter surface = 22 methods (not ~58 per REQUIREMENTS.md BEADS-02 wording) because fork's contract has Bin B in SDK helpers, not adapter | Phase Requirements BEADS-02 mapping | [VERIFIED: `adapters/types.ts:67-121`]; REQUIREMENTS.md wording predates Phase 3 D-04 ("adapter stays thin"). Planner must cross-reference against fork contract, not REQUIREMENTS.md prose. |
 | A11 | The hybrid tier at sibling's `pathRouter.mjs` (CR-02 BLOCKER) gets resolved in fork by either deleting hybrid tier or forcing `putRecord` on hybrid paths through named-doc dispatch | Common Pitfalls + Landmines fixed | [ASSUMED] — fork's canonical-file list may not map 1:1 to sibling's 7 patterns. Plan 06-04 resolves during `paths.ts` authoring. |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Does fork's `runAdapterConformanceSuite` harness give BeadsAdapter enough pre-test hooks for bd initialization?**
-   - What we know: harness does `mkdtemp + mkdir .planning + new Adapter(tmpDir)` [VERIFIED: `adapter.conformance.ts:32-38`]. Does NOT do bd init.
-   - What's unclear: whether BeadsAdapter's `_ensureBd()` can lazily bd-init (Outcome C pattern: `bd init --from-jsonl` from seed fixture) or whether harness needs a per-adapter beforeEach callback.
-   - Recommendation: Plan 06-07 explicitly resolves. If harness extension is needed, it's a fork-side change (ADR required since signature is D-15 locked). If BeadsAdapter can self-init, document the pattern.
+   - **RESOLVED: defer to Plan 06-07 Task 2.** Factory callback passed to `runAdapterConformanceSuite('beads', factory)` inlines the bd init (`bd init --from-jsonl` from seed.jsonl + `chmod 0o700`) per test case invocation. No harness extension needed; D-15 signature stays locked. Pattern: `runAdapterConformanceSuite('beads', (dir) => { _initBdFromSeed(dir); return new BeadsAdapter(dir); })`.
 
 2. **Does `removeCollection` on bd-routed paths need cascade semantics that sibling's Spike 002 rejected for phase completion?**
-   - What we know: sibling's cascade-loop walks parent-child only, NOT `blocks`. `bd dep add` (default type) IS blocks. Collection removal via cascade would need `bd delete <id> --cascade` semantics that bd may or may not expose.
-   - What's unclear: whether bd v1.0.3 has a cascade-delete primitive, or whether `removeCollection` enumerates + deletes per-issue.
-   - Recommendation: Plan 06-03 spike adds `bd delete` + `--cascade` to the CLI catalog investigation. If absent, Plan 06-05 implements as `listCollection + remove each`.
+   - **RESOLVED: defer to Plan 06-03 Task 1 (spike).** Plan 06-03's spike script includes `probe_deleteCascade(bd)` investigating `bd delete --cascade`. If present → Plan 06-05 removeCollection uses `--cascade`. If absent → Plan 06-05 implements as `listCollection + remove each` per issue, accepting that cross-issue `blocks` edges become orphan references (documented limitation; acceptable for v1.0 per sibling Spike 002 rejection of cascade semantics for phase completion).
 
 3. **How does the 16-case `StateWriteOutcome` matrix map to Outcome B (labels-first)?**
-   - What we know: `created_section` is a MarkdownAdapter affordance tied to heading-walker scaffolding.
-   - What's unclear: whether BeadsAdapter in Outcome B should never emit `created_section`, always emit a synthetic marker, or the test matrix is relaxed for this adapter.
-   - Recommendation: Plan 06-06 documents the mapping as an ADR; conformance test behavior is explicit.
+   - **RESOLVED: defer to Plan 06-06 ADR (D-OQ06-CREATED-SECTION, authored in Plan 06-06).** In Outcome B (labels-first + description-blob), `created_section` variant is NEVER emitted because there are no discrete sub-records to scaffold — the entire issue is one description blob. Conformance test matrix relaxes the 2 `created_section` cases for BeadsAdapter when `capabilities.snapshot` is determined by Outcome B shipping. In Outcome A (sub-records), original 16-case matrix applies. Plan 06-06 Task 2 documents ADR inline in DECISIONS.md.
 
 4. **Which of the sibling's 8 cluster files (discussTodos, initBundlers, longTail, phaseLifecycle, primitives, roadmapMilestone, state, verifyReviews — total ~1000 LOC) does NOT carry forward under fork's Phase 3 D-04 ("adapter stays thin")?**
-   - What we know: sibling has domain methods on the adapter (addPhase, etc.); fork puts those in SDK helpers.
-   - What's unclear: whether any of those cluster files contain *primitive* code that carries forward vs pure domain logic that's already in fork's SDK helpers.
-   - Recommendation: Plan 06-04 task audits each cluster file with "is this domain logic (discard) or primitive plumbing (port)?". Likely all 8 discard because fork's SDK helpers own the domain layer.
+   - **RESOLVED: Plan 06-01 selective-prune step 4 DELETES all 8 cluster files.** Per fork's Phase 3 D-04, domain methods (addPhase, completePhaseAndCascade, addSummary, etc.) live in fork's SDK helpers — not the adapter. Sibling's cluster files are pure domain logic; carry-forward whitelist (D-SCAFFOLD) explicitly excludes them. Plan 06-02 audit confirms: if any primitive plumbing found in cluster files during port, surface as ADR; otherwise discard.
 
 5. **Is there a clean way to preserve `git log --follow` history for the `/Volumes/code/gsd-beads` → `.ts` port?**
-   - What we know: sibling's Plan 06-04 D-11 used verbatim extraction to preserve `--follow`; `git mv foo.mjs foo.ts` preserves follow for rename detection.
-   - What's unclear: whether `git mv + in-place content rewrite (mjs → ts)` in the same commit preserves follow, or splits it into 2 commits (mv first, then rewrite).
-   - Recommendation: Plan 06-02 tests this mechanically on one file; if split-commit is needed, document the discipline for all 14 files.
+   - **RESOLVED: defer to Plan 06-02 Task 1 mechanical test.** Plan 06-02 ports ONE file first (`_atomicWrite.mjs → _atomicWrite.ts`) via `git mv foo.mjs foo.ts && <in-place content rewrite>` in a SINGLE commit, then runs `git log --follow src/_atomicWrite.ts`. If blame traces back through the `.mjs` original → discipline stands (use single-commit rename+rewrite for all 14 whitelist files). If not → discipline splits into 2 commits per file (mv first, then rewrite). Plan 06-02 commits the finding to CLAUDE.md so Plan 06-04 format-module ports follow the validated pattern.
 
 6. **Does the user's bd v1.0.3 install match `1b2dd2cb` build exactly, or a different v1.0.3 point release?**
-   - What we know: sibling's verified version string is `bd v1.0.3 (1b2dd2cb)`.
-   - What's unclear: whether point-release builds of v1.0.3 have identical CLI behavior for the 9 subcommands sibling uses.
-   - Recommendation: Plan 06-03 spike's §1 first task is `bd --version` assertion. If mismatch, reconcile with user.
+   - **RESOLVED: defer to Plan 06-03 Task 2 (spike) checkpoint.** Plan 06-03 spike's §1 first task is `bd --version` assertion (`bd --version` → expect "bd v1.0.3" substring; flag mismatch at checkpoint). Plan 06-03 Task 2 is a human-verify checkpoint — if build mismatch, user reconciles or confirms spike proceeds against their installed build. SPIKE-RESULTS §1 records actual build string for future reference.
 
 ## Validation Architecture
 
