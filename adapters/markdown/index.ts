@@ -872,14 +872,21 @@ export class MarkdownAdapter implements StorageAdapter {
       case 'resume': {
         // Distinguish "removed a real pause" from "nothing to resume"
         // (D-2026-05-10-08). Prior behavior was blind-unlink.
-        const existed = (await this.getRecord('WAITING.json')) !== null;
-        if (!existed) {
-          // Still attempt the .gsd/ cleanup in case the two copies drifted.
-          try { unlinkSync(join(this.projectDir, '.gsd', 'WAITING.json')); } catch { /* ENOENT OK */ }
+        //
+        // WR-03: check BOTH `.planning/WAITING.json` AND `.gsd/WAITING.json`
+        // so a drifted dual-write state (only the `.gsd/` copy present) is
+        // reported as `applied: true` rather than a misleading
+        // `nothing_to_remove` — the user's pause WAS cleared, even if the
+        // two locations had gotten out of sync. Only report
+        // `nothing_to_remove` when neither location held a copy.
+        const planningExisted = (await this.getRecord('WAITING.json')) !== null;
+        const gsdPath = join(this.projectDir, '.gsd', 'WAITING.json');
+        const gsdExisted = existsSync(gsdPath);
+        if (!planningExisted && !gsdExisted) {
           return { applied: false, reason: 'nothing_to_remove' };
         }
-        await this.removeRecord('WAITING.json');
-        try { unlinkSync(join(this.projectDir, '.gsd', 'WAITING.json')); } catch { /* ENOENT OK */ }
+        if (planningExisted) await this.removeRecord('WAITING.json');
+        try { unlinkSync(gsdPath); } catch { /* ENOENT OK */ }
         return { applied: true };
       }
       default: {
