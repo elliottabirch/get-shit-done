@@ -15,13 +15,16 @@ findings:
   info: 5
   total: 9
   warning_fixed: 4
-  info_remaining: 5
+  info_fixed: 5
 status: fixed
 fixed_commits:
   - 8dd1c2be  # WR-01
   - e24c4192  # WR-02
   - 04edcf7a  # WR-03
   - f3838c84  # WR-04
+  - 9ba15cd7  # IN-01 + IN-05 (fold-in)
+  - 45726cb5  # IN-02
+  - 228960a0  # IN-03 + IN-04 (fold-in)
 ---
 
 # Phase 3 (Gap Plan 03-06): Code Review Report
