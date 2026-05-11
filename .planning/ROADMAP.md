@@ -86,7 +86,7 @@ Plans:
   2. Recording a STATE.md event from a workflow uses exactly one call shape — `recordStateEvent({type, payload})` with `type` ∈ `roadmap_evolution | decision | blocker_added | blocker_resolved | metric | session | todo_count_update | deferred_items | forensic_session | quick_task` — and the same call shape works against any adapter that satisfies the interface.
   3. A user running any workflow that performs a write (e.g. `addPhase`, `completePhaseAndCascade`, `recordVerification`, `addSummary`, `createUat`/`updateUat`) observes byte-identical `.planning/` output to upstream when MarkdownAdapter is mounted (golden-file diff = empty).
   4. OQ-01 is resolved: `commitPlanningState` semantics for non-git backends are documented (no-op vs checkpoint snapshot) and adapter implementations match the documented behavior; the conformance harness has a stub test that will be filled in Phase 7.
-**Plans:** 5 plans
+**Plans:** 6 plans
 Plans:
 **Wave 1**
 - [x] 03-01-PLAN.md — Foundation: withTransaction impl + event types + phase-helpers scaffold + leak-grep write patterns
@@ -100,6 +100,9 @@ Plans:
 
 **Wave 4** *(blocked on Wave 3 completion)*
 - [x] 03-05-PLAN.md — Conformance tests + OQ-01 ADR + leak-grep verification
+
+**Wave 5** *(gap closure — post Phase 3 ship; unblocks Phase 6 BeadsAdapter)*
+- [ ] 03-06-PLAN.md — StateWriteOutcome three-state contract (HANDOFF decisions[3]; ADR D-2026-05-10-08 to be filed)
 
 ### Phase 4: Plug workflow leaks (top-10 + `<context>`-block class)
 **Repo:** this repo (`feat/storage-adapter`)
