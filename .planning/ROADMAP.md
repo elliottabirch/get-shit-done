@@ -180,9 +180,28 @@ Plans:
   3. Every Bin B method has an implementation that maps to a bd-native shape (issue + label, typed comment, sub-record, or `updateSection`-style anchor); a smoke test exercising one workflow per Bin B method category (phase, plan, summary, uat, state-event, debug, intel, learnings, etc.) succeeds end-to-end against a real `bd` store.
   4. OQ-06 is resolved: the knowledge-graph subsystem scope decision is recorded in DECISIONS.md (separate `GraphAdapter` sub-interface OR out-of-scope for v1.0 with documented graceful degradation in `gsd-phase-researcher` and `graphify.md`); the BeadsAdapter behavior matches the recorded decision.
   5. UI-review and sketch workflows running against `BeadsAdapter` degrade gracefully (per BEADS-05) when `writeBinaryAsset` is unsupported — they log a warning and skip the binary write rather than crashing or corrupting state.
-**Plans:** 0/TBD
+**Plans:** 7 plans
 Plans:
-- [ ] TBD
+**Wave 1** *(foundation — no dependencies)*
+- [ ] 06-01-PLAN.md — Fork subpath export + Capabilities.graphEdges extension + sibling scaffold + bd CLI spike (D-TXN Outcome A/B lock)
+
+**Wave 2** *(blocked on Wave 1 — needs bd-client + spike outcome)*
+- [ ] 06-02-PLAN.md — BdClient + BeadsAdapter.init() (BEADS-04) + 7 Bin A record primitives
+
+**Wave 3** *(blocked on Wave 2 — composes record primitives)*
+- [ ] 06-03-PLAN.md — Format module (heading-walker + 12 canonical-file schemas + UnknownSectionError) + section + frontmatter primitives
+
+**Wave 4** *(blocked on Waves 2+3 — needs record + section primitives)*
+- [ ] 06-04-PLAN.md — withTransaction (Outcome A or B per spike) + commitPlanningState + updateSection withTransaction-wrap
+
+**Wave 5** *(blocked on Wave 4 — needs withTransaction)*
+- [ ] 06-05-PLAN.md — 3 recordState* event families (16-case StateWriteOutcome matrix) + putNamedDoc/getNamedDoc + writeBinaryAsset + markdownLockfile throw-stubs (BEADS-02, BEADS-05)
+
+**Wave 6** *(blocked on Wave 5 — composes event families for full-state tests)*
+- [ ] 06-06-PLAN.md — Dep-edge synthesizer + graphs/graph.json merge-preserves-semantic (BEADS-03 / D-OQ06)
+
+**Wave 7** *(blocked on all prior — final smoke coverage + README)*
+- [ ] 06-07-PLAN.md — 8 per-Bin-B-category smoke tests + BeadsAdapter README (D-SCAFFOLD + D-RUNTIME-RESOLUTION)
 
 ### Phase 7: Conformance test suite
 **Repo:** both (test harness in this repo, adapter implementations in both)
@@ -226,6 +245,6 @@ Phase 6 begins in sibling repo `~/code/gsd-beads` only after Phase 5 ships in th
 | 3. Wire core write methods + recordStateEvent | 5/5 | Complete | 2026-05-10 |
 | 4. Plug workflow leaks (top-10 + `<context>`-block class) | 0/7 | Planning complete | - |
 | 5. Foundational primitive lift | 0/TBD | Not started | - |
-| 6. BeadsAdapter implementation | 0/TBD | Not started | - |
+| 6. BeadsAdapter implementation | 0/7 | Planning complete | - |
 | 7. Conformance test suite | 0/TBD | Not started | - |
 | 8. Migration + distribution | 0/TBD | Not started | - |
