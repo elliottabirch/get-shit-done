@@ -53,7 +53,7 @@ last_updated: 2026-05-11
 
 > Populated by the planner as plans land. Each task maps to a requirement, a threat (N/A — `workflow.security_enforcement` is `false`), and an automated command.
 >
-> **W0 status:** `nyquist_compliant: true` remains FALSE until pre-execution validation confirms every row's command resolves on the respective repo side and the test files are scaffolded.
+> **W0 status:** Per-Task Verification Map populated; approved 2026-05-11 post-plan-checker revision round 2. Every row has a plan→task→automated-command pointer; full command text lives in each plan's `<verify>` block.
 
 Each plan's `<verify>` block inside each `<task>` element is the canonical per-task automated command — the table below is an index so a reviewer can see the requirement→task→command mapping at a glance. For exact command text + file paths, see the corresponding plan's task block.
 
