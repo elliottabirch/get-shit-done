@@ -686,9 +686,16 @@ export class MarkdownAdapter implements StorageAdapter {
         case 'decision': {
           const { phase, summary, rationale } = event.payload;
           const entry = `- [Phase ${phase || '?'}]: ${summary}${rationale ? ` — ${rationale}` : ''}`;
-          modified = this.appendToSection(
+          // Use create-if-missing so a STATE.md that lacks a Decisions section
+          // still receives the append (consistent with forensic_session /
+          // quick_task / deferred_item event types). The broadened heading
+          // regex (any L2/L3 heading containing "Decisions"/"decisions" as a
+          // word, with an optional suffix like "(2026-04-30)") catches common
+          // real-world variants like "## Locked decisions (date)".
+          modified = this.appendToOrCreateSection(
             body,
-            /(###?\s*(?:Decisions|Decisions Made|Accumulated.*Decisions)\s*\n)([\s\S]*?)(?=\n###?|\n##[^#]|$)/i,
+            /(###?\s*[^\n]*\b[Dd]ecisions?\b[^\n]*\n)([\s\S]*?)(?=\n###?|\n##[^#]|$)/,
+            '## Decisions Made',
             entry,
           );
           break;

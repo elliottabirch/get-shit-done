@@ -53,6 +53,66 @@ None yet.
     expect(content).not.toContain('None yet');
   });
 
+  // Regression: STATE.md files in the wild use heading variants like
+  // "## Locked decisions (2026-04-30)" (lowercase, suffix). The prior
+  // hard-coded regex matched only the three literals "Decisions",
+  // "Decisions Made", "Accumulated...Decisions", so those writes silently
+  // no-op'd — the handler reported `{added: true}` while the decision
+  // was dropped on the floor. Broadened to match any heading containing
+  // the word decision(s) case-insensitively.
+  it('appends decision entry to heading variants (lowercase, suffixed)', async () => {
+    await adapter.putRecord(
+      'STATE.md',
+      `---
+milestone: v1.0
+---
+
+# State
+
+## Locked decisions (2026-04-30)
+
+- Original entry
+`,
+    );
+
+    await adapter.recordStateAppend({
+      type: 'decision',
+      payload: { phase: '99', summary: 'Heading variant', rationale: 'regression' },
+    });
+
+    const content = await adapter.getRecord('STATE.md');
+    expect(content).toContain('- [Phase 99]: Heading variant — regression');
+    // The pre-existing entry must survive the append (not clobbered).
+    expect(content).toContain('- Original entry');
+  });
+
+  it('creates Decisions Made section when no decisions heading exists', async () => {
+    await adapter.putRecord(
+      'STATE.md',
+      `---
+milestone: v1.0
+---
+
+# State
+
+## Current Position
+
+Phase: 1
+`,
+    );
+
+    await adapter.recordStateAppend({
+      type: 'decision',
+      payload: { phase: '01', summary: 'First decision', rationale: null },
+    });
+
+    const content = await adapter.getRecord('STATE.md');
+    expect(content).toContain('## Decisions Made');
+    expect(content).toContain('- [Phase 01]: First decision');
+    // Existing content preserved.
+    expect(content).toContain('## Current Position');
+  });
+
   it('appends metric row to Performance Metrics table', async () => {
     await adapter.putRecord(
       'STATE.md',
