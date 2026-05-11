@@ -84,6 +84,64 @@ describe('recordStateAppend outcomes', () => {
     expect(outcome).toEqual({ applied: true, created_section: '## Performance Metrics' });
   });
 
+  // WR-04: cover the applied:true bare path (table already exists — no scaffold).
+  it('metric: applied:true bare when Performance Metrics table exists', async () => {
+    await seedStateMd(
+      adapter,
+      [
+        '# State',
+        '',
+        '## Performance Metrics',
+        '',
+        '| Phase/Plan | Duration | Tasks | Files |',
+        '|-----------|----------|-------|-------|',
+        '| None yet |  |  |  |',
+        '',
+      ].join('\n'),
+    );
+
+    const outcome = await adapter.recordStateAppend({
+      type: 'metric',
+      payload: { phase: '03', plan: '06', duration: '15m', tasks: '9', files: '6' },
+    });
+
+    expect(outcome).toEqual({ applied: true });
+  });
+
+  // WR-04: Append/session outcome coverage.
+  it('session: applied:true bare when Last session field exists', async () => {
+    await seedStateMd(
+      adapter,
+      [
+        '# State',
+        '',
+        '## Session Continuity',
+        '',
+        'Last session: 2026-05-01T00:00:00Z',
+        'Resume File: None',
+        '',
+      ].join('\n'),
+    );
+
+    const outcome = await adapter.recordStateAppend({
+      type: 'session',
+      payload: { resumeFile: 'plan.md' },
+    });
+
+    expect(outcome).toEqual({ applied: true });
+  });
+
+  it('session: applied:true + created_section when no session field present', async () => {
+    await seedStateMd(adapter, '# State\n\n## Current Position\n\nPhase: 1\n');
+
+    const outcome = await adapter.recordStateAppend({
+      type: 'session',
+      payload: { stoppedAt: 'PLAN-01 step 3', resumeFile: 'plan.md' },
+    });
+
+    expect(outcome).toEqual({ applied: true, created_section: '## Session Continuity' });
+  });
+
   it('roadmap_evolution: applied:false + reason:duplicate on exact re-append', async () => {
     // Seed with the exact line the roadmap_evolution formatter will produce.
     await seedStateMd(
@@ -122,6 +180,43 @@ describe('recordStateAppend outcomes', () => {
     });
 
     expect(outcome).toEqual({ applied: true, created_section: '### Roadmap Evolution' });
+  });
+
+  // WR-02 regression: dedupe scope is scoped to `### Roadmap Evolution`, not
+  // the whole file. An identical bullet line present outside that subsection
+  // (e.g., under `## Decisions Made`) must NOT block the write.
+  // Documents D-2026-05-10-08 "Consequences" scope-change entry.
+  it('roadmap_evolution: applied:true when identical bullet exists OUTSIDE Roadmap Evolution', async () => {
+    await seedStateMd(
+      adapter,
+      [
+        '# State',
+        '',
+        '## Decisions Made',
+        '',
+        // An identical bullet under a different section — pre-03-06 caller-side
+        // dedupe would have seen this and refused the write.
+        '- Phase 3 added: Test entry',
+        '',
+        '## Accumulated Context',
+        '',
+        '### Roadmap Evolution',
+        '',
+        'None yet.',
+        '',
+      ].join('\n'),
+    );
+
+    const outcome = await adapter.recordStateAppend({
+      type: 'roadmap_evolution',
+      payload: { phase: '3', action: 'added', note: 'Test entry' },
+    });
+
+    expect(outcome).toEqual({ applied: true });
+    // Sanity: the new entry lands in the Roadmap Evolution subsection.
+    const content = await adapter.getRecord('STATE.md');
+    expect(content).toContain('### Roadmap Evolution');
+    expect(content).toMatch(/### Roadmap Evolution[\s\S]*- Phase 3 added: Test entry/);
   });
 });
 
@@ -183,6 +278,25 @@ describe('recordStateMutation outcomes', () => {
     expect(outcome).toEqual({ applied: true });
   });
 
+  // WR-04: cover the section-exists-but-blocker-absent branch in
+  // removeFromBlockersList (adapters/markdown/index.ts `filtered.length
+  // === lines.length` short-circuit). A section-absent test already covers
+  // the other nothing_to_remove branch; this one guards the short-circuit.
+  it('blocker_resolved: applied:false + reason:nothing_to_remove when section exists but named blocker absent', async () => {
+    await seedStateMd(adapter, '# State\n\n## Blockers\n\n- Other blocker\n');
+
+    const outcome = await adapter.recordStateMutation({
+      type: 'blocker_resolved',
+      payload: { text: 'Does not exist' },
+    });
+
+    expect(outcome).toEqual({ applied: false, reason: 'nothing_to_remove' });
+
+    // And the existing blocker must still be present (no accidental clobber).
+    const content = await adapter.getRecord('STATE.md');
+    expect(content).toContain('- Other blocker');
+  });
+
   it('todo_count_update: applied:true + created_section when Pending todos absent', async () => {
     await seedStateMd(adapter, '# State\n\n## Current Position\n\nPhase: 1\n');
 
@@ -192,6 +306,18 @@ describe('recordStateMutation outcomes', () => {
     });
 
     expect(outcome).toEqual({ applied: true, created_section: '## Pending todos' });
+  });
+
+  // WR-04: cover the applied:true bare path (section already exists).
+  it('todo_count_update: applied:true bare when Pending todos section exists', async () => {
+    await seedStateMd(adapter, '# State\n\n## Pending todos\n\n(none)\n');
+
+    const outcome = await adapter.recordStateMutation({
+      type: 'todo_count_update',
+      payload: { count: 5 },
+    });
+
+    expect(outcome).toEqual({ applied: true });
   });
 
   it('deferred_items remove: applied:false + reason:nothing_to_remove when item absent', async () => {
@@ -214,6 +340,19 @@ describe('recordStateMutation outcomes', () => {
     });
 
     expect(outcome).toEqual({ applied: true });
+  });
+
+  // WR-04: cover the scaffold path for deferred_items add — STATE.md without
+  // a Deferred Ideas section.
+  it('deferred_items add: applied:true + created_section when Deferred Ideas absent', async () => {
+    await seedStateMd(adapter, '# State\n\n## Current Position\n\nPhase: 1\n');
+
+    const outcome = await adapter.recordStateMutation({
+      type: 'deferred_items',
+      payload: { items: ['Plugin system'], action: 'add' },
+    });
+
+    expect(outcome).toEqual({ applied: true, created_section: '## Deferred Ideas' });
   });
 });
 
