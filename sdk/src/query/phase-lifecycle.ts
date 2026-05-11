@@ -59,7 +59,6 @@ import {
   renumberIntegerPhases,
   updateRoadmapAfterRemoval,
   updateStatePhaseFields,
-  updateStateProgressFields,
   updatePerformanceMetrics,
   decrementStateTotalPhases,
 } from './phase-helpers.js';
@@ -997,26 +996,19 @@ export const phaseComplete: QueryHandler = async (args, projectDir, workstream) 
 
     await updatePerformanceMetrics(adapter, workstream, phaseNum, { planCount, summaryCount }, projectDir);
 
-    // Update frontmatter: increment completed_phases and recalculate percent.
-    // mergeFrontmatter is a shallow Object.assign, so we rebuild a nested
-    // `progress` subtree from the current frontmatter to avoid clobbering
-    // untouched fields.
+    // Update only non-derived frontmatter fields. Progress counters
+    // (total_phases, completed_phases, total_plans, completed_plans, percent)
+    // are derived by syncStateFrontmatter (state.ts:buildStateFrontmatter) from
+    // the on-disk phase tree on every adapter write — we intentionally do NOT
+    // write them here. Before this became the single-writer rule, phase.complete
+    // used a phase-weighted formula (new_completed / total_phases) while the
+    // sync path used plan-weighted (completed_plans / total_plans), so
+    // `progress.percent` bounced between the two values depending on which
+    // wrote last (see Phase 3 UAT Bug 2).
     const statePath = planningRelativePath(workstream, 'STATE.md');
-    const existingFm = (await adapter.getFrontmatter(statePath)) as Record<string, unknown> | null;
-    const existingProgress = ((existingFm && (existingFm.progress as Record<string, unknown>)) ?? {}) as Record<string, unknown>;
-    const rawCompleted = Number(existingProgress.completed_phases ?? 0);
-    const rawTotal = Number(existingProgress.total_phases ?? 0);
-    if (Number.isFinite(rawCompleted)) {
-      const newCompleted = rawCompleted + 1;
-      const progress: Record<string, unknown> = { ...existingProgress, completed_phases: newCompleted };
-      if (rawTotal > 0) {
-        progress.percent = Math.round((newCompleted / rawTotal) * 100);
-      }
-      await adapter.mergeFrontmatter(statePath, {
-        progress,
-        status: isLastPhase ? 'milestone_complete' : 'ready_to_plan',
-      });
-    }
+    await adapter.mergeFrontmatter(statePath, {
+      status: isLastPhase ? 'milestone_complete' : 'ready_to_plan',
+    });
   });
 
   return {
