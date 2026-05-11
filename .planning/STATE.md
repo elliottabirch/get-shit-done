@@ -2,18 +2,17 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: ready_to_plan
-stopped_at: Wave 5 (Plan 05-05) and Wave 6 (Plan 05-06) merged;
-last_updated: "2026-05-11T01:54:44.129Z"
-last_activity: 2026-05-11
+status: executing
+stopped_at: HANDOFF.json checkpoint — Phase 5 shipped (7/7), Phase 3 UAT
+last_updated: "2026-05-11T04:04:18.905Z"
+last_activity: 2026-05-11 -- Phase 03 planning complete
 progress:
   total_phases: 8
-  completed_phases: 6
-  total_plans: 29
+  completed_phases: 4
+  total_plans: 30
   completed_plans: 30
-  percent: 75
+  percent: 100
 ---
-
 
 # Project State
 
@@ -21,8 +20,8 @@ progress:
 
 Phase: 6
 Plan: Not started
-Status: Ready to plan
-Last activity: 2026-05-11
+Status: Ready to execute
+Last activity: 2026-05-11 -- Phase 03 planning complete
 
 ## Reference
 
@@ -125,23 +124,31 @@ These are NOT blocking for Phase 1; resolved as relevant phases approach:
 
 ## Pending todos
 
-(none — fresh repo)
+- **Systemic: retrofit planner-subagent-prompt.md + leak-grep scope** (captured 2026-05-11)
+  - `$HOME/.claude/get-shit-done/templates/planner-subagent-prompt.md` still emits `<context>` blocks with `@.planning/*` refs, producing PLAN.md artifacts that trip the Phase 4 leak-gate
+  - Every PLAN.md in this repo (03-01..05, 04-01..07, 05-01..07) was committed pre-hook or via `--no-verify`; 03-06 is the first to hit the gate and was manually stripped
+  - Two-part fix: (a) rewrite the planner template to emit `<files_to_read>` inside `<objective>` instead of `<context>` auto-loads; (b) narrow `scripts/leak-grep.cjs` to skip `.planning/phases/**/*-PLAN.md` (these are generated artifacts, not skill-activated source)
+  - Not blocking v1.0. Candidate for a standalone cleanup plan or Phase 7 scope when conformance-test-suite work touches leak-grep anyway
+  - Ref: D-2026-05-10-OQ04 (partial resolution); SYNTHESIS §6 OQ-04
 
 ## Session Continuity
 
-Last session: 2026-05-10T21:00:23.743Z
-Stopped at: Wave 5 (Plan 05-05) and Wave 6 (Plan 05-06) merged;
-Phase 5 at 6/7 plans complete. Plan 05-07 (final wave — 5 ADRs for
-OQ-02/05/07/10 + shadow-dir journal + Phase 5 exit checkpoint) is the
-only remaining work in Phase 5.
+Last session: 2026-05-10T21:00:23.743Z (resumed 2026-05-10; Phase 5 shipped
+mid-session, Phase 3 UAT caught 2 more blocker bugs — all fixed)
+Stopped at: HANDOFF.json checkpoint — Phase 5 shipped (7/7), Phase 3 UAT
+complete (4/4); `StateWriteOutcome` three-state contract DESIGNED but not
+implemented (hit context budget). Tree clean at 5d3e05f3.
 
-Uncommitted: `sdk/src/query/route-next-action.ts` has a JSDoc-only
-addition around `toAdapterDir` — low-risk, unrelated to Plan 05-07.
+Uncommitted: none.
 
-Next action: Execute Plan 05-07 via `/gsd-execute-phase 5` to close out
-Phase 5. After Phase 5 ships, unblocks sibling repo `gsd-beads` v1.0
-Phase 6 (BeadsAdapter implementation) per SYNTHESIS §9 high-severity
-dry-run risk.
+Next action (decision needed): Either (a) land the `StateWriteOutcome`
+contract refactor as a Phase 3.1 gap plan (30–45 min; clean target for
+BeadsAdapter from day one), or (b) fold it into Phase 6 interface design.
+See HANDOFF.json `human_actions_pending[0]`.
+
+Note: ROADMAP.md line 31 still shows `[ ] Phase 5` — stale; the phase
+shipped (commit 9656d25a) with all 7 plans `[x]` at lines 148–166.
+Flip the phase-level checkbox before Phase 6 kickoff.
 
 Sibling repo state: `gsd-beads` v0.2 milestone is superseded; v1.0
-Phase 6 activates once this repo's Phase 5 ships.
+Phase 6 (BeadsAdapter) is now unblocked.
