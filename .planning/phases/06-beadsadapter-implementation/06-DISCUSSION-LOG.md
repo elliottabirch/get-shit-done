@@ -174,3 +174,79 @@ User asked about end-to-end distribution + runtime wiring. Explained the Phase 8
 ## Reviewed todos (not folded)
 
 - cjs-sdk-golden-parity-failures.md — belongs to Phase 8 DIST-04 or standalone debt plan, not Phase 6 sibling-repo work
+
+---
+
+# Session 2 — post-hybrid-pivot re-discuss (2026-05-11)
+
+**Trigger:** Previous CONTEXT.md was amendment-appended after the user surfaced that `/Volumes/code/gsd-beads` already exists as a mature repo (~15 KLOC shipped, 71 conformance tests, 13 spikes) rather than the greenfield scaffold the original discussion assumed. Archived to `archive-greenfield/06-CONTEXT-pre-pivot.md`; `/gsd-discuss-phase 6 --chain` re-run for fresh CONTEXT.md.
+
+**Areas discussed:** D-MAPPING, D-TECH-STACK, D-SCAFFOLD, D-TXN-SPIKE
+
+## D-MAPPING — storage model (AMENDED)
+
+| Option | Description | Selected |
+|--------|-------------|----------|
+| A. Accept sibling's labels-first + description-blob | Proven 71 tests; zero bd-primitive risk; maps cleanly to 3 recordState* families via `--author gsd:event:<type>` + `bd remember --key` + label +/-. | |
+| B. Spike sub-records first, fall back to labels-first if unavailable | Plan 06-01 spikes bd v1.0.3 for any named-JSON-field primitive beyond --description. If yes → original D-MAPPING. If no → labels-first fallback. Consolidates with D-TXN-SPIKE into one Plan 06-01. | ✓ |
+| C. Force sub-records via structured JSON inside description blob | JSON-in-description workaround; loses human-readability in bd-native views. | |
+
+**User's choice:** B. Spike sub-records first, fall back to labels-first if unavailable
+
+**Notes:** User wants empirical evidence on bd primitives before locking the storage shape. Mirrors D-TXN-SPIKE's spike-then-ship pattern; consolidates both bd-primitive questions ("what does bd v1.0.3 actually expose?") into Plan 06-01's scope. Outcome gates D-MAPPING-SCHEMA schema scope (sub-records → 12+ per-canonical-file schemas; labels-first → just phase.ts + state.ts + generic parsers).
+
+## D-TECH-STACK — language + test runner (NEW)
+
+| Option | Description | Selected |
+|--------|-------------|----------|
+| A. Stay .mjs + node:test | Sibling's stack; fastest; zero rewrite; loses author-site compile-time type enforcement. | |
+| B. Migrate everything to .ts + vitest | ~1000 LOC port; drops node:test; full compile-time type enforcement of StateWriteOutcome + event discriminated unions. | ✓ |
+| C. Hybrid — .mjs internals + .ts compliance surface | Port only adapter-compliance modules to .ts; keep .mjs for bd internals. Bounded scope; mental-model split. | |
+
+**User's choice:** B. Migrate everything to .ts + vitest
+
+**Notes:** User prioritized compile-time type safety over hybrid's scope reduction. Reasoning: sibling's Phase 7 shipped WARN-level frontmatter/YAML bugs (WR-02/WR-03/WR-05) that TS would have caught at edit-time; single-stack consumption cleaner than hybrid's mental-model split. ~2× original LOC budget; offset by catching several shape bugs during the port.
+
+## D-SCAFFOLD — repo reset mechanics (AMENDED)
+
+| Option | Description | Selected |
+|--------|-------------|----------|
+| A. Archive-branch + selective prune + whitelist port to .ts | git branch v0.2-archive; git rm -rf everything except whitelist; port whitelisted .mjs → .ts during reset; delete shadow-era artifacts; rewrite README/CLAUDE.md/CONTRIBUTING.md. | ✓ |
+| B. Archive-branch + full reset (re-author ~1000 LOC fresh) | Cleanest separation; loses proven-correct code + validating test fixtures. | |
+| C. Keep archive/ in-tree (no archive-branch) | Leave sibling's archive/ where it is; build v1.0 alongside. Clutters working tree. | |
+| D. Amend the whitelist — discuss which files port | Adjust the set before locking. | |
+
+**User's choice:** A. Archive-branch + selective prune + whitelist port to .ts
+
+**Notes:** ~750 LOC of proven-correct code (format/phase 251, bd/helper 65, bd/findRoot 68, format/section ~130, format/frontmatter 107, pathRouter 97, helpers 105, _atomicWrite 30) has real port value vs re-author cost. Archive-branch preserves full history essentially free. Combined with D-TECH-STACK: the whitelist drives concrete .mjs → .ts port work in Plan 06-01 (or a Plan 06-02 port task per planner's call). Whitelist also calls out 2 amendments during port: Landmine 3 (adapter-context CWD in bd helper) and WR-05 (atomic-write ms-resolution race).
+
+## D-TXN-SPIKE — withTransaction outcomes (AMENDED, widened to 3)
+
+| Option | Description | Selected |
+|--------|-------------|----------|
+| A. Widen spike to 3 outcomes (A/B/C) | A: in-memory buffer (~150 LOC, mid-txn partial-commit risk). B: staging store + bead-hash bookmark (closes §9 gate by construction IF bd exposes primitives). C: file-snapshot restore (sibling-proven in 71 tests; slow ~400-700ms per rollback but reliable). Ship best-available; neutral documentation. | ✓ |
+| B. Lock Outcome C upfront (sibling-proven, skip spike) | Skip bd-primitive spike; ship C directly. Misses possibility of Outcome B's perf win. | |
+| C. Keep original 2 outcomes (A/B), ignore sibling's C | Original plan; ignores Outcome C despite sibling proving it works. | |
+
+**User's choice:** A. Widen spike to 3 outcomes (A/B/C)
+
+**Notes:** Ignoring sibling's proven file-snapshot pattern (Outcome C) just because it's slower than staging-store-cutover would throw away ~800ms-per-rollback verified reliability. Spike evaluates all three; Plan 06-03 (withTransaction impl) ships whichever outcome wins per the spike's §7 locked verdict. `capabilities.transaction: true` in all three outcomes; `capabilities.snapshot: true` in B AND C (both provide snapshot semantics), false in A. Documentation names the shipped outcome neutrally — no "fallback" framing.
+
+## Claude's Discretion (this session)
+
+- Spike sequencing within Plan 06-01 — mapping-spike vs txn-spike order; standalone doc vs test file vs script
+- Plan count and wave structure — amendment proposes 4 plans × 4 waves; planner may widen to 5 if Outcome A (sub-records) ships because schema-authoring scope inflates
+- Format module internal organization — single file per canonical schema vs one big format.ts
+- BeadsAdapter.init() exact probe invocation — default: port findRoot.ts's walk (4 topology cases proven)
+- Error-class export path — src/errors.ts vs inline
+- Dep-edge synthesizer strategy — lazy vs eager-cache
+- Sibling-repo branch strategy — long-lived main vs per-plan feature branches
+- BeadsAdapter package export path — preserve sibling's `./src/adapter.*` path during port (minimizes package.json diff)
+- WARN-level landmine triage — which of WR-01/WR-09 to fix-during-port vs defer
+
+## Deferred Ideas (this session)
+
+- If D-MAPPING spike lands Outcome B (labels-first): document "sub-records unavailable in bd v1.0.3" as a carry-forward learning + upstream bd feature request
+- WARN-level landmines WR-01, WR-09 deferred to planner's budget call
+- Systemic planner-subagent-prompt.md + leak-grep scope todo (from STATE.md; not Phase 6 scope)
+
