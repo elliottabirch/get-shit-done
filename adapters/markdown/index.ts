@@ -37,10 +37,14 @@ import type { AppendEvent, MutationEvent, SignalEvent } from '../state-event-typ
 
 // ─── CJS path resolution ───────────────────────────────────────────────────────
 // Mirrors the three-candidate probe from sdk/src/query/state-project-load.ts.
-// adapters/markdown/index.ts is 2 levels deep from repo root, so '../../' reaches root.
-
+// At runtime `import.meta.url` may be either of:
+//   - adapters/dist/markdown/index.js  (dist, 3 levels deep)  → `../../../` reaches root
+//   - adapters/markdown/index.ts       (src under vitest, 2 levels deep) → `../../` reaches root
 const BUNDLED_LIB_DIR = fileURLToPath(
-  new URL('../../get-shit-done/bin/lib/', import.meta.url),
+  new URL(
+    (import.meta.url.includes('/dist/') ? '../../../' : '../../') + 'get-shit-done/bin/lib/',
+    import.meta.url,
+  ),
 );
 
 function resolveLibPath(name: string, projectDir: string): string {
@@ -68,7 +72,7 @@ interface PlanningWorkspaceCjs {
 interface FrontmatterCjs {
   cmdFrontmatterGet(cwd: string, filePath: string, field?: string, raw?: boolean): unknown;
   cmdFrontmatterSet(cwd: string, filePath: string, field: string, value: unknown, raw?: boolean): void;
-  cmdFrontmatterMerge(cwd: string, filePath: string, data: Record<string, unknown>, raw?: boolean): void;
+  cmdFrontmatterMerge(cwd: string, filePath: string, data: string, raw?: boolean): void;
 }
 
 interface CoreCjs {
@@ -198,6 +202,39 @@ export class MarkdownAdapter implements StorageAdapter {
     }
   }
 
+  async removeCollection(prefix: string): Promise<void> {
+    // Transactions: stage removal by enumerating the subtree and marking each
+    // entry. Txn commit (see commitTxn) materializes via the shadow-dir rename
+    // + removal pass already in place; explicit rmdir at commit is not needed
+    // because fs.rm -r is applied during commit for `removedPaths` roots.
+    if (this.activeTxn) {
+      // Walk current real subtree + shadow to enumerate all paths to remove.
+      const realAbs = this.resolve(prefix);
+      try {
+        const realEntries = await readdir(realAbs, { withFileTypes: true });
+        for (const entry of realEntries) {
+          const childRel = `${prefix}/${entry.name}`;
+          if (entry.isDirectory()) {
+            await this.removeCollection(childRel);
+          } else {
+            await this.removeRecord(childRel);
+          }
+        }
+      } catch (err) {
+        if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
+      }
+      this.activeTxn.removedPaths.add(prefix);
+      return;
+    }
+    const abs = this.resolve(prefix);
+    try {
+      await rm(abs, { recursive: true, force: true });
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === 'ENOENT') return;
+      throw err;
+    }
+  }
+
   async listCollection(prefix: string, filter?: RecordFilter): Promise<RecordRef[]> {
     const realAbs = this.resolve(prefix);
     let entries: import('node:fs').Dirent[] = [];
@@ -305,8 +342,20 @@ export class MarkdownAdapter implements StorageAdapter {
   // Wraps frontmatter.cjs via createRequire (D-02).
 
   async getFrontmatter(path: string, field?: string): Promise<unknown> {
-    const fm = this.req(this.libPaths['frontmatter.cjs']) as FrontmatterCjs;
-    return fm.cmdFrontmatterGet(this.projectDir, this.resolve(path), field, false);
+    // The CJS `cmdFrontmatterGet` is a CLI command that writes to stdout and
+    // returns undefined — it cannot be used programmatically. Parse directly
+    // via the exported `extractFrontmatter` helper, reading through the
+    // adapter's record layer so txn-shadow state is respected.
+    const content = await this.getRecord(path);
+    if (content === null) return undefined;
+    const fmMod = this.req(this.libPaths['frontmatter.cjs']) as {
+      extractFrontmatter: (c: string) => Record<string, unknown>;
+    };
+    const fm = fmMod.extractFrontmatter(content);
+    if (field) {
+      return fm[field];
+    }
+    return fm;
   }
 
   async updateFrontmatter(path: string, field: string, value: unknown): Promise<void> {
@@ -315,8 +364,66 @@ export class MarkdownAdapter implements StorageAdapter {
   }
 
   async mergeFrontmatter(path: string, patch: Record<string, unknown>): Promise<void> {
+    // When a txn is active, the CJS helper's direct fs access would bypass the
+    // shadow-dir — reading stale content and writing outside the txn. Route
+    // through getRecord/putRecord so writes land in the shadow and reads see
+    // prior in-txn mutations. No-txn behavior remains identical: the fallback
+    // path below still calls the CJS helper against the real file.
+    if (this.activeTxn) {
+      const current = (await this.getRecord(path)) ?? '';
+      const existingFm = this.extractFrontmatterFromContent(current);
+      const body = this.stripFrontmatterFromContent(current);
+      const merged: Record<string, unknown> = { ...existingFm, ...patch };
+      const yaml = this.reconstructFrontmatterYaml(merged);
+      await this.putRecord(path, `---\n${yaml}\n---\n\n${body}`);
+      return;
+    }
     const fm = this.req(this.libPaths['frontmatter.cjs']) as FrontmatterCjs;
-    fm.cmdFrontmatterMerge(this.projectDir, this.resolve(path), patch, false);
+    fm.cmdFrontmatterMerge(this.projectDir, this.resolve(path), JSON.stringify(patch), false);
+  }
+
+  /** Extract YAML frontmatter into a JS object via the CJS helper's shared parser. */
+  private extractFrontmatterFromContent(content: string): Record<string, unknown> {
+    const fm = this.req(this.libPaths['frontmatter.cjs']) as {
+      extractFrontmatter: (c: string) => Record<string, unknown>;
+    };
+    return fm.extractFrontmatter(content);
+  }
+
+  /** Strip the leading `---\n...\n---\n` block, if present. */
+  private stripFrontmatterFromContent(content: string): string {
+    const m = content.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?/);
+    return m ? content.slice(m[0].length) : content;
+  }
+
+  /** Reconstruct YAML frontmatter using the CJS helper's formatter. */
+  private reconstructFrontmatterYaml(data: Record<string, unknown>): string {
+    const fm = this.req(this.libPaths['frontmatter.cjs']) as {
+      reconstructFrontmatter?: (d: Record<string, unknown>) => string;
+      spliceFrontmatter?: (content: string, data: Record<string, unknown>) => string;
+    };
+    if (typeof fm.reconstructFrontmatter === 'function') {
+      return fm.reconstructFrontmatter(data);
+    }
+    // Fallback: splice into an empty-fm document and extract the YAML block.
+    if (typeof fm.spliceFrontmatter === 'function') {
+      const spliced = fm.spliceFrontmatter('---\n---\n\nBODY', data);
+      const m = spliced.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n/);
+      return m ? m[1] : '';
+    }
+    // Last resort: naive serialization. Only triggers if CJS surface changes.
+    const lines: string[] = [];
+    for (const [k, v] of Object.entries(data)) {
+      if (v !== null && typeof v === 'object' && !Array.isArray(v)) {
+        lines.push(`${k}:`);
+        for (const [ck, cv] of Object.entries(v as Record<string, unknown>)) {
+          lines.push(`  ${ck}: ${JSON.stringify(cv)}`);
+        }
+      } else {
+        lines.push(`${k}: ${JSON.stringify(v)}`);
+      }
+    }
+    return lines.join('\n');
   }
 
   // ─── markdownLockfile group (D-09 / ADAPTER-07) ───────────────────────────
@@ -487,9 +594,15 @@ export class MarkdownAdapter implements StorageAdapter {
   /** D-01: apply shadow-dir changes to real planning tree. Idempotent on dir creation. */
   private async _commitShadowDir(ctx: TxnCtx): Promise<void> {
     // 1) Apply removes first (so touchedPaths can recreate if needed).
+    // Collection removals (directories) come through removeCollection and may
+    // appear as either a leaf path or a prefix containing other removedPaths;
+    // use `rm -rf` to handle both file and directory cases uniformly and to
+    // survive macOS EPERM on directory `unlink` (EISDIR on linux).
     for (const relPath of ctx.removedPaths) {
       const realAbs = this.resolve(relPath);
-      try { await unlink(realAbs); } catch (err) {
+      try {
+        await rm(realAbs, { recursive: true, force: true });
+      } catch (err) {
         if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
       }
     }
@@ -736,8 +849,19 @@ export class MarkdownAdapter implements StorageAdapter {
   /** Rebuild frontmatter from body + disk via syncStateFrontmatter. */
   private async syncFrontmatter(body: string): Promise<string> {
     // Dynamic import using a variable to prevent TypeScript from following
-    // the import for rootDir analysis (adapters tsconfig rootDir = ".")
-    const modulePath = '../../sdk/src/query/state-mutation.js';
+    // the import for rootDir analysis (adapters tsconfig rootDir = ".").
+    //
+    // At runtime `import.meta.url` may point to either of:
+    //   - adapters/dist/markdown/index.js   (normal dist path, 3 levels deep)
+    //   - adapters/markdown/index.ts        (src path under vitest, 2 levels deep)
+    // Choose the relative prefix based on which one we see; otherwise the
+    // computed candidate URLs walk one parent too many from src and produce
+    // `/Volumes/code/sdk/...` instead of `/Volumes/code/get-shit-done/sdk/...`.
+    const isDist = import.meta.url.includes('/dist/');
+    const prefix = isDist ? '../../../' : '../../';
+    const distUrl = new URL(`${prefix}sdk/dist/query/state-mutation.js`, import.meta.url);
+    const srcUrl = new URL(`${prefix}sdk/src/query/state-mutation.js`, import.meta.url);
+    const modulePath = existsSync(fileURLToPath(distUrl)) ? distUrl.href : srcUrl.href;
     const mod = await (import(/* webpackIgnore: true */ modulePath) as Promise<{
       syncStateFrontmatter: (content: string, projectDir: string) => Promise<string>;
     }>);
