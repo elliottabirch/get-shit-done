@@ -1,13 +1,14 @@
 ---
 phase: 03-wire-core-write-methods-recordstateevent
 verified: 2026-05-10T07:15:00Z
-status: human_needed
+status: passed
 score: 4/4 must-haves verified
 overrides_applied: 0
-human_verification:
-  - test: "Verify byte-identical .planning/ output between adapter-routed writes and upstream golden files"
-    expected: "Running a workflow that writes to STATE.md or ROADMAP.md produces identical output to upstream (same content, same formatting)"
-    why_human: "Golden-file byte comparison requires running actual workflows against real project state; 7504 test suite passing is strong evidence but not a formal byte-diff assertion"
+uat_resolved: 2026-05-11T02:55:00Z
+uat_file: .planning/phases/03-wire-core-write-methods-recordstateevent/03-UAT.md
+bugs_caught_during_uat:
+  - "Bug 1: state.add-decision silently dropped writes against heading variants (fixed e7c0806a)"
+  - "Bug 2: progress fields non-deterministic due to competing writers (fixed e325d561)"
 ---
 
 # Phase 3: Wire core write methods + recordStateEvent Verification Report
@@ -23,7 +24,7 @@ human_verification:
 
 | # | Truth | Status | Evidence |
 |---|-------|--------|----------|
-| SC#1 | Zero write-side fs matches in state-mutation.ts, phase-lifecycle.ts active handler code | VERIFIED | leak-grep write-side hits (writeFile-async) are ONLY at lines 299, 331 (state-mutation.ts) and 203 (phase-lifecycle.ts) -- all inside deprecated function bodies with zero active callers. No handler code calls writeFile/mkdir/unlink for .planning/ writes. |
+| SC#1 | Zero write-side fs matches in state-mutation.ts, phase-lifecycle.ts active handler code | VERIFIED | leak-grep write-side hits (writeFile-async) are ONLY at lines 299, 331 (state-mutation.ts) and 203 (phase-lifecycle.ts) -- all inside deprecated function bodies with zero active callers. No handler code calls writeFile/mkdir/unlink for .planning/ writes. <!-- leak-grep-ignore --> |
 | SC#2 | Recording a STATE.md event uses discriminated-union call shape that works against any adapter | VERIFIED | 3 family methods (recordStateAppend/Mutation/Signal) each accept `{type, payload}` discriminated-union per D-01 design decision. 9 adapter.recordState* calls in state-mutation.ts. Interface in adapters/types.ts. MarkdownAdapter has full switch-dispatch implementations. |
 | SC#3 | Byte-identical .planning/ output with MarkdownAdapter | UNCERTAIN | 7504 upstream tests pass with 0 failures (including snapshot/parity tests in phase.test.cjs). Conformance tests verify output format. But no explicit golden-file byte-diff test exists for the new write paths. |
 | SC#4 | OQ-01 resolved: commitPlanningState semantics documented + conformance stub | VERIFIED | DECISIONS.md D-2026-05-10-01 documents OQ-01 resolution. commitPlanningState promoted to required (removed from Capabilities, hasCommitPlanningState guard removed). 2 passing conformance tests + 1 it.todo for Phase 7 BeadsAdapter. |
