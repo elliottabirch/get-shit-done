@@ -25,6 +25,32 @@ export type NamedDocCategory =
 /** D-14 (Phase 5): fixed-key discriminator for the 'root' category singletons at .planning/ root. */
 export type RootNamedDocKey = 'HANDOFF' | 'CONTINUE-HERE' | 'DECISIONS-INDEX';
 
+/**
+ * Result of a recordState* call. Replaces the prior Promise<void> return
+ * so callers can distinguish three cases that were previously
+ * indistinguishable:
+ *
+ *   1. applied: true                    — data landed (section already existed)
+ *   2. applied: true + created_section  — data landed AND helper scaffolded
+ *                                         the target section first (Phase 3
+ *                                         UAT fix, surfaced as typed signal)
+ *   3. applied: false, reason: 'duplicate'         — dedupe hit; caller's
+ *                                                    intent to add an entry
+ *                                                    already present (no-op)
+ *   4. applied: false, reason: 'nothing_to_remove' — caller asked to remove
+ *                                                    something that isn't
+ *                                                    there (structural no-op)
+ *
+ * Motivated by Phase 3 UAT commits e7c0806a + e325d561 + 08b4054a where
+ * recordState* helpers silently no-op'd on regex mismatch while reporting
+ * success. The create-if-missing fix stopped the silent drop; this type
+ * surfaces the full outcome so callers can branch on it. See ADR
+ * D-2026-05-10-08 for the full design rationale.
+ */
+export type StateWriteOutcome =
+  | { applied: true; created_section?: string }
+  | { applied: false; reason: 'duplicate' | 'nothing_to_remove' };
+
 export interface Capabilities {
   // Required core groups (D-05): true literal forces compile-time presence
   record: true;
@@ -86,10 +112,12 @@ export interface StorageAdapter {
   getNamedDoc(category: Exclude<NamedDocCategory, 'root'>, key: string, opts?: { workstream?: string }): Promise<string | null>;
   commitPlanningState(message: string, files?: string[]): Promise<void>;
 
-  // Event families (D-01/D-04): grouped by mutation semantics
-  recordStateAppend(event: AppendEvent): Promise<void>;
-  recordStateMutation(event: MutationEvent): Promise<void>;
-  recordStateSignal(event: SignalEvent): Promise<void>;
+  // Event families (D-01/D-04): grouped by mutation semantics.
+  // Returns StateWriteOutcome (three-state contract, D-2026-05-10-08) — see
+  // StateWriteOutcome JSDoc for the motivating Phase 3 UAT scars.
+  recordStateAppend(event: AppendEvent): Promise<StateWriteOutcome>;
+  recordStateMutation(event: MutationEvent): Promise<StateWriteOutcome>;
+  recordStateSignal(event: SignalEvent): Promise<StateWriteOutcome>;
 }
 
 export class UnsupportedCapabilityError extends Error {

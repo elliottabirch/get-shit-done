@@ -889,3 +889,130 @@ work or at Phase 6 start; not blocking Phase 5).
 **Status:** Phase 5 shadow-dir journal upgrade; closes SYNTHESIS §9 dry-run gate for Phase 6 activation.
 
 ---
+
+## D-2026-05-10-08 — StateWriteOutcome three-state contract (Phase 3 gap closure)
+
+**Date:** 2026-05-10
+**Trigger:** Phase 3 UAT (2026-05-10) caught two blocker bugs where
+`recordState*` methods silently no-op'd on regex mismatch while reporting
+success. Three commits landed the defensive fixes:
+
+- `e7c0806a` — broadened the `state.add-decision` heading regex and
+  switched to `appendToOrCreateSection` so decisions land even when the
+  target STATE.md lacks a "## Decisions" heading. Added two regression
+  tests asserting file content.
+- `e325d561` — made `syncStateFrontmatter` the single writer of progress
+  fields (stopped phase-weighted vs plan-weighted writers from fighting
+  and producing non-deterministic values).
+- `08b4054a` — systemic hardening: applied the create-if-missing pattern
+  to `blocker_added`, `metric`, and `todo_count_update` dispatchers.
+
+Those fixes stopped the bleeding but left callers unable to distinguish
+three semantically-different outcomes:
+
+1. **Applied** — entry landed (optionally with newly-scaffolded section)
+2. **Intentional no-op** — duplicate dedupe fired
+3. **Structural no-op** — nothing-to-remove (resolving an absent blocker)
+
+All three returned `Promise<void>` and callers saw undifferentiated
+success. `stateAddRoadmapEvolution` worked around this by doing a caller-
+side pre-read + line-match dedupe loop — duplicating the adapter's own
+internal dedupe logic.
+
+**Decision:** The three `recordState*` methods on `StorageAdapter` now
+return a discriminated union:
+
+```typescript
+export type StateWriteOutcome =
+  | { applied: true; created_section?: string }
+  | { applied: false; reason: 'duplicate' | 'nothing_to_remove' };
+```
+
+- `applied: true` — the mutation landed. `created_section` is populated
+  when the adapter had to scaffold a missing heading (surfaces the
+  Phase 3 UAT-fix semantics as a typed signal rather than silent-true).
+- `applied: false, reason: 'duplicate'` — dedupe hit; the entry already
+  exists. Callers can distinguish intentional re-append from error.
+- `applied: false, reason: 'nothing_to_remove'` — structural no-op; the
+  caller asked to remove something that isn't there. The two
+  discriminants (`'duplicate'`, `'nothing_to_remove'`) are mutually
+  exclusive and every Append/Mutation/Signal no-op path maps to
+  exactly one of them.
+
+Caller-side dedupe in `stateAddRoadmapEvolution` is REMOVED (it was
+duplicating adapter-side dedupe logic in `appendToRoadmapEvolution`).
+All 8 SDK callsites in `sdk/src/query/state-mutation.ts` consume the
+outcome and surface the distinction to their handler responses.
+
+**Rationale:**
+
+- **BeadsAdapter unblock (primary):** Phase 6 (sibling repo `gsd-beads`)
+  is imminent. Landing the contract BEFORE Phase 6 gives BeadsAdapter a
+  clean target from day one. The alternative (fold into Phase 6) makes
+  BeadsAdapter tolerate the current two-state contract and refactor
+  later — technically possible but punts known work into an adapter
+  that already has spike-findings backlog.
+- **Preserves UAT fixes:** The create-if-missing behavior from e7c0806a
+  and 08b4054a is RETAINED unchanged. The type system surfaces it
+  (`created_section`) instead of hiding it (silent `applied: true`).
+  The 2 regression tests from 08b4054a are migrated to additionally
+  assert on `outcome.created_section === '## Performance Metrics'` /
+  `'## Blockers'` — content assertions preserved, type assertions added.
+- **Single source of truth for dedupe:** Before this change, adapter-
+  side dedupe (`appendToRoadmapEvolution` returning content unchanged)
+  and caller-side dedupe (`stateAddRoadmapEvolution` pre-read loop)
+  coexisted, with the caller's version winning. After this change, the
+  adapter is the single source of truth and callers narrow on
+  `outcome.reason`.
+- **Behavior change called out:** When `outcome.applied === false`, the
+  adapter now SKIPS the `syncFrontmatter + normalizeMd + putRecord`
+  sequence. Prior behavior rewrote the file unchanged on dedupe hits,
+  causing `last_updated` frontmatter churn. The new behavior is cleaner
+  but visible — documented here so future debuggers find the rationale.
+- **`resume` existence check:** `recordStateSignal({type: 'resume'})`
+  now checks for WAITING.json existence before the unlink, so callers
+  can distinguish "resumed a real pause" from "nothing to resume."
+  Low-risk behavior sharpening; matches the three-state contract.
+- **`updateSessionFields` create-if-missing extension:** Extended the
+  create-if-missing pattern to session updates: when no recognizable
+  session field matches, scaffold a `## Session Continuity` section
+  at EOF and surface `created_section` in the outcome. Parallel to
+  the decision / metric / blocker_added / todo_count_update pattern
+  from commit 08b4054a; HelperResult discipline made the silent
+  no-op impossible to ignore. Flagged in Plan 03-06 `<scope_concerns>`
+  and explicitly surfaced here rather than silently absorbed.
+
+**Consequences:**
+
+- `adapters/types.ts`: +1 exported type, 3 method-signature changes.
+- `adapters/markdown/index.ts`: 1 module-level type (`HelperResult`) +
+  1 imported type (`StateWriteOutcome`), 7 internal helpers refactored,
+  1 dead helper (`appendToSection`) deleted (zero remaining callers),
+  3 public methods refactored.
+- `sdk/src/query/state-mutation.ts`: 8 callsites updated; caller-side
+  dedupe removed from `stateAddRoadmapEvolution`.
+- Conformance suite: +1 new file (`write-outcome.test.ts`, 16 tests)
+  covering all 4 outcome variants per family; 2 existing regression
+  tests migrated to assert on `created_section`.
+- Handler response shapes: callers now receive `reason` and
+  `created_section` fields when applicable. Backward-compatible
+  additions to the response JSON; no existing field removed or renamed.
+- Baselines preserved: SDK unit 1567/0 → 1567/0; conformance 117 → 133
+  (117 + 16 new); leak-grep 0 active-handler hits.
+
+**References:**
+
+- HANDOFF.json `decisions[3]` — the canonical three-state design.
+- Phase 3 UAT file: `.planning/phases/03-wire-core-write-methods-recordstateevent/03-UAT.md`
+- Commits: `e7c0806a` (decision fix), `e325d561` (progress single-writer),
+  `08b4054a` (blocker/metric/todo hardening + 2 regression tests),
+  `a03f199c` (dead `updateStateProgressFields` removal), `5d3e05f3`
+  (Phase 5 ship + Phase 3 UAT bug fixes pause point).
+- Gap closure plan: `.planning/phases/03-wire-core-write-methods-recordstateevent/03-06-PLAN.md`
+- Prior related ADRs: D-2026-05-10-01 (OQ-01 resolution),
+  D-2026-05-10-02 (commitPlanningState promotion), D-2026-05-10-07
+  (withTransaction shadow-dir journal).
+
+**Status:** Accepted. Landed in Plan 03-06.
+
+---

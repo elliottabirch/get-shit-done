@@ -41,6 +41,7 @@ import {
 import { buildStateFrontmatter, getMilestonePhaseFilter } from './state.js';
 import type { QueryHandler } from './utils.js';
 import type { AppendEvent, MutationEvent, SignalEvent } from './state-event-types.js';
+import type { StateWriteOutcome } from '../../../adapters/types.js';
 import { readModifyWriteState } from './phase-helpers.js';
 
 // ─── Process exit lock cleanup (D2 — match CJS state.cjs:16-23) ─────────
@@ -672,8 +673,19 @@ export const stateRecordMetric: QueryHandler = async (args, projectDir, _workstr
     type: 'metric',
     payload: { phase, plan, duration, tasks, files },
   };
-  await adapter.recordStateAppend(event);
-  return { data: { recorded: true, phase, plan, duration } };
+  const outcome: StateWriteOutcome = await adapter.recordStateAppend(event);
+  if (!outcome.applied) {
+    return { data: { recorded: false, reason: outcome.reason, phase, plan, duration } };
+  }
+  return {
+    data: {
+      recorded: true,
+      phase,
+      plan,
+      duration,
+      ...(outcome.created_section ? { created_section: outcome.created_section } : {}),
+    },
+  };
 };
 
 /**
@@ -779,8 +791,17 @@ export const stateAddDecision: QueryHandler = async (args, projectDir, _workstre
     type: 'decision',
     payload: { phase: phase || '?', summary: summaryText, rationale: rationaleText || undefined },
   };
-  await adapter.recordStateAppend(event);
-  return { data: { added: true, decision: entry } };
+  const outcome: StateWriteOutcome = await adapter.recordStateAppend(event);
+  if (!outcome.applied) {
+    return { data: { added: false, reason: outcome.reason, decision: entry } };
+  }
+  return {
+    data: {
+      added: true,
+      decision: entry,
+      ...(outcome.created_section ? { created_section: outcome.created_section } : {}),
+    },
+  };
 };
 
 /**
@@ -812,8 +833,17 @@ export const stateAddBlocker: QueryHandler = async (args, projectDir, _workstrea
     type: 'blocker_added',
     payload: { text: blockerText },
   };
-  await adapter.recordStateMutation(event);
-  return { data: { added: true, blocker: blockerText } };
+  const outcome: StateWriteOutcome = await adapter.recordStateMutation(event);
+  if (!outcome.applied) {
+    return { data: { added: false, reason: outcome.reason, blocker: blockerText } };
+  }
+  return {
+    data: {
+      added: true,
+      blocker: blockerText,
+      ...(outcome.created_section ? { created_section: outcome.created_section } : {}),
+    },
+  };
 };
 
 /**
@@ -832,7 +862,12 @@ export const stateResolveBlocker: QueryHandler = async (args, projectDir, _works
     type: 'blocker_resolved',
     payload: { text: searchText },
   };
-  await adapter.recordStateMutation(event);
+  const outcome: StateWriteOutcome = await adapter.recordStateMutation(event);
+  if (!outcome.applied) {
+    // applied:false + reason:'nothing_to_remove' IS the correct signal that
+    // the blocker was not present (D-2026-05-10-08).
+    return { data: { resolved: false, reason: outcome.reason, blocker: searchText } };
+  }
   return { data: { resolved: true, blocker: searchText } };
 };
 
@@ -893,7 +928,9 @@ function formatRoadmapEvolutionEntry(opts: {
  *
  * Returns `{ added: true, entry }` on success, or
  * `{ added: false, reason: 'duplicate', entry }` when an identical line
- * already exists.
+ * already exists. Dedupe is adapter-side (Plan 03-06 / D-2026-05-10-08):
+ * reports `added: false, reason: 'duplicate'` when the adapter detects
+ * an exact line-match.
  *
  * Throws `GSDError` with `ErrorClassification.Validation` when required
  * inputs are missing or `--action` is not in the allowed set.
@@ -926,17 +963,6 @@ export const stateAddRoadmapEvolution: QueryHandler = async (args, projectDir, _
 
   const adapter = await adapterFor(projectDir);
 
-  // Dedupe against current STATE.md body so the handler can report
-  // `added: false, reason: 'duplicate'` when the entry already exists.
-  const statePath = planningRelativePath(_workstream, 'STATE.md');
-  const existing = await adapter.getRecord(statePath);
-  if (existing) {
-    const existingLines = existing.split('\n').map(l => l.trim());
-    if (existingLines.some(l => l === entry.trim())) {
-      return { data: { added: false, reason: 'duplicate', entry } };
-    }
-  }
-
   const event: AppendEvent = {
     type: 'roadmap_evolution',
     payload: {
@@ -947,8 +973,20 @@ export const stateAddRoadmapEvolution: QueryHandler = async (args, projectDir, _
       urgent,
     },
   };
-  await adapter.recordStateAppend(event);
-  return { data: { added: true, entry } };
+  const outcome: StateWriteOutcome = await adapter.recordStateAppend(event);
+  if (!outcome.applied) {
+    // outcome.reason === 'duplicate' (or defensive 'nothing_to_remove').
+    // Adapter-side dedupe replaces the caller-side pre-read + line-match
+    // loop that previously lived here (Plan 03-06 / D-2026-05-10-08).
+    return { data: { added: false, reason: outcome.reason, entry } };
+  }
+  return {
+    data: {
+      added: true,
+      entry,
+      ...(outcome.created_section ? { created_section: outcome.created_section } : {}),
+    },
+  };
 };
 
 /**
@@ -968,8 +1006,17 @@ export const stateRecordSession: QueryHandler = async (args, projectDir, _workst
       resumeFile,
     },
   };
-  await adapter.recordStateAppend(event);
-  return { data: { recorded: true, updated: ['Last session', 'Stopped At', 'Resume File'] } };
+  const outcome: StateWriteOutcome = await adapter.recordStateAppend(event);
+  if (!outcome.applied) {
+    return { data: { recorded: false, reason: outcome.reason } };
+  }
+  return {
+    data: {
+      recorded: true,
+      updated: ['Last session', 'Stopped At', 'Resume File'],
+      ...(outcome.created_section ? { created_section: outcome.created_section } : {}),
+    },
+  };
 };
 
 /**
@@ -1198,7 +1245,13 @@ export const stateSignalWaiting: QueryHandler = async (args, projectDir, _workst
     type: 'waiting',
     payload: { waitType, question, options, phase },
   };
-  await adapter.recordStateSignal(event);
+  const outcome: StateWriteOutcome = await adapter.recordStateSignal(event);
+  if (!outcome.applied) {
+    // Defensive: waiting always applies. If this ever fires, it signals
+    // future drift in the adapter contract — surface via response rather
+    // than silent success.
+    return { data: { signaled: false, reason: outcome.reason } };
+  }
   return { data: { signaled: true, path: waitingPaths[0], paths: waitingPaths } };
 };
 
@@ -1211,7 +1264,11 @@ export const stateSignalResume: QueryHandler = async (_args, projectDir, _workst
     type: 'resume',
     payload: {},
   };
-  await adapter.recordStateSignal(event);
+  const outcome: StateWriteOutcome = await adapter.recordStateSignal(event);
+  if (!outcome.applied) {
+    // reason === 'nothing_to_remove' — WAITING.json was absent.
+    return { data: { resumed: false, reason: outcome.reason, removed: false } };
+  }
   return { data: { resumed: true, removed: true } };
 };
 

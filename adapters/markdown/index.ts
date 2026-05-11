@@ -31,6 +31,7 @@ import type {
   RecordFilter,
   SectionMode,
   NamedDocCategory,
+  StateWriteOutcome,
 } from '../types.js';
 import { UnsupportedCapabilityError } from '../types.js';
 import type { AppendEvent, MutationEvent, SignalEvent } from '../state-event-types.js';
@@ -92,6 +93,23 @@ interface TxnCtx {
 }
 
 // ─── MarkdownAdapter ──────────────────────────────────────────────────────────
+
+/**
+ * Internal helper return shape. Public recordState* methods convert this
+ * into the user-facing StateWriteOutcome before returning.
+ *   body             — post-mutation STATE.md body (or unchanged input
+ *                      when applied === false)
+ *   applied          — whether the body actually changed
+ *   created_section  — heading scaffolded by the helper (preserves the
+ *                      Phase 3 UAT-fix semantics as a typed signal)
+ *   reason           — populated on applied:false paths
+ */
+type HelperResult = {
+  body: string;
+  applied: boolean;
+  created_section?: string;
+  reason?: 'duplicate' | 'nothing_to_remove';
+};
 
 export class MarkdownAdapter implements StorageAdapter {
   /** D-06: diagnostic identity, never used for behavior branching */
@@ -676,11 +694,11 @@ export class MarkdownAdapter implements StorageAdapter {
    * Pipeline: withTransaction → getRecord → strip frontmatter → find section →
    * append formatted entry → syncStateFrontmatter → normalize → putRecord.
    */
-  async recordStateAppend(event: AppendEvent): Promise<void> {
-    await this.withTransaction(async () => {
+  async recordStateAppend(event: AppendEvent): Promise<StateWriteOutcome> {
+    return this.withTransaction(async () => {
       const raw = (await this.getRecord('STATE.md')) ?? '';
       const body = this.stripFrontmatter(raw);
-      let modified: string;
+      let result: HelperResult;
 
       switch (event.type) {
         case 'decision': {
@@ -692,7 +710,7 @@ export class MarkdownAdapter implements StorageAdapter {
           // regex (any L2/L3 heading containing "Decisions"/"decisions" as a
           // word, with an optional suffix like "(2026-04-30)") catches common
           // real-world variants like "## Locked decisions (date)".
-          modified = this.appendToOrCreateSection(
+          result = this.appendToOrCreateSection(
             body,
             /(###?\s*[^\n]*\b[Dd]ecisions?\b[^\n]*\n)([\s\S]*?)(?=\n###?|\n##[^#]|$)/,
             '## Decisions Made',
@@ -703,24 +721,24 @@ export class MarkdownAdapter implements StorageAdapter {
         case 'metric': {
           const { phase, plan, duration, tasks, files } = event.payload;
           const entry = `| Phase ${phase} P${plan} | ${duration} | ${tasks || '-'} tasks | ${files || '-'} files |`;
-          modified = this.appendToMetricsTable(body, entry);
+          result = this.appendToMetricsTable(body, entry);
           break;
         }
         case 'roadmap_evolution': {
           const { phase, action, note, after, urgent } = event.payload;
           const entry = this.formatRoadmapEvolutionEntry({ phase, action, note, after, urgent });
-          modified = this.appendToRoadmapEvolution(body, entry);
+          result = this.appendToRoadmapEvolution(body, entry);
           break;
         }
         case 'session': {
           const { stoppedAt, resumeFile } = event.payload;
-          modified = this.updateSessionFields(body, stoppedAt, resumeFile);
+          result = this.updateSessionFields(body, stoppedAt, resumeFile);
           break;
         }
         case 'forensic_session': {
           const { sessionId, findings } = event.payload;
           const entry = `- ${sessionId}: ${findings}`;
-          modified = this.appendToOrCreateSection(
+          result = this.appendToOrCreateSection(
             body,
             /(##\s*Forensic Sessions\s*\n)([\s\S]*?)(?=\n##|$)/i,
             '## Forensic Sessions',
@@ -729,9 +747,9 @@ export class MarkdownAdapter implements StorageAdapter {
           break;
         }
         case 'quick_task': {
-          const { task, result } = event.payload;
-          const entry = `- ${task}${result ? ': ' + result : ''}`;
-          modified = this.appendToOrCreateSection(
+          const { task, result: taskResult } = event.payload;
+          const entry = `- ${task}${taskResult ? ': ' + taskResult : ''}`;
+          result = this.appendToOrCreateSection(
             body,
             /(##\s*Quick Tasks\s*\n)([\s\S]*?)(?=\n##|$)/i,
             '## Quick Tasks',
@@ -745,9 +763,21 @@ export class MarkdownAdapter implements StorageAdapter {
         }
       }
 
-      const synced = await this.syncFrontmatter(modified);
+      // Translate HelperResult → StateWriteOutcome. Skip disk write when the
+      // body didn't change (no-op semantics).
+      // NOTE: when !result.applied we intentionally skip syncFrontmatter +
+      // normalizeMd + putRecord. Prior behavior rewrote the file unchanged
+      // on dedupe hits, causing last_updated frontmatter churn. The new
+      // behavior is cleaner but visible; documented in ADR D-2026-05-10-08.
+      if (!result.applied) {
+        return { applied: false, reason: result.reason ?? 'duplicate' };
+      }
+      const synced = await this.syncFrontmatter(result.body);
       const normalized = this.normalizeMd(synced);
       await this.putRecord('STATE.md', normalized);
+      return result.created_section
+        ? { applied: true, created_section: result.created_section }
+        : { applied: true };
     });
   }
 
@@ -756,11 +786,11 @@ export class MarkdownAdapter implements StorageAdapter {
    * Pipeline: withTransaction → getRecord → strip frontmatter → mutate list →
    * syncStateFrontmatter → normalize → putRecord.
    */
-  async recordStateMutation(event: MutationEvent): Promise<void> {
-    await this.withTransaction(async () => {
+  async recordStateMutation(event: MutationEvent): Promise<StateWriteOutcome> {
+    return this.withTransaction(async () => {
       const raw = (await this.getRecord('STATE.md')) ?? '';
       const body = this.stripFrontmatter(raw);
-      let modified: string;
+      let result: HelperResult;
 
       switch (event.type) {
         case 'blocker_added': {
@@ -769,7 +799,7 @@ export class MarkdownAdapter implements StorageAdapter {
           // Create-if-missing (Phase 3 UAT Bug 1 family): the prior
           // appendToSection silently dropped writes when no Blockers
           // heading existed. Broadened heading match + auto-create.
-          modified = this.appendToOrCreateSection(
+          result = this.appendToOrCreateSection(
             body,
             /(###?\s*[^\n]*\b[Bb]lockers?(?:\/[Cc]oncerns)?\b[^\n]*\n)([\s\S]*?)(?=\n###?|\n##[^#]|$)/,
             '## Blockers',
@@ -779,17 +809,17 @@ export class MarkdownAdapter implements StorageAdapter {
         }
         case 'blocker_resolved': {
           const { text } = event.payload;
-          modified = this.removeFromBlockersList(body, text);
+          result = this.removeFromBlockersList(body, text);
           break;
         }
         case 'todo_count_update': {
           const { count } = event.payload;
-          modified = this.updateTodoCount(body, count);
+          result = this.updateTodoCount(body, count);
           break;
         }
         case 'deferred_items': {
           const { items, action } = event.payload;
-          modified = this.mutateDeferredItems(body, items, action);
+          result = this.mutateDeferredItems(body, items, action);
           break;
         }
         default: {
@@ -798,9 +828,20 @@ export class MarkdownAdapter implements StorageAdapter {
         }
       }
 
-      const synced = await this.syncFrontmatter(modified);
+      // Translate HelperResult → StateWriteOutcome. NOTE: when !result.applied
+      // we skip syncFrontmatter + normalizeMd + putRecord (D-2026-05-10-08).
+      // The Mutation family's default no-op reason is 'nothing_to_remove'
+      // (removers dominate here); Append's is 'duplicate'. Helpers always set
+      // reason explicitly, so the `??` fallback is defensive.
+      if (!result.applied) {
+        return { applied: false, reason: result.reason ?? 'nothing_to_remove' };
+      }
+      const synced = await this.syncFrontmatter(result.body);
       const normalized = this.normalizeMd(synced);
       await this.putRecord('STATE.md', normalized);
+      return result.created_section
+        ? { applied: true, created_section: result.created_section }
+        : { applied: true };
     });
   }
 
@@ -808,7 +849,7 @@ export class MarkdownAdapter implements StorageAdapter {
    * Signal-family event: writes/removes stateless flags.
    * Dual-write: .planning/WAITING.json via adapter + .gsd/WAITING.json via direct fs (Pitfall #4).
    */
-  async recordStateSignal(event: SignalEvent): Promise<void> {
+  async recordStateSignal(event: SignalEvent): Promise<StateWriteOutcome> {
     switch (event.type) {
       case 'waiting': {
         const { waitType, question, options, phase } = event.payload;
@@ -826,14 +867,20 @@ export class MarkdownAdapter implements StorageAdapter {
         // Dual-write to .gsd/WAITING.json (outside adapter scope per Pitfall #4)
         mkdirSync(join(this.projectDir, '.gsd'), { recursive: true });
         writeFileSync(join(this.projectDir, '.gsd', 'WAITING.json'), payload, 'utf-8');
-        break;
+        return { applied: true };
       }
       case 'resume': {
-        // Remove WAITING.json via adapter
+        // Distinguish "removed a real pause" from "nothing to resume"
+        // (D-2026-05-10-08). Prior behavior was blind-unlink.
+        const existed = (await this.getRecord('WAITING.json')) !== null;
+        if (!existed) {
+          // Still attempt the .gsd/ cleanup in case the two copies drifted.
+          try { unlinkSync(join(this.projectDir, '.gsd', 'WAITING.json')); } catch { /* ENOENT OK */ }
+          return { applied: false, reason: 'nothing_to_remove' };
+        }
         await this.removeRecord('WAITING.json');
-        // Remove .gsd/WAITING.json (outside adapter scope)
         try { unlinkSync(join(this.projectDir, '.gsd', 'WAITING.json')); } catch { /* ENOENT OK */ }
-        break;
+        return { applied: true };
       }
       default: {
         const _exhaustive: never = event;
@@ -879,16 +926,9 @@ export class MarkdownAdapter implements StorageAdapter {
     return mod.syncStateFrontmatter(body, this.projectDir);
   }
 
-  /** Append entry to a section matched by regex pattern. Strips placeholder text. */
-  private appendToSection(content: string, pattern: RegExp, entry: string): string {
-    const match = content.match(pattern);
-    if (!match) return content;
-    let sectionBody = match[2];
-    // Strip common placeholder lines
-    sectionBody = sectionBody.replace(/None yet\.?\s*\n?/gi, '').replace(/No decisions yet\.?\s*\n?/gi, '').replace(/^None\.?\s*\n?/gim, '');
-    sectionBody = sectionBody.trimEnd() + '\n' + entry + '\n';
-    return content.replace(pattern, (_m, header: string) => `${header}${sectionBody}`);
-  }
+  // (appendToSection removed — Plan 03-06: zero remaining callers after the
+  // seven helpers below were refactored to HelperResult. The helper was a
+  // legacy primitive superseded by appendToOrCreateSection.)
 
   /**
    * Append a row to the Performance Metrics table (handles the table pattern).
@@ -896,7 +936,7 @@ export class MarkdownAdapter implements StorageAdapter {
    * Metrics section + table don't exist, create both and append the first
    * row. Prior behavior silently dropped the write.
    */
-  private appendToMetricsTable(content: string, entry: string): string {
+  private appendToMetricsTable(content: string, entry: string): HelperResult {
     const metricsPattern = /(##\s*Performance Metrics[\s\S]*?\n\|[^\n]+\n\|[-|\s]+\n)([\s\S]*?)(?=\n##|\n$|$)/i;
     const match = content.match(metricsPattern);
     if (match) {
@@ -906,11 +946,16 @@ export class MarkdownAdapter implements StorageAdapter {
       } else {
         tableBody = tableBody + '\n' + entry;
       }
-      return content.replace(metricsPattern, (_m, header: string) => `${header}${tableBody}\n`);
+      const newBody = content.replace(metricsPattern, (_m, header: string) => `${header}${tableBody}\n`);
+      return { body: newBody, applied: true };
     }
     // Section + table missing — scaffold both at end of file.
     const scaffold = '\n\n## Performance Metrics\n\n| Phase/Plan | Duration | Tasks | Files |\n|-----------|----------|-------|-------|\n';
-    return content.trimEnd() + `${scaffold}${entry}\n`;
+    return {
+      body: content.trimEnd() + `${scaffold}${entry}\n`,
+      applied: true,
+      created_section: '## Performance Metrics',
+    };
   }
 
   /** Format a Roadmap Evolution entry line. */
@@ -936,53 +981,100 @@ export class MarkdownAdapter implements StorageAdapter {
   }
 
   /** Append entry to Roadmap Evolution subsection; create if missing. */
-  private appendToRoadmapEvolution(content: string, entry: string): string {
+  private appendToRoadmapEvolution(content: string, entry: string): HelperResult {
     const subsectionPattern = /(###\s*Roadmap Evolution\s*\n)([\s\S]*?)(?=\n###?\s|\n##[^#]|$)/i;
     const match = content.match(subsectionPattern);
 
     if (match) {
       let sectionBody = match[2];
-      // Dedupe: exact line match
+      // Dedupe: exact line match — surfaces reason:'duplicate' to the caller.
+      // Previously this branch returned `content` unchanged and silently
+      // reported success; the three-state StateWriteOutcome contract
+      // (D-2026-05-10-08) makes the dedupe visible.
       const existingLines = sectionBody.split('\n').map(l => l.trim());
-      if (existingLines.some(l => l === entry.trim())) return content;
+      if (existingLines.some(l => l === entry.trim())) {
+        return { body: content, applied: false, reason: 'duplicate' };
+      }
       // Strip placeholder
       sectionBody = sectionBody.replace(/^None(?:\s+yet)?\.?\s*$/gim, '');
       sectionBody = sectionBody.trimEnd() + '\n' + entry + '\n';
-      return content.replace(subsectionPattern, (_m, header: string) => `${header}${sectionBody}`);
+      const newBody = content.replace(subsectionPattern, (_m, header: string) => `${header}${sectionBody}`);
+      return { body: newBody, applied: true };
     }
 
     // Subsection missing — create under Accumulated Context or at EOF
     const accumulatedPattern = /(##\s*Accumulated Context\s*\n)/i;
     const newSubsection = `\n### Roadmap Evolution\n\n${entry}\n`;
     if (accumulatedPattern.test(content)) {
-      return content.replace(accumulatedPattern, (_m, header: string) => `${header}${newSubsection}`);
+      return {
+        body: content.replace(accumulatedPattern, (_m, header: string) => `${header}${newSubsection}`),
+        applied: true,
+        created_section: '### Roadmap Evolution',
+      };
     }
-    return content.trimEnd() + `\n\n## Accumulated Context\n${newSubsection}\n`;
+    return {
+      body: content.trimEnd() + `\n\n## Accumulated Context\n${newSubsection}\n`,
+      applied: true,
+      created_section: '### Roadmap Evolution',
+    };
   }
 
-  /** Update session fields (Last session, Stopped At, Resume File) in body. */
-  private updateSessionFields(content: string, stoppedAt?: string, resumeFile?: string): string {
+  /**
+   * Update session fields (Last session, Stopped At, Resume File) in body.
+   * Create-if-missing (Phase 3 UAT Bug 1 family, Plan 03-06 extension):
+   * scaffold a `## Session Continuity` section at EOF when no recognizable
+   * session field matches. Prior behavior silently returned the input
+   * unchanged — which would flow through the HelperResult discipline as
+   * applied:true with no visible effect. Scaffolding matches decision /
+   * metric / blocker parity and surfaces via created_section.
+   */
+  private updateSessionFields(content: string, stoppedAt?: string, resumeFile?: string): HelperResult {
     const now = new Date().toISOString();
-    let result = content;
+    let working = content;
+    let anyReplaced = false;
 
-    // Update Last session
-    result = this.replaceFieldInBody(result, 'Last session', now) ?? result;
-    result = this.replaceFieldInBody(result, 'Last Date', now) ?? result;
-
-    // Update Stopped At
-    if (stoppedAt) {
-      const updated = this.replaceFieldInBody(result, 'Stopped At', stoppedAt)
-        ?? this.replaceFieldInBody(result, 'Stopped at', stoppedAt);
-      if (updated) result = updated;
+    // Track whether each field-replacement attempt actually modified content.
+    const lastSession = this.replaceFieldInBody(working, 'Last session', now)
+      ?? this.replaceFieldInBody(working, 'Last Date', now);
+    if (lastSession !== null) {
+      working = lastSession;
+      anyReplaced = true;
     }
 
-    // Update Resume File
-    const rf = resumeFile ?? 'None';
-    const rfUpdated = this.replaceFieldInBody(result, 'Resume File', rf)
-      ?? this.replaceFieldInBody(result, 'Resume file', rf);
-    if (rfUpdated) result = rfUpdated;
+    if (stoppedAt) {
+      const stopped = this.replaceFieldInBody(working, 'Stopped At', stoppedAt)
+        ?? this.replaceFieldInBody(working, 'Stopped at', stoppedAt);
+      if (stopped !== null) {
+        working = stopped;
+        anyReplaced = true;
+      }
+    }
 
-    return result;
+    const rf = resumeFile ?? 'None';
+    const rfUpdated = this.replaceFieldInBody(working, 'Resume File', rf)
+      ?? this.replaceFieldInBody(working, 'Resume file', rf);
+    if (rfUpdated !== null) {
+      working = rfUpdated;
+      anyReplaced = true;
+    }
+
+    if (anyReplaced) {
+      return { body: working, applied: true };
+    }
+
+    // No field matched — scaffold a Session Continuity section at EOF.
+    const lines: string[] = [];
+    lines.push('## Session Continuity');
+    lines.push('');
+    lines.push(`Last session: ${now}`);
+    if (stoppedAt) lines.push(`Stopped At: ${stoppedAt}`);
+    lines.push(`Resume File: ${rf}`);
+    const scaffold = lines.join('\n') + '\n';
+    return {
+      body: content.trimEnd() + `\n\n${scaffold}`,
+      applied: true,
+      created_section: '## Session Continuity',
+    };
   }
 
   /** Replace a field value in body content (supports **bold:** and plain: formats). */
@@ -1005,34 +1097,46 @@ export class MarkdownAdapter implements StorageAdapter {
     pattern: RegExp,
     heading: string,
     entry: string,
-  ): string {
+  ): HelperResult {
     const match = content.match(pattern);
     if (match) {
       let sectionBody = match[2];
       sectionBody = sectionBody.replace(/None yet\.?\s*\n?/gi, '').replace(/^None\.?\s*\n?/gim, '');
       sectionBody = sectionBody.trimEnd() + '\n' + entry + '\n';
-      return content.replace(pattern, (_m, header: string) => `${header}${sectionBody}`);
+      const newBody = content.replace(pattern, (_m, header: string) => `${header}${sectionBody}`);
+      return { body: newBody, applied: true };
     }
-    // Section not found — create at end
-    return content.trimEnd() + `\n\n${heading}\n\n${entry}\n`;
+    // Section not found — create at end.
+    return {
+      body: content.trimEnd() + `\n\n${heading}\n\n${entry}\n`,
+      applied: true,
+      created_section: heading,
+    };
   }
 
   /** Remove a blocker line by text match and replace with "None" if empty. */
-  private removeFromBlockersList(content: string, searchText: string): string {
+  private removeFromBlockersList(content: string, searchText: string): HelperResult {
     const sectionPattern = /(###?\s*(?:Blockers|Blockers\/Concerns|Concerns)\s*\n)([\s\S]*?)(?=\n###?|\n##[^#]|$)/i;
     const match = content.match(sectionPattern);
-    if (!match) return content;
+    if (!match) {
+      return { body: content, applied: false, reason: 'nothing_to_remove' };
+    }
     const sectionBody = match[2];
     const lines = sectionBody.split('\n');
     const filtered = lines.filter(line => {
       if (!line.startsWith('- ')) return true;
       return !line.toLowerCase().includes(searchText.toLowerCase());
     });
+    if (filtered.length === lines.length) {
+      // Section exists but the target blocker wasn't found — structural no-op.
+      return { body: content, applied: false, reason: 'nothing_to_remove' };
+    }
     let newBody = filtered.join('\n');
     if (!newBody.trim() || !newBody.includes('- ')) {
       newBody = 'None\n';
     }
-    return content.replace(sectionPattern, (_m, header: string) => `${header}${newBody}`);
+    const result = content.replace(sectionPattern, (_m, header: string) => `${header}${newBody}`);
+    return { body: result, applied: true };
   }
 
   /**
@@ -1040,19 +1144,24 @@ export class MarkdownAdapter implements StorageAdapter {
    * Create-if-missing (Phase 3 UAT Bug 1 family): scaffold a Pending todos
    * section when none exists. Prior behavior silently dropped the update.
    */
-  private updateTodoCount(content: string, count: number): string {
+  private updateTodoCount(content: string, count: number): HelperResult {
     const todoPattern = /(##\s*Pending todos\s*\n)([\s\S]*?)(?=\n##|$)/i;
     const match = content.match(todoPattern);
     const replacement = count > 0 ? `(${count} items)\n` : '(none)\n';
     if (match) {
-      return content.replace(todoPattern, (_m, header: string) => `${header}\n${replacement}`);
+      const newBody = content.replace(todoPattern, (_m, header: string) => `${header}\n${replacement}`);
+      return { body: newBody, applied: true };
     }
     // Section missing — append at end.
-    return content.trimEnd() + `\n\n## Pending todos\n\n${replacement}`;
+    return {
+      body: content.trimEnd() + `\n\n## Pending todos\n\n${replacement}`,
+      applied: true,
+      created_section: '## Pending todos',
+    };
   }
 
   /** Mutate Deferred Ideas section: add or remove items. */
-  private mutateDeferredItems(content: string, items: string[], action: 'add' | 'remove'): string {
+  private mutateDeferredItems(content: string, items: string[], action: 'add' | 'remove'): HelperResult {
     const sectionPattern = /(###?\s*(?:Deferred Ideas|Deferred)\s*\n)([\s\S]*?)(?=\n###?|\n##[^#]|$)/i;
     const match = content.match(sectionPattern);
 
@@ -1062,14 +1171,21 @@ export class MarkdownAdapter implements StorageAdapter {
         let sectionBody = match[2];
         sectionBody = sectionBody.replace(/^None\.?\s*\n?/gim, '').replace(/None yet\.?\s*\n?/gi, '');
         sectionBody = sectionBody.trimEnd() + '\n' + entries + '\n';
-        return content.replace(sectionPattern, (_m, header: string) => `${header}${sectionBody}`);
+        const newBody = content.replace(sectionPattern, (_m, header: string) => `${header}${sectionBody}`);
+        return { body: newBody, applied: true };
       }
       // Create section if missing
-      return content.trimEnd() + `\n\n## Deferred Ideas\n\n${entries}\n`;
+      return {
+        body: content.trimEnd() + `\n\n## Deferred Ideas\n\n${entries}\n`,
+        applied: true,
+        created_section: '## Deferred Ideas',
+      };
     }
 
     // action === 'remove'
-    if (!match) return content;
+    if (!match) {
+      return { body: content, applied: false, reason: 'nothing_to_remove' };
+    }
     const sectionBody = match[2];
     const lines = sectionBody.split('\n');
     const lowerItems = items.map(i => i.toLowerCase());
@@ -1078,11 +1194,16 @@ export class MarkdownAdapter implements StorageAdapter {
       const lineText = line.slice(2).trim().toLowerCase();
       return !lowerItems.some(item => lineText.includes(item));
     });
+    if (filtered.length === lines.length) {
+      // Section exists but none of the items matched a line — no-op.
+      return { body: content, applied: false, reason: 'nothing_to_remove' };
+    }
     let newBody = filtered.join('\n');
     if (!newBody.trim() || !newBody.includes('- ')) {
       newBody = 'None\n';
     }
-    return content.replace(sectionPattern, (_m, header: string) => `${header}${newBody}`);
+    const result = content.replace(sectionPattern, (_m, header: string) => `${header}${newBody}`);
+    return { body: result, applied: true };
   }
 
   async putNamedDoc(
