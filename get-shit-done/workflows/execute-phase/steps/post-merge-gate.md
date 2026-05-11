@@ -29,7 +29,8 @@ if [ -z "$BUILD_CMD" ]; then
   elif [ -f "go.mod" ]; then
     BUILD_CMD="go build ./..."
   elif [ -f "pyproject.toml" ] || [ -f "requirements.txt" ]; then
-    BUILD_CMD="python -m py_compile $(find . -name '*.py' -not -path './.planning/*' -not -path './node_modules/*' | head -20 | tr '\n' ' ')"
+    BUILD_CMD="python -m py_compile $(find . -name '*.py' -not -path './.planning/*' -not -path './node_modules/*' | head -20 | tr '\n' ' ')" <!-- leak-grep-ignore -->
+
   elif [ -f "package.json" ] && grep -q '"build"' package.json; then
     BUILD_CMD="npm run build"
   else

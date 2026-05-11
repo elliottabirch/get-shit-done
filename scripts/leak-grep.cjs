@@ -106,8 +106,11 @@ const SDK_FS_EXTS = /\.ts$/;
 // File-level and line-level exclusion directives (D-07 / Phase 4 formalization)
 // ---------------------------------------------------------------------------
 
-// File-level: first 5 lines contain `// leak-grep-allow file` → skip entire file
-const FILE_ALLOW_RE = /\/[/*]\s*leak-grep-allow\s+file\b/;
+// File-level: first 5 lines contain `// leak-grep-allow file` (C-style comment)
+// or `<!-- leak-grep-allow file -->` (markdown HTML comment) → skip entire file.
+// Markdown form lets planning artifacts (VERIFICATION.md / REVIEW.md / SPEC.md
+// that describe the leak patterns themselves) opt out without polluting rendered output.
+const FILE_ALLOW_RE = /(?:\/[/*]|<!--)\s*leak-grep-allow\s+file\b/;
 
 // Line-level: line contains `// leak-grep-ignore`, `/* leak-grep-ignore */`,
 // or `<!-- leak-grep-ignore -->` (markdown HTML-comment form) → skip that line.
