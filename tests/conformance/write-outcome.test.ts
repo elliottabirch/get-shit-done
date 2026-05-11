@@ -123,6 +123,43 @@ describe('recordStateAppend outcomes', () => {
 
     expect(outcome).toEqual({ applied: true, created_section: '### Roadmap Evolution' });
   });
+
+  // WR-02 regression: dedupe scope is scoped to `### Roadmap Evolution`, not
+  // the whole file. An identical bullet line present outside that subsection
+  // (e.g., under `## Decisions Made`) must NOT block the write.
+  // Documents D-2026-05-10-08 "Consequences" scope-change entry.
+  it('roadmap_evolution: applied:true when identical bullet exists OUTSIDE Roadmap Evolution', async () => {
+    await seedStateMd(
+      adapter,
+      [
+        '# State',
+        '',
+        '## Decisions Made',
+        '',
+        // An identical bullet under a different section — pre-03-06 caller-side
+        // dedupe would have seen this and refused the write.
+        '- Phase 3 added: Test entry',
+        '',
+        '## Accumulated Context',
+        '',
+        '### Roadmap Evolution',
+        '',
+        'None yet.',
+        '',
+      ].join('\n'),
+    );
+
+    const outcome = await adapter.recordStateAppend({
+      type: 'roadmap_evolution',
+      payload: { phase: '3', action: 'added', note: 'Test entry' },
+    });
+
+    expect(outcome).toEqual({ applied: true });
+    // Sanity: the new entry lands in the Roadmap Evolution subsection.
+    const content = await adapter.getRecord('STATE.md');
+    expect(content).toContain('### Roadmap Evolution');
+    expect(content).toMatch(/### Roadmap Evolution[\s\S]*- Phase 3 added: Test entry/);
+  });
 });
 
 describe('recordStateMutation outcomes', () => {

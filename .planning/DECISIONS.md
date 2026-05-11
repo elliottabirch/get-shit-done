@@ -999,6 +999,22 @@ outcome and surface the distinction to their handler responses.
   additions to the response JSON; no existing field removed or renamed.
 - Baselines preserved: SDK unit 1567/0 → 1567/0; conformance 117 → 133
   (117 + 16 new); leak-grep 0 active-handler hits.
+- **`roadmap_evolution` dedupe scope narrowed (intentional):** The pre-
+  Plan-03-06 caller-side dedupe in `stateAddRoadmapEvolution` scanned
+  the ENTIRE STATE.md body for an exact-line match. The new adapter-
+  side dedupe in `appendToRoadmapEvolution` scans ONLY the
+  `### Roadmap Evolution` subsection captured by `subsectionPattern`.
+  Observable impact: if an identical bullet line appears outside the
+  Roadmap Evolution subsection (e.g., under `## Decisions Made` or in
+  prose), the old handler refused the write with
+  `{added: false, reason: 'duplicate'}`; the new handler accepts it
+  with `{applied: true}`. The new scope is arguably more correct
+  (sections should have independent dedupe) but is a visible contract
+  change documented here for traceability. Regression coverage:
+  `tests/conformance/write-outcome.test.ts` contains a test seeding an
+  identical line outside `### Roadmap Evolution` and asserting the
+  write succeeds — renaming or moving that test will need to preserve
+  the scope invariant.
 
 **References:**
 
