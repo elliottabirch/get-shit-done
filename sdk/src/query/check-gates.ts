@@ -82,7 +82,12 @@ export const checkGates: QueryHandler = async (args, projectDir, workstream) => 
     const phaseRes = await findPhase(adapter, [phaseNum], projectDir, workstream);
     const pdata = phaseRes.data as Record<string, unknown>;
     if (pdata.found && pdata.directory) {
-      const phaseDirRel = pdata.directory as string;
+      // findPhase returns a display-relative path (e.g. '.planning/phases/04-ui').
+      // The adapter is rooted at .planning/, so strip the leading prefix.
+      const displayDir = pdata.directory as string;
+      const phaseDirRel = displayDir.startsWith('.planning/')
+        ? displayDir.slice('.planning/'.length)
+        : displayDir;
       const verContent = await adapter.getRecord(`${phaseDirRel}/VERIFICATION.md`);
       if (verContent) {
         const failLines = verContent.match(/\|\s*FAIL\s*\|[^\n]*/gi) || [];

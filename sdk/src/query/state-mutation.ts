@@ -925,6 +925,18 @@ export const stateAddRoadmapEvolution: QueryHandler = async (args, projectDir, _
   const entry = formatRoadmapEvolutionEntry({ phase, action, note, after, urgent });
 
   const adapter = await adapterFor(projectDir);
+
+  // Dedupe against current STATE.md body so the handler can report
+  // `added: false, reason: 'duplicate'` when the entry already exists.
+  const statePath = planningRelativePath(_workstream, 'STATE.md');
+  const existing = await adapter.getRecord(statePath);
+  if (existing) {
+    const existingLines = existing.split('\n').map(l => l.trim());
+    if (existingLines.some(l => l === entry.trim())) {
+      return { data: { added: false, reason: 'duplicate', entry } };
+    }
+  }
+
   const event: AppendEvent = {
     type: 'roadmap_evolution',
     payload: {

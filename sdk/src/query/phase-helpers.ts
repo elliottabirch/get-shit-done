@@ -184,7 +184,12 @@ export async function readModifyWriteRoadmap(
 // ─── scanNextPhaseNumber ─────────────────────────────────────────────────────
 
 /**
- * Scan the phases directory to find the next sequential phase number.
+ * Scan ROADMAP.md and the phases directory to find the next sequential phase number.
+ *
+ * Scans ROADMAP.md for phase references in three formats (heading, bullet checklist,
+ * bold inline) — these are the canonical source of truth. Falls back to scanning
+ * .planning/phases/ directory names when ROADMAP yields no matches (fresh repo,
+ * pre-populated phase dirs). See regression #2726.
  *
  * Transaction-wrapping: NO — read-only operation, safe outside transactions.
  *
@@ -196,17 +201,34 @@ export async function scanNextPhaseNumber(
   adapter: StorageAdapter,
   workstream: string | undefined,
 ): Promise<number> {
-  const phasesPath = planningRelativePath(workstream, 'phases');
-  const entries = await adapter.listCollection(phasesPath);
   let maxPhase = 0;
 
-  for (const entry of entries) {
-    // Parse directory names like "03-wire-core-write-methods" or "CK-03-wire"
-    const match = /^(?:[A-Z][A-Z0-9]*-)?(\d+)/i.exec(entry.name);
-    if (match) {
-      const num = parseInt(match[1], 10);
-      if (num >= 999) continue; // skip backlog phases
+  // Primary: parse ROADMAP.md. Matches heading (## Phase N:), bullet checklist
+  // (- [x] Phase N:), and bold (**Phase N:**). Skips 999.x backlog phases.
+  const roadmapPath = planningRelativePath(workstream, 'ROADMAP.md');
+  const roadmap = await adapter.getRecord(roadmapPath);
+  if (roadmap !== null) {
+    const phasePattern = /(?:^|\n)\s*(?:[-*]\s*(?:\[[x ]\]\s*)?|#{2,4}\s*|\*{1,2}\s*)Phase\s+(\d+)[A-Z]?(?:\.\d+)*:/gi;
+    let m: RegExpExecArray | null;
+    while ((m = phasePattern.exec(roadmap)) !== null) {
+      const num = parseInt(m[1], 10);
+      if (num >= 999) continue;
       if (num > maxPhase) maxPhase = num;
+    }
+  }
+
+  // Fallback: scan phases/ directory when ROADMAP scan finds nothing.
+  if (maxPhase === 0) {
+    const phasesPath = planningRelativePath(workstream, 'phases');
+    const entries = await adapter.listCollection(phasesPath);
+    for (const entry of entries) {
+      // Parse directory names like "03-wire-core-write-methods" or "CK-03-wire"
+      const match = /^(?:[A-Z][A-Z0-9]*-)?(\d+)/i.exec(entry.name);
+      if (match) {
+        const num = parseInt(match[1], 10);
+        if (num >= 999) continue;
+        if (num > maxPhase) maxPhase = num;
+      }
     }
   }
 
@@ -235,14 +257,7 @@ export async function removePhaseDir(
 ): Promise<void> {
   await adapter.withTransaction(async () => {
     const basePath = planningRelativePath(workstream, `phases/${dirName}`);
-    const entries = await adapter.listCollection(basePath);
-
-    for (const entry of entries) {
-      await adapter.removeRecord(`${basePath}/${entry.name}`);
-    }
-
-    // Remove the .gitkeep last (directory marker)
-    await adapter.removeRecord(`${basePath}/.gitkeep`);
+    await adapter.removeCollection(basePath);
   });
 }
 
@@ -300,23 +315,7 @@ export async function removePhaseFiles(
   phaseDir: string,
 ): Promise<void> {
   const basePath = planningRelativePath(workstream, `phases/${phaseDir}`);
-  const entries = await adapter.listCollection(basePath);
-
-  for (const entry of entries) {
-    const entryPath = `${basePath}/${entry.name}`;
-    const st = await adapter.stat(entryPath);
-    if (st && st.kind === 'dir') {
-      // Recursively remove nested directory contents
-      const nestedEntries = await adapter.listCollection(entryPath);
-      for (const nested of nestedEntries) {
-        await adapter.removeRecord(`${entryPath}/${nested.name}`);
-      }
-    }
-    await adapter.removeRecord(entryPath);
-  }
-
-  // Attempt to remove directory marker itself
-  await adapter.removeRecord(`${basePath}/.gitkeep`);
+  await adapter.removeCollection(basePath);
 }
 
 // ─── archivePhaseDir ────────────────────────────────────────────────────────
@@ -349,11 +348,8 @@ export async function archivePhaseDir(
     }
   }
 
-  // Remove originals
-  for (const entry of entries) {
-    await adapter.removeRecord(`${srcPath}/${entry.name}`);
-  }
-  await adapter.removeRecord(`${srcPath}/.gitkeep`);
+  // Remove the entire source directory tree (files + dir marker) in one shot
+  await adapter.removeCollection(srcPath);
 }
 
 // ─── removeRoadmapPhase ─────────────────────────────────────────────────────
@@ -555,11 +551,8 @@ export async function renumberDecimalPhases(
       }
     }
 
-    // Remove old directory files
-    for (const file of dirEntries) {
-      await adapter.removeRecord(`${oldDirPath}/${file.name}`);
-    }
-    await adapter.removeRecord(`${oldDirPath}/.gitkeep`);
+    // Remove the entire old directory (files + dir marker) in one shot
+    await adapter.removeCollection(oldDirPath);
 
     // Ensure new dir has .gitkeep
     await adapter.putRecord(`${newDirPath}/.gitkeep`, '');
@@ -638,11 +631,8 @@ export async function renumberIntegerPhases(
       }
     }
 
-    // Remove old directory files
-    for (const file of dirEntries) {
-      await adapter.removeRecord(`${oldDirPath}/${file.name}`);
-    }
-    await adapter.removeRecord(`${oldDirPath}/.gitkeep`);
+    // Remove the entire old directory (files + dir marker) in one shot
+    await adapter.removeCollection(oldDirPath);
 
     // Ensure new dir has .gitkeep
     await adapter.putRecord(`${newDirPath}/.gitkeep`, '');
@@ -814,15 +804,20 @@ export async function updateStateProgressFields(
 ): Promise<void> {
   await adapter.withTransaction(async () => {
     const statePath = planningRelativePath(workstream, 'STATE.md');
-    const patch: Record<string, unknown> = {};
-    if (fields.totalPhases !== undefined) patch['progress.total_phases'] = fields.totalPhases;
-    if (fields.completedPhases !== undefined) patch['progress.completed_phases'] = fields.completedPhases;
-    if (fields.totalPlans !== undefined) patch['progress.total_plans'] = fields.totalPlans;
-    if (fields.completedPlans !== undefined) patch['progress.completed_plans'] = fields.completedPlans;
-    if (fields.percent !== undefined) patch['progress.percent'] = fields.percent;
+    // Build a nested `progress` object. mergeFrontmatter does a top-level
+    // Object.assign, so we need to merge our changes with the existing
+    // progress subtree to avoid clobbering untouched fields.
+    const existing = (await adapter.getFrontmatter(statePath)) as Record<string, unknown> | null;
+    const existingProgress = ((existing && (existing.progress as Record<string, unknown>)) ?? {}) as Record<string, unknown>;
+    const progress: Record<string, unknown> = { ...existingProgress };
+    if (fields.totalPhases !== undefined) progress.total_phases = fields.totalPhases;
+    if (fields.completedPhases !== undefined) progress.completed_phases = fields.completedPhases;
+    if (fields.totalPlans !== undefined) progress.total_plans = fields.totalPlans;
+    if (fields.completedPlans !== undefined) progress.completed_plans = fields.completedPlans;
+    if (fields.percent !== undefined) progress.percent = fields.percent;
 
-    if (Object.keys(patch).length > 0) {
-      await adapter.mergeFrontmatter(statePath, patch);
+    if (Object.keys(progress).length > 0) {
+      await adapter.mergeFrontmatter(statePath, { progress });
     }
   });
 }
