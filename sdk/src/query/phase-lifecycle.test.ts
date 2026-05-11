@@ -1116,10 +1116,17 @@ describe('phaseComplete', () => {
     expect(state).toMatch(/Phase:\s*11/);
     // Status should indicate ready to plan
     expect(state).toMatch(/Status:\s*Ready to plan/);
-    // Completed phases should be incremented from 1 to 2
-    expect(state).toMatch(/completed_phases:\s*2/);
-    // Percent should be recalculated (2/3 = 67%)
-    expect(state).toMatch(/percent:\s*67/);
+    // Progress fields are now single-writer: syncStateFrontmatter derives
+    // completed_phases / completed_plans / percent from disk on every adapter
+    // write (see Phase 3 UAT Bug 2 fix). phase.complete no longer writes them.
+    //
+    // Disk state set up above:
+    //   phase 09: 0 plans, 0 summaries → NOT complete (plans > 0 gate)
+    //   phase 10: 3 plans, 3 summaries → complete
+    //   phase 11: 0 plans, 0 summaries → NOT complete
+    // → completed_phases derived = 1, completed_plans = 3 / total_plans = 3 → percent = 100
+    expect(state).toMatch(/completed_phases:\s*1/);
+    expect(state).toMatch(/percent:\s*100/);
   });
 
   it('detects next phase from filesystem, falls back to ROADMAP.md', async () => {
