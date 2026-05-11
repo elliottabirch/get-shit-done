@@ -6,8 +6,8 @@
   "phase_dir": ".planning/phases/02-wire-core-read-methods-to-adapter",
   "phase_number": "02",
   "phase_name": "wire-core-read-methods-to-adapter",
-  "has_verification": false,
-  "project_root": "/home/ellio/code/get-shit-done/.claude/worktrees/agent-afe48fc6f178f469c",
+  "has_verification": true,
+  "project_root": "/Volumes/code/get-shit-done",
   "agents_installed": true,
   "missing_agents": [],
   "project_title": "Project: get-shit-done (fork — adapter-interface seam)"

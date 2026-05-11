@@ -31,7 +31,8 @@
   "patterns_path": ".planning/phases/02-wire-core-read-methods-to-adapter/02-PATTERNS.md",
   "context_path": ".planning/phases/02-wire-core-read-methods-to-adapter/02-CONTEXT.md",
   "research_path": ".planning/phases/02-wire-core-read-methods-to-adapter/02-RESEARCH.md",
-  "project_root": "/home/ellio/code/get-shit-done/.claude/worktrees/agent-afe48fc6f178f469c",
+  "verification_path": ".planning/phases/02-wire-core-read-methods-to-adapter/02-VERIFICATION.md",
+  "project_root": "/Volumes/code/get-shit-done",
   "agents_installed": true,
   "missing_agents": [],
   "project_title": "Project: get-shit-done (fork — adapter-interface seam)"
