@@ -677,5 +677,462 @@ before researching or planning.**
 
 ---
 
+## Post-Extraction Amendments (2026-05-11, hybrid pivot)
+
+> **Status:** This section SUPERSEDES the locked decisions above where noted.
+> The original sections are preserved for audit trail; every amendment
+> below is additive and explicitly cites the D-ID it amends.
+>
+> **Trigger:** User surfaced that `/Volumes/code/gsd-beads` already exists
+> as a mature repo (~1000 LOC shipped adapter code, 71 conformance tests,
+> 13 concluded spikes, mid-execution on its own Phase 7) rather than the
+> greenfield scaffold the original Phase 6 decisions assumed.
+>
+> **Extraction artifact:** `./.claude/skills/spike-findings-gsd-beads/`
+> (6 files, 2696 lines) captures the full carry-forward reference.
+> Planner + executor MUST read this skill before Phase 6 implementation.
+>
+> **Sibling base:** `/Volumes/code/gsd-beads` @ git HEAD `5082d45` —
+> frozen by user confirmation; no parallel work until Phase 6 completes.
+>
+> **bd CLI dependency:** User will install bd v1.0.3 before Plan 06-01
+> spike executes. Replanning proceeds without it.
+>
+> **Archived:** Original Phase 6 artifacts (7 PLAN.md + PATTERNS.md +
+> RESEARCH.md + VALIDATION.md) moved to `archive-greenfield/` — see
+> that directory's README.md for scope notes.
+
+### Meta-amendment: Hybrid delivery model
+
+Phase 6 is no longer "ground-up implementation against a locked
+contract" — it is **contract-compliance reconciliation on top of the
+sibling's existing Phase 7 code**. The scope shifts from:
+
+- **Before:** 7 plans × waves 1-7 × greenfield file creation
+- **After:** 3-4 plans × targeted diffs against the sibling + small
+  fork-side additions (unchanged subpath export + additive capabilities
+  field) + archive-branch the sibling's pre-Phase-6 history
+
+The fork-side footprint is unchanged from the original plan:
+- `package.json` — `./conformance` subpath export (D-CONFORM-EXPORT)
+- `adapters/types.ts` — additive `graphEdges` field on `Capabilities`
+  (D-OQ06-CAPS)
+- `adapters/markdown/index.ts` — declare `graphEdges: { semantic: true,
+  dependency: false }` on MarkdownAdapter's capabilities object
+
+The sibling-side footprint is substantially smaller than originally
+planned — most of what the plans would have authored ALREADY EXISTS in
+the sibling at `/Volumes/code/gsd-beads/src/`. Phase 6's sibling work
+becomes "patch sibling to satisfy fork contract" not "author sibling
+from scratch."
+
+### D-OQ06 — layered graph edges — **RE-AFFIRM**
+
+Spike 014 in the sibling (`/Volumes/code/gsd-beads/.planning/spikes/014-bd-blocks-sibling-deps/`)
+independently validated every property D-OQ06 needs: `bd dep add`
+(default `blocks` type) works; field name in `bd export --json` is
+`type` (not `dependency_type`); `depends_on_id` is the blocker
+direction; single `bd export --json` surfaces all edges (fits
+≤2-spawn budget); cascade-loop IGNORES blocks-edges (only walks
+parent-child) so dep-edges don't accidentally trigger phase close.
+
+Phase 6 hybrid plans cite Spike 014 directly. `graphEdges: { semantic:
+false, dependency: true }` on BeadsAdapter stays; MarkdownAdapter gets
+`graphEdges: { semantic: true, dependency: false }` via the fork-side
+additive change.
+
+**Severity:** optional — evidence cite only, no decision flip.
+
+### D-MAPPING — hybrid L2 sub-records + L3/L4 anchor-comments — **CRITICAL AMENDMENT**
+
+**Current lock:** L2 sections → bd sub-records (native mutable JSON
+fields). L3/L4 nested content → anchor-tagged comments on the issue.
+
+**Reality:** bd v1.0.3 does NOT expose a JSON-sub-record primitive on
+issues at the CLI level. The sibling empirically confirmed this by
+going labels-first + description-blob instead: frontmatter synthesizes
+from bd labels (`phase-id:07`, `version:v1.0`, `status:open` → JS
+object); section content stores as **the issue's single-string
+`description`**, re-parsed on every read
+(`/Volumes/code/gsd-beads/src/adapter/primitives.mjs:226-254`).
+
+**Amendment:** **Accept the sibling's labels-first + description-blob
+architecture as the shipping D-MAPPING implementation for v1.0.**
+
+Rationale:
+- Sibling's architecture is **proven**: 71 conformance tests green
+  against live bd v1.0.3 through `bd update <id> --description`,
+  `bd label add/remove <id> key:value`, and anchor-parsing via
+  `src/format/section.mjs`.
+- Our hybrid-with-sub-records design required a primitive bd doesn't
+  have. Forcing it would mean either (a) patching bd upstream (out of
+  scope) or (b) simulating sub-records via structured JSON inside the
+  description blob — which is what the sibling ALREADY does, just
+  without the sub-record framing.
+- The `recordStateAppend`/`Mutation`/`Signal` three-family design
+  (Phase 3 D-01) still maps cleanly onto sibling's pattern:
+  - `recordStateAppend` high-frequency types → `bd comments add` with
+    `--author gsd:event:<type>` (sibling D-09 amendment; note
+    `--label` does NOT work on comments in bd v1.0.3 — landmine 4).
+  - `recordStateAppend` low-frequency types → `bd remember <json>
+    --key <milestone>:<type>:<id>` (sibling D-09 memory path).
+  - `recordStateMutation` → label add/remove or memory-key update.
+  - `recordStateSignal` → memory or label delete.
+
+**What changes in our plans:**
+- Phase 6 abandons the "author L2 sub-record schemas per canonical
+  file" task. We DO still need schema shape — but as `frontmatter +
+  body` schemas for the sibling's labels+description shape, not as
+  sub-record shape.
+- `D-MAPPING-SCHEMA` amendment below adjusts the schema scope.
+
+**Plan 06-01 spike scope amendment:** The original D-TXN-SPIKE scope
+stays. An additional **mapping-verification task** confirms sibling's
+`recordStateEvent` (single method) can be losslessly reshaped into the
+fork's three-method `recordStateAppend`/`Mutation`/`Signal` with
+`StateWriteOutcome` return shape. No CLI experimentation required —
+this is a code-reading + migration-map task.
+
+**Severity:** **critical** — flips the core mapping model.
+
+### D-MAPPING-SCHEMA — authored per-canonical-file schemas — **AMENDMENT**
+
+**Current lock:** TS schemas per canonical file (STATE, ROADMAP, PROJECT,
+REQUIREMENTS, DECISIONS, AI-SPEC, SPEC, UAT, VERIFICATION, PLAN,
+CONTEXT, debug-session).
+
+**Reality:** Sibling NEVER authored per-canonical-file schemas. It
+lived with generic labels-as-frontmatter + generic section-bounds
+rewriter (sibling's `src/format/section.mjs` handles arbitrary anchor
+paths; `src/format/frontmatter.mjs` handles arbitrary flat-scalar
+YAML). Only `src/format/phase.mjs` is file-specific (bidirectional
+ROADMAP.md phase entries).
+
+**Amendment:** **Scope per-canonical-file schemas to ONLY the files
+where generic-parser-plus-labels isn't sufficient** — specifically:
+- `ROADMAP.md` — already has `phase.mjs` proven bidirectional;
+  port to TS as the reference.
+- `STATE.md` — has the `recordStateEvent` payload structure that
+  needs per-type typing; depends on fork's `AppendEvent` / `MutationEvent`
+  / `SignalEvent` discriminated unions.
+
+For the other 10 canonical files, use the **generic-parser-plus-
+typed-label-enum** approach the sibling proved works. Typed TS schemas
+come from the **label enum** + the **frontmatter flat-scalar shape**,
+not from bespoke per-file sub-record schemas.
+
+**What changes in our plans:**
+- Phase 6 drops from "12+ TS schemas" to "2 explicit TS schemas +
+  shared generic frontmatter/section parsers." Significant scope
+  reduction; LOC budget shifts from schema-authoring to porting the
+  sibling's proven parsers.
+
+**Severity:** recommended — scope reduction; carry-forward of
+sibling's proven-generic approach is strictly cheaper + matches reality.
+
+### D-TXN-SPIKE — bd primitives spike for withTransaction — **AMENDMENT (widen)**
+
+**Current lock:** Plan 06-01 spikes bd's store-clone + bead-hash
+bookmark. Outcome gates Option A (in-memory write-buffer) vs Option B
+(staging-store cutover).
+
+**Reality:** Sibling `snapshot()/restore()` is **file-based**: `bd
+export --json -o <path>` + `bd init --from-jsonl` into a fresh tmpdir.
+Neither Option A nor Option B. The sibling did NOT discover or test
+bd's store-clone or bead-hash-bookmark primitives.
+
+**Amendment:** **Evaluate Option C in the spike.** Three outcomes:
+- **Outcome A:** in-memory write-buffer. Queue mutations; apply on
+  commit; discard on rollback. ~150 LOC. Mid-txn failure can leave
+  partial commit (Phase 6.1 follow-up).
+- **Outcome B:** staging bd store + bead-hash bookmark cutover. Atomic
+  commit via bookmark swap. Matches MarkdownAdapter shadow-dir journal
+  semantics 1:1. Closes SYNTHESIS §9 dry-run gate by construction —
+  IF bd exposes the primitives.
+- **Outcome C (NEW — sibling-proven):** file-snapshot restore. At txn
+  entry, take `bd export --json` snapshot. On rollback, `bd init
+  --from-jsonl` into a fresh tmpdir and swap bookmark (fs-level
+  `.beads/` directory rename). Slow (bd init ~700ms cold-start) but
+  **proven reliable** in sibling's Phase 7 shipping code. Fallback
+  path if B's primitives don't exist.
+
+**Plan 06-01 spike output expectations:**
+- Section § "bd CLI primitives discovered" — full CLI command catalog
+  (equivalent to what sibling's helper already uses, plus anything
+  new).
+- Section § "Store-clone + bead-hash bookmark availability" — PASS /
+  PARTIAL / FAIL verdict with commands attempted + outputs.
+- Section § "Chosen outcome" — A / B / C with justification tied to
+  §3 results.
+
+**What changes in our plans:**
+- Plan 06-01 spike now has three possible outcomes to handle, not two.
+- The withTransaction-implementing plan (originally Plan 06-04) has
+  three implementation paths, selected post-spike. Documentation must
+  name the shipped outcome neutrally (no "fallback" framing, per
+  round-1 checker B3).
+
+**Severity:** recommended — widens the decision tree, doesn't
+invalidate the approach.
+
+### D-BINARY — skip-and-warn for binaryAsset — **RE-AFFIRM**
+
+Sibling implemented this exactly (`/Volumes/code/gsd-beads/src/adapter/primitives.mjs:582-588`):
+`capabilities.binaryAsset: false`; `writeBinaryAsset` throws
+`UnsupportedOperationError` with locked message format. Conformance
+asserts both the throw and message format (4 tests in
+`capabilities.test.mjs`).
+
+**Amendment (minor):** Use the fork's `UnsupportedCapabilityError`
+(from `adapters/types.ts:123`) instead of sibling's
+`UnsupportedOperationError`. Port the sibling's 4-test capability-lint
+pattern into the hybrid plans' conformance coverage.
+
+**Severity:** optional — class name harmonization only.
+
+### D-INIT-ERR — typed BdManagedMismatchError — **RE-AFFIRM**
+
+Sibling has `BeadsEmpty` sentinel (`/Volumes/code/gsd-beads/src/adapter.mjs:40-44`)
+thrown from `_ensureBd()` when `findBeadsRoot()` returns null. No
+`__brand`, no `code` literal — uses `this.name` for cross-module
+`instanceof` fallback instead.
+
+**Amendment:** Fork contract wins: `BdManagedMismatchError` with
+locked shape (`code: 'PROJECT_BD_MANAGED_MISMATCH'`, `projectDir`,
+`hint`, `__brand`). Port sibling's **probe mechanism**
+(`findBeadsRoot()` walk at `/Volumes/code/gsd-beads/src/bd/findRoot.mjs`
+— 68 LOC, 4 topology cases tested) directly — this is the proven
+bd-managed-dir detection logic.
+
+**Severity:** optional — port the proven walk; don't re-author.
+
+### D-SCAFFOLD — fresh npm init + file-link — **CRITICAL AMENDMENT**
+
+**Current lock:** `~/code/gsd-beads/` created fresh via `npm init -y`.
+Fresh scaffold; no v0.2 carry-forward except concepts.
+
+**Reality:** `/Volumes/code/gsd-beads` already exists as a mature repo
+at `main @ 5082d45` with 6 shipped phases + 13 concluded spikes + ~15
+KLOC working code. The "fresh scaffold" framing was wrong. Additionally,
+the sibling uses:
+- `.mjs` + Node ESM (not `.ts` + TypeScript)
+- `node --test` (not `vitest`)
+- `peerDependencies: { "get-shit-done-cc": "*" }` with `optional: true`
+  (not `"get-shit-done": "file:../get-shit-done"` dev-dep)
+
+**Amendment:** **Hybrid reset-and-repurpose.** Plan 06-01 Task X does:
+1. **Archive full history:** `git branch v0.2-archive` on sibling main.
+   Preserves all shadow + library-alpha history cheaply.
+2. **Selective prune on main:** `git rm -rf` everything EXCEPT a
+   whitelist of carry-forward files:
+   - `src/bd/findRoot.mjs`, `src/bd/helper.mjs`, `src/bd/errors.mjs`
+   - `src/helpers/parsePhaseId.mjs`, `deriveDiskStatus.mjs`,
+     `detectDrift.mjs`, `loadMilestoneHeading.mjs`
+   - `src/format/phase.mjs`, `section.mjs`, `frontmatter.mjs`
+   - `src/adapter/pathRouter.mjs`, `_atomicWrite.mjs`
+   - `tests/fixtures/build-seed.sh` (for regeneration discipline)
+   - `.planning/spikes/014-bd-blocks-sibling-deps/SPIKE.md`
+   - `.gitignore` (bd-tuned; keep)
+3. **Delete outright:** `archive/v0.2-shadow/`, `install/memories/`,
+   `settings.fragment.json`, `recipe/`, `gsd-sdk-cc.version.lock`,
+   most of `.planning/` (keep only spike 014), sibling's own
+   `.claude/skills/spike-findings-gsd-beads/` (canonical copy lives
+   in fork).
+4. **Tech-stack decision for the new src/ layout:** TS vs .mjs?
+   See amendment to D-TECH-STACK below.
+5. **Init/update `package.json`:** name stays `gsd-beads`; exports
+   stays primary-class shape; peerDependencies pattern is correct
+   for the post-Phase-8 world and can stay. Fork's
+   `"get-shit-done": "file:../get-shit-done"` dev-dep becomes
+   `devDependencies: { "get-shit-done-cc": "file:../get-shit-done" }`
+   so both the file-link AND the eventual peerDep registration are
+   satisfied.
+6. **Rewrite `README.md` + `CLAUDE.md` + `CONTRIBUTING.md`** for
+   the v1.0 adapter library shape (most of the old content is
+   shadow-era narrative).
+
+**Severity:** **critical** — flips the repo-preparation mechanics.
+
+### D-TECH-STACK (NEW) — `.ts` + vitest vs `.mjs` + node:test
+
+**Context:** Not an originally-locked decision; emerged from the
+extraction. Sibling is `.mjs` + `node:test`; fork's Phase 6 assumed
+`.ts` + vitest.
+
+**Options:**
+- **A. Stay `.mjs` + node:test** — keep sibling's proven code as-is;
+  port only adapters/types.ts type definitions as a reference (not
+  enforced at compile time). Fastest; loses compile-time type
+  enforcement of `StateWriteOutcome` + event payload discriminated
+  unions; matches fork's upstream CJS discipline (Phase 1 D-02
+  forbids CJS modifications, but upstream CJS ≠ sibling's ESM —
+  consistency with upstream's ESM is what matters).
+- **B. Migrate sibling to `.ts` + vitest** — Phase 6 ports every
+  carry-forward `.mjs` to TS (~1000 LOC) + adds vitest config +
+  TypeScript compile output for consumption. Gains compile-time
+  enforcement. Biggest scope inflation.
+- **C. Hybrid** — keep `.mjs` for bd-interaction modules (src/bd/,
+  src/adapter/); author new adapter-compliance TS modules (src/
+  primitives.ts, src/events.ts, src/capabilities.ts) that IMPORT the
+  `.mjs` helpers. TypeScript modules surface the `StorageAdapter`
+  type compliance; `.mjs` internals stay proven. `vitest` can
+  `.ts` + `node:test` can `.mjs`; both run via `npm test`.
+
+**Recommended:** Option A (stay `.mjs` + node:test). Rationale:
+- Scope stays bounded. Phase 6 delivers contract compliance, not
+  language migration.
+- Type enforcement at consumer-boundary is achieved via `.d.ts` files
+  hand-authored alongside the ESM modules (sibling's tsconfig already
+  has `"checkJs": true, "allowJs": true` at least in intent — needs
+  verification).
+- Matches sibling's shipped reality. Consumers (Phase 8 resolver) can
+  consume the default export cleanly.
+- Avoids the 1000-LOC rewrite risk.
+
+This decision is **new and needs user confirmation** — unlike the
+amendments above which clarify/adjust existing locks, D-TECH-STACK is
+a fresh architectural call.
+
+**Severity:** **critical** — shapes every Phase 6 file authored.
+
+### D-CONFORM-EXPORT — fork `./conformance` subpath — **RE-AFFIRM**
+
+Fork-side subpath export is unchanged and unaffected by sibling's
+state. Sibling's own `tests/conformance/` harness (from Phase 7)
+dies with the prune in D-SCAFFOLD amendment; the new v1.0 sibling
+imports the fork's harness via `get-shit-done/conformance`.
+
+**Amendment (minor):** If D-TECH-STACK settles on Option A (stay
+`.mjs`), the fork's subpath export must resolve to a `.js` or `.mjs`
+output; the current TS source compiles to `.js`. Verify this works.
+Port the sibling's dual-path auto-invoke gate pattern into the fork's
+conformance harness so it can run both via glob (`npm run
+test:conformance`) AND via driver (`node tests/conformance/run.mjs`)
+without double-registration.
+
+**Severity:** optional — execution detail.
+
+### D-RUNTIME-RESOLUTION — dynamic require("gsd-{name}") — **RE-AFFIRM +
+clarify export shape**
+
+Sibling's `package.json` declares `"main": "./src/adapter.mjs"` and
+default-exports the `BeadsAdapter` class from `src/adapter.mjs`. This
+is the exact shape Phase 8's resolver needs: `const Adapter =
+(await import('gsd-beads')).default; new Adapter(projectDir)`.
+
+**Amendment:** **Codify the export shape:** BeadsAdapter exports as
+BOTH default AND named:
+```js
+export class BeadsAdapter { ... }
+export default BeadsAdapter;
+```
+Sibling already does this. Preserve during the prune.
+
+**Severity:** optional — pattern clarification.
+
+### Carry-forward source paths (authoritative reference)
+
+All paths relative to `/Volumes/code/gsd-beads/` unless noted. These
+are the files the hybrid Phase 6 plans will port/preserve from the
+sibling; the rest of the sibling is archived in `v0.2-archive` branch
+or deleted outright.
+
+| File | LOC | Role | Port destination |
+|------|-----|------|------------------|
+| `src/bd/findRoot.mjs` | 68 | bd-managed-dir walker (4 topology cases tested) | `src/bd/findRoot.mjs` (kept in-place per D-SCAFFOLD whitelist) |
+| `src/bd/helper.mjs` | 65 | spawnSync wrapper + sentinel errors + JSONL fallback | `src/bd/helper.mjs` (kept; amend for adapter-context CWD per Landmine 3) |
+| `src/bd/errors.mjs` | ~50 | BeadsCause enum + sentinel subclasses | `src/bd/errors.mjs` (kept; add `BdManagedMismatchError` with fork's locked shape) |
+| `src/helpers/parsePhaseId.mjs` | 16 | label normalization | `src/helpers/parsePhaseId.mjs` (kept) |
+| `src/helpers/deriveDiskStatus.mjs` | 24 | 7-value priority chain | `src/helpers/deriveDiskStatus.mjs` (kept) |
+| `src/helpers/detectDrift.mjs` | 40 | 3-kind drift detector | `src/helpers/detectDrift.mjs` (kept; narrower than D-MAPPING-SCHEMA's vision but useful pattern) |
+| `src/helpers/loadMilestoneHeading.mjs` | 25 | milestone-heading formatter | `src/helpers/loadMilestoneHeading.mjs` (kept) |
+| `src/format/phase.mjs` | 251 | bidirectional ROADMAP.md phase parser | `src/format/phase.mjs` (kept; fulfills the single file-specific schema D-MAPPING-SCHEMA amendment keeps) |
+| `src/format/section.mjs` | ~130 | slugify + locateSection + rewriteSection | `src/format/section.mjs` (kept) |
+| `src/format/frontmatter.mjs` | 107 | flat-scalar YAML parser | `src/format/frontmatter.mjs` (kept; escalate to `js-yaml` if nested-object frontmatter surfaces) |
+| `src/adapter/pathRouter.mjs` | 97 | closed-enum path router | `src/adapter/pathRouter.mjs` (kept; 7 patterns need review against fork's canonical-file list) |
+| `src/adapter/_atomicWrite.mjs` | 30 | tmpfile + POSIX rename | `src/adapter/_atomicWrite.mjs` (kept; fix WR-05 ms-resolution race during port) |
+| `tests/fixtures/build-seed.sh` | — | JSONL seed regeneration | `tests/fixtures/build-seed.sh` (kept; enforces BEADS_ACTOR=seed discipline) |
+| `.planning/spikes/014-bd-blocks-sibling-deps/SPIKE.md` | — | Dep-edges primitive proof | `.planning/research/spike-014-bd-blocks.md` (kept for D-OQ06 evidence) |
+
+Fork-side skill (authoritative carry-forward reference):
+- `/Volumes/code/get-shit-done/.claude/skills/spike-findings-gsd-beads/`
+  (6 files, 2696 lines — SKILL.md + 5 reference files). MUST be read
+  by Phase 6 planner + executor.
+
+### Landmines to NOT re-inherit
+
+The sibling documented 13 bug-scars in its own Phase 7 verification
+work. Phase 6 hybrid plans MUST fix these during port, not carry
+them forward:
+
+1. **`_abs()` path traversal (CR-01 BLOCKER)** — Fork Phase 6 MUST
+   add runtime path-traversal guard + negative conformance tests.
+2. **`putRecord` on hybrid-tier paths bypasses D-10 dual-write (CR-02
+   BLOCKER)** — Phase 6 must either force hybrid through named-doc
+   dispatch or delete the hybrid tier.
+3. **bd helper `cwd` not propagated (Landmine 3)** — Phase 6 bakes
+   adapter-context CWD implicitly into the wrapper.
+4. **`bd comments add --label` doesn't work in v1.0.3 (Landmine 4)**
+   — Phase 6 uses `--author gsd:event:<type>` for high-frequency
+   event types.
+5. **`bd show <id> --json` returns single-element ARRAY** — Phase 6
+   unwraps via `Array.isArray(shown) ? shown[0] : shown`.
+6. **`bd export --json` is JSONL, not JSON array** — Phase 6 wrapper
+   handles both (already in sibling helper at `src/bd/helper.mjs:43-55`).
+7. **bd "no issues found" returns `{error, schema_version}` with exit
+   code 0** — Phase 6 detects + maps to sentinel (already in sibling
+   helper).
+8. **`.beads` must `chmodSync(0o700)` post-init** — Phase 6
+   conformance fixtures + snapshot/restore enforce.
+9. **WR-02/WR-03 frontmatter YAML escape bugs** — Phase 6 fixes or
+   escalates to `js-yaml`.
+10. **WR-05 atomic-write tmpfile ms-resolution race** — fix via
+    `process.pid + crypto.randomBytes` suffix or `O_EXCL` open flag.
+
+### Plan breakdown — hybrid shape
+
+Phase 6 hybrid plans (replacing the archived 7-plan breakdown):
+
+| Plan | Wave | Scope |
+|------|------|-------|
+| **06-01 — Repo preparation + bd spike + fork-side additive changes** | 1 | Archive sibling history (`v0.2-archive` branch); selective prune on main per D-SCAFFOLD amendment; bd CLI availability verification + spike of store-clone + bead-hash-bookmark primitives (D-TXN outcome selection) + mapping-verification (D-MAPPING compliance audit). Fork-side changes: `./conformance` subpath export + `graphEdges` Capabilities extension + MarkdownAdapter capabilities object update. |
+| **06-02 — Contract compliance on sibling primitives** | 2 | Patch sibling's shipped primitives to satisfy fork contract: 9-key `capabilities` shape + `StateWriteOutcome` three-state return on `recordStateEvent` (split into 3 families: `recordStateAppend`/`Mutation`/`Signal`) + typed `BdManagedMismatchError` (port sibling's `BeadsEmpty` to fork shape) + path-traversal guard on `_abs()`. Port landmines 3, 4, 5, 6, 7, 8 fixes. |
+| **06-03 — withTransaction outcome implementation** | 3 | Ship chosen withTransaction outcome (A/B/C per Plan 01 spike output). Implement `snapshot()`/`restore()` under the chosen strategy. Commit-planning-state bead-hash bookmark. Plan 3 depends on Plan 1 outcome. |
+| **06-04 — dep-edge synthesizer + reconciliation + README** | 4 | Dep-edge synthesizer citing Spike 014 (D-OQ06); conformance-test reconciliation (retire sibling's harness; import fork's via `get-shit-done/conformance`); sibling `README.md` + `CLAUDE.md` rewrite for v1.0 library shape; BeadsAdapter export shape (default + named class per D-RUNTIME-RESOLUTION). |
+
+This is 4 plans × waves 1-4. Significantly smaller than the original
+7-plan breakdown because the sibling's shipped primitives absorb most
+of the implementation work; Phase 6's remaining scope is compliance +
+selective additions.
+
+### User decisions required before replanning proceeds
+
+Amendments above are drafted but not yet locked. Items flagged for
+user approval (in priority order):
+
+1. **D-MAPPING critical amendment** — accept sibling's labels-first
+   + description-blob as the v1.0 mapping, drop the L2-sub-records
+   design? (Yes/no)
+2. **D-TECH-STACK (new)** — Option A `.mjs` + node:test (stay
+   sibling's stack) / Option B migrate to `.ts` + vitest / Option C
+   hybrid? (A recommended)
+3. **D-SCAFFOLD critical amendment** — adopt the
+   archive-branch-then-selective-prune reset mechanics with the
+   named carry-forward whitelist? (Yes/no — the whitelist itself is
+   negotiable)
+4. **D-TXN-SPIKE amendment** — widen to 3 outcomes (A/B/C) in Plan
+   06-01 spike? (Yes/no)
+5. **Plan count** — 4 hybrid plans × 4 waves as outlined above, or
+   different shape? (Default: 4 × 4 as above)
+6. **Re-discuss-phase** — after amendments land, run
+   `/gsd-discuss-phase 6` (chain) to re-capture a fresh CONTEXT.md
+   that lives alongside this amended version? Or leave this
+   amendment-appended file as the canonical source?
+
+</decisions>
+
+---
+
 *Phase: 06-beadsadapter-implementation*
-*Context gathered: 2026-05-11*
+*Context gathered: 2026-05-11 (original)*
+*Post-extraction amendments: 2026-05-11 (hybrid pivot after sibling repo discovered at /Volumes/code/gsd-beads)*
