@@ -1,29 +1,38 @@
 {
   "version": "1.0",
-  "timestamp": "2026-05-07T14:35:00Z",
-  "phase": "03",
-  "phase_name": "wire-core-write-methods-recordStateEvent",
-  "phase_dir": ".planning/phases/03-wire-core-write-methods-recordStateEvent",
+  "timestamp": "2026-05-11T03:31:20.860Z",
+  "phase": "05",
+  "phase_name": "foundational-primitive-lift",
+  "phase_dir": ".planning/phases/05-foundational-primitive-lift",
   "plan": null,
   "task": null,
   "total_tasks": null,
-  "status": "ready_to_plan",
-  "next_action": "Plan Phase 3 — /gsd-plan-phase 3",
-  "context_notes": "Phase 2 verified 4/4 SC on 2026-05-07. All SDK read handlers routed through adapter. Phase 3 scope: migrate state-mutation.ts (10+ write handlers) and phase-lifecycle.ts write handlers to adapter; introduce recordStateEvent discriminated-union; resolve OQ-01 (commitPlanningState semantics). Key pattern established in Phase 2: adapter-first-arg with closure wiring in createRegistry. phasesArchive already has adapter-first-arg but body still uses fs rename (needs adapter write primitive). adapterFor() transitional calls remain in write handlers — Phase 3 removes them.",
-  "completed_tasks": [],
+  "status": "phase_shipped_pending_adapter_contract_refactor",
+  "completed_tasks": [
+    {"id": "phase-5", "name": "Phase 5 shipped (7/7 plans complete, ROADMAP checkboxes set, completed_phases flipped)", "status": "done", "commit": "9656d25a"},
+    {"id": "uat-5", "name": "Phase 5 UAT (7/7 tests pass; live STATE.md round-trip confirmed)", "status": "done", "commit": "59baf95d"},
+    {"id": "uat-3", "name": "Phase 3 UAT (4/4 tests pass; 2 blocker bugs caught + fixed mid-session)", "status": "done", "commit": "8ca755bc"},
+    {"id": "bug-1", "name": "Bug 1: decision append silent-drop fixed (appendToOrCreateSection + broadened heading regex)", "status": "done", "commit": "e7c0806a"},
+    {"id": "bug-2", "name": "Bug 2: progress non-determinism fixed (syncStateFrontmatter single-writer rule)", "status": "done", "commit": "e325d561"},
+    {"id": "cleanup-1", "name": "Dead updateStateProgressFields helper removed", "status": "done", "commit": "a03f199c"},
+    {"id": "hardening-1", "name": "Systemic hardening: blocker_added + metric + todo_count_update create-if-missing + 2 regression tests", "status": "done", "commit": "08b4054a"}
+  ],
   "remaining_tasks": [
-    {"task": "Plan Phase 3", "priority": "high"},
-    {"task": "Write Phase 2 SUMMARY (optional — verification doc is sufficient)", "priority": "low"}
+    {"id": "contract-refactor", "name": "Three-state StateWriteOutcome contract across recordState* methods", "status": "designed_not_implemented", "scope": "adapters/types.ts (add type + change signatures) + adapters/markdown/index.ts (dispatchers + helpers return HelperResult) + 10+ SDK handler callers in state-mutation.ts + remove duplicate dedupe in stateAddRoadmapEvolution + regression tests", "estimated_effort": "30-45 min in a fresh session"},
+    {"id": "phase-6", "name": "Phase 6: BeadsAdapter implementation (sibling repo ~/code/gsd-beads)", "status": "not_started", "unblocked_by": "Phase 5 shipped"}
   ],
   "blockers": [],
-  "human_actions_pending": [],
-  "uncommitted_files": [],
-  "decisions": [
-    "Golden tests that dispatch to fixture dirs must construct registry with fixture dir (not REPO_ROOT) — adapter reads from its root, not projectDir",
-    "CJS resolveModelInternal always resolves (no configExists guard) — SDK must match",
-    "extractFrontmatterLeading (byte-0 anchored) is correct for CJS parity; extractFrontmatter (last-match) is only for corruption recovery",
-    "phasesArchive body stays fs-based until Phase 3 provides adapter write primitives (rename/move)",
-    "getMilestonePhaseFilter signature is (adapter, workstream) — already done, callers threaded"
+  "human_actions_pending": [
+    {"action": "Decide: implement StateWriteOutcome contract as Phase 3.1 gap plan BEFORE Phase 6, or roll it into Phase 6 interface design", "context": "Phase 6 will re-examine StorageAdapter anyway; bundling the contract refactor there may be cleaner than a standalone edit. But BeadsAdapter will need the contract from day one, so landing it first gives the new adapter a clean target.", "blocking": false}
   ],
-  "blocking_constraints": []
+  "decisions": [
+    {"decision": "ADR ID renumbering: planner drafted D-2026-05-01..05; actually landed as D-2026-05-10-03..07", "rationale": "Drafted IDs collided with prior Phase 2/3/4 entries (D-2026-05-01 stat primitive, D-2026-05-01-OQ04, D-2026-05-10-01, etc.)", "phase": "05"},
+    {"decision": "Revert + atomic re-execute of Plan 05-06", "rationale": "Original Wave 6 executor commit 88d43deb bundled legitimate migration with file-corrupting edits (dangling JSDoc, missing closing braces). Reverted c02f37ae cleanly and re-landed as 4 atomic commits (49a5f6cb D-21, 11dc85a3 named-docs, 6070d319 codebase-docs, b22606a9 tmp-docs exception) with build+test gates per commit", "phase": "05"},
+    {"decision": "syncStateFrontmatter is the ONLY writer of progress fields", "rationale": "Two competing writers (phase.complete phase-weighted vs sync plan-weighted) produced non-deterministic values across consecutive adapter writes. Deriving from disk on every write gives reproducible, always-current results.", "phase": "03"},
+    {"decision": "Create-if-missing for additive event dispatchers (decision, metric, blocker_added, todo_count_update)", "rationale": "Silent-noop on hardcoded-regex mismatch caused additive writes to be falsely reported as successful. Scaffolding the target section + landing the entry preserves data + signals intent via the future created_section field in the outcome.", "phase": "03"},
+    {"decision": "StateWriteOutcome three-state contract DESIGNED (not yet implemented)", "rationale": "Even with create-if-missing, callers can't distinguish applied (data landed), intentional no-op (duplicate dedupe), and structural no-op (nothing-to-remove). Shape: {applied: true, created_section?: string} | {applied: false, reason: 'duplicate' | 'nothing_to_remove'}. Design complete in chat history; implementation hit context budget.", "phase": "03"}
+  ],
+  "uncommitted_files": [],
+  "next_action": "Decide whether to land the StateWriteOutcome contract refactor as a Phase 3.1 gap plan (30-45 min in fresh context) or fold it into Phase 6 interface design. If doing it now: (1) add StateWriteOutcome to adapters/types.ts + change recordState* signatures; (2) refactor adapters/markdown/index.ts helpers to return HelperResult; (3) update 10+ callers in sdk/src/query/state-mutation.ts; (4) remove handler-side dedupe in stateAddRoadmapEvolution; (5) add regression tests for each outcome shape.",
+  "context_notes": "Very long session (6+ hours, 30+ commits). Flow: /gsd-resume-work → /gsd-execute-phase 5 → discovered Wave 6 corruption → reverted → re-executed Plan 05-06 cleanly → Phase 5 UAT → shipped Phase 5 → Phase 3 UAT → caught 2 more blocker bugs + did systemic audit → fixed 3 more silent-noop sites. Critical observation: the user's instinct to push back on 'pass' and demand real verification (re-running live smokes, reading diffs carefully) caught every bug — the automated 1567-test suite had missed ALL of them because no test exercised the 'STATE.md without section X' edge case. Key lesson captured: 'if (!match) return content' is the root anti-pattern behind the silent-drop family. Test state at pause: SDK 1567/0, Conformance 117/0, TS 0 errors, tree clean at 08b4054a."
 }
