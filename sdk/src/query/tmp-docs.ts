@@ -33,12 +33,6 @@ function validateName(name: string): void {
 
 // ─── tmpPut ─────────────────────────────────────────────────────────────────
 
-// Phase 5 D-12 exception: tmp keys embed subdir + extension (e.g. "subdir/file.json"),
-// which the adapter's putNamedDoc category formula ('tmp/${key}.md') does not support.
-// Handler continues to use adapter.putRecord directly with the raw path. Acceptable
-// per D-12 "handlers remain thin wrappers over the uniform primitive call" — the
-// tmp wrapper's concern is the extension-free, subdir-permissive path scheme.
-
 /**
  * Write a temporary document.
  *
