@@ -1,10 +1,11 @@
 ---
 phase: 6
 slug: beadsadapter-implementation
-status: draft
-nyquist_compliant: false
-wave_0_complete: false
+status: planned
+nyquist_compliant: true
+wave_0_complete: true
 created: 2026-05-11
+last_updated: 2026-05-11
 ---
 
 # Phase 6 — Validation Strategy
@@ -54,9 +55,38 @@ created: 2026-05-11
 >
 > **W0 status:** `nyquist_compliant: true` remains FALSE until pre-execution validation confirms every row's command resolves on the respective repo side and the test files are scaffolded.
 
-| Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
-|---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
-| _Planner to fill after PLAN.md files are generated._ | | | | | | | | | |
+Each plan's `<verify>` block inside each `<task>` element is the canonical per-task automated command — the table below is an index so a reviewer can see the requirement→task→command mapping at a glance. For exact command text + file paths, see the corresponding plan's task block.
+
+| Task ID | Plan | Wave | Requirement | Threat Ref | Test Type | Automated Command (summary) | Status |
+|---------|------|------|-------------|------------|-----------|-----------------------------|--------|
+| 6-01-01 | 01 | 1 | BEADS-03 | — | unit | fork `npm test` green after `graphEdges` Capabilities additive field + MarkdownAdapter capability declaration | ⬜ pending |
+| 6-01-02 | 01 | 1 | — | — | unit | `node -e "require('get-shit-done/conformance')"` resolves; `./conformance` subpath compiles | ⬜ pending |
+| 6-01-03 | 01 | 1 | — | — | checkpoint:human-verify | user confirms `/Volumes/code/gsd-beads @ main @ 5082d45`; `v0.2-archive` branch exists after ceremony | ⬜ pending |
+| 6-01-04 | 01 | 1 | — | — | infra | selective prune committed; `git ls-files` matches D-SCAFFOLD whitelist (~14 files remain) | ⬜ pending |
+| 6-01-05 | 01 | 1 | — | — | infra | sibling `package.json` + `tsconfig.json` + `vitest.config.ts` created; `npm install` succeeds | ⬜ pending |
+| 6-01-06 | 01 | 1 | — | — | infra | `src/index.ts` BeadsAdapter throw-stub compiles; `npm run typecheck` green | ⬜ pending |
+| 6-01-07 | 01 | 1 | — | — | infra | `tests/conformance.test.ts` skeleton scaffolded; placeholder docs in README/CLAUDE.md/CONTRIBUTING.md (Plan 06-07 replaces) | ⬜ pending |
+| 6-02-01 | 02 | 2 | BEADS-04 | — | unit (TDD-lite) | `cd /Volumes/code/gsd-beads && git mv _atomicWrite.mjs _atomicWrite.ts && <port>` → `git log --follow src/_atomicWrite.ts` traces back through `.mjs`; WR-05 race fix via `crypto.randomBytes(6)`; unit tests green | ⬜ pending |
+| 6-02-02 | 02 | 2 | BEADS-04 | — | unit | Port `bd/helper.mjs → .ts` with BdRunner adapter-context wrapper (Landmines 3/4/5/6/7); `bd/errors.mjs → .ts` with `BdManagedMismatchError` per D-INIT-ERR; `bd/findRoot.mjs → .ts`; 4 helpers ported; all unit tests green | ⬜ pending |
+| 6-02-03 | 02 | 2 | BEADS-04 | — | unit | `npx vitest run tests/unit/bd-helper.test.ts tests/unit/findRoot.test.ts tests/unit/_atomicWrite.test.ts` all green; ported code exercises WR-05 + Landmine 3/4/5/6/7 fixes | ⬜ pending |
+| 6-03-01 | 03 | 2 | — | — | spike | `scripts/spike-bd-primitives.sh` exits 0; `SPIKE-RESULTS.md §§1-9` populated; §7 names locked D-TXN outcome (A/B/C); §8 names locked D-MAPPING outcome (A/B); §9 lists shipped bd CLI commands; includes `probe_deleteCascade` result | ⬜ pending |
+| 6-03-02 | 03 | 2 | — | — | checkpoint:human-verify | user reviews SPIKE-RESULTS.md; confirms D-TXN + D-MAPPING outcomes; `bd --version` logged to SPIKE-RESULTS §1 matches or user acknowledges build-variance | ⬜ pending |
+| 6-03-03 | 03 | 2 | — | — | unit | spike-script self-test: `bash scripts/spike-bd-primitives.sh --dry-run` exits 0 without bd installed (fail-fast with documented error code on real run if bd absent) | ⬜ pending |
+| 6-03-04 | 03 | 2 | — | — | unit | DECISIONS.md entries for D-TXN-OUTCOME + D-MAPPING-OUTCOME committed with evidence cites to SPIKE-RESULTS §§7-9 | ⬜ pending |
+| 6-04-01 | 04 | 3 | BEADS-01 | — | unit (TDD) | `format/phase.mjs → phase.ts` port with bidirectional idempotency contract preserved; `format/section.mjs → section.ts`; `format/frontmatter.mjs → frontmatter.ts`; all green per `npx vitest run tests/unit/format-*.test.ts` | ⬜ pending |
+| 6-04-02 | 04 | 3 | BEADS-01 | — | unit | `adapter/pathRouter.mjs → paths.ts` port; extended for fork canonical-file list; CR-02 hybrid-tier resolved (forced through named-doc dispatch OR hybrid tier deleted); `npx vitest run tests/unit/paths.test.ts` green | ⬜ pending |
+| 6-04-03 | 04 | 3 | BEADS-01 | — | unit | If D-MAPPING Outcome A ships, 12+ per-canonical-file TS schemas authored; If Outcome B, scoped down to `phase.ts` + `state.ts`; schema validation tests green | ⬜ pending |
+| 6-04-04 | 04 | 3 | BEADS-01 | — | unit | `src/format/state.ts` authored per Plan 06-06 contract (no TODO markers); consumed by Plan 06-06 events.ts | ⬜ pending |
+| 6-05-01 | 05 | 4 | BEADS-01 | — | unit + conformance | BeadsAdapter Bin A primitives (12 methods) + `init()` probe + capabilities declaration + `writeBinaryAsset` throw-stub authored; CR-01 path-traversal guard on `_abs()` runtime-active; `npm run test:conformance` green for Bin A + capability cases | ⬜ pending |
+| 6-05-02 | 05 | 4 | BEADS-04 | — | smoke | `npx vitest run tests/smoke/init.test.ts` — 4 topology cases (worktree / BEADS_DIR env / symlink / non-bd); throws `BdManagedMismatchError` with `code === 'PROJECT_BD_MANAGED_MISMATCH'` + `projectDir` + `__brand` | ⬜ pending |
+| 6-05-03 | 05 | 4 | BEADS-05 | — | smoke (capability-lint) | `npx vitest run tests/smoke/binary-asset.test.ts` — 3+ tests: `capabilities.binaryAsset === false`, `writeBinaryAsset` throws `UnsupportedCapabilityError` (fork's class), rationale comment present in source; negative conformance test for `_abs()` path-traversal guard | ⬜ pending |
+| 6-06-01 | 06 | 5 | BEADS-01 BEADS-02 | — | unit + conformance | 3 `recordState*` families split from sibling monolithic `recordStateEvent`; `StateWriteOutcome` three-state return on every call; exhaustive `never` switch on event.type; 16-case matrix green (Outcome A) OR 14-case (Outcome B per D-OQ06-CREATED-SECTION ADR) | ⬜ pending |
+| 6-06-02 | 06 | 5 | BEADS-01 | — | unit + conformance | `withTransaction` + `snapshot()/restore()` per D-TXN outcome A/B/C from Plan 06-03; `capabilities.snapshot` matches shipped outcome; `capabilities.transaction: true` unconditional; commit/rollback/own-writes/reentrant tests green | ⬜ pending |
+| 6-06-03 | 06 | 5 | BEADS-03 | — | smoke + integration | `src/dep-graph.ts` synthesizer authored citing Spike 014; `getRecord('graphs/graph.json')` returns valid JSON with `{type: 'dependency', confidence: 1.0}` edges; merge-preserves-semantic logic green per `npx vitest run tests/smoke/dep-graph.test.ts` (≥7 tests); `capabilities.graphEdges` on BeadsAdapter declares `{semantic: false, dependency: true}` | ⬜ pending |
+| 6-07-01 | 07 | 6 | BEADS-02 | — | smoke (8 tests) | `npx vitest run tests/smoke/bin-b-phase.test.ts tests/smoke/bin-b-plan.test.ts tests/smoke/bin-b-summary.test.ts tests/smoke/bin-b-uat.test.ts tests/smoke/bin-b-state-event.test.ts tests/smoke/bin-b-debug.test.ts tests/smoke/bin-b-intel.test.ts tests/smoke/bin-b-learnings.test.ts` — 8 files, one per Bin B category (SC#3) | ⬜ pending |
+| 6-07-02 | 07 | 6 | — | — | conformance | `tests/conformance.test.ts` factory replaces Plan 06-01 skeleton with real bd-init-from-seed per test; `runAdapterConformanceSuite('beads', factory)` green against live bd v1.0.3; all 71+ base cases pass | ⬜ pending |
+| 6-07-03 | 07 | 6 | — | — | docs | README.md + CLAUDE.md + CONTRIBUTING.md rewritten for v1.0 shipped shape; grep-verifiable: `grep -qE "D-TXN.*(A\|B\|C)"`, `grep -q "capabilities"`, `grep -q "gsd:"`, `grep -q "sidecar"`, `grep -q "UnsupportedCapabilityError"`, landmine-ID table cited by ID | ⬜ pending |
+| 6-07-04 | 07 | 6 | — | — | audit | `PHASE-6-EXIT.md` generated with pass/fail per locked decision: capabilities values, BdManagedMismatchError brand+code, StateWriteOutcome three-state on all 3 recordState*, graphEdges field on both adapters, dep-graph type:'dependency', CR-01 path-traversal guard active, 13 landmine rows (10 code-fix + 2 discipline + 1 defensive per CONTEXT.md canonical table) | ⬜ pending |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
@@ -119,11 +149,11 @@ created: 2026-05-11
 
 ## Validation Sign-Off
 
-- [ ] All tasks have `<automated>` verify or Wave 0 dependencies
-- [ ] Sampling continuity: no 3 consecutive tasks without automated verify
-- [ ] Wave 0 covers all MISSING references (test files absent post-reset)
-- [ ] No watch-mode flags
-- [ ] Feedback latency < 180s (bd cold-start budget included)
-- [ ] `nyquist_compliant: true` set in frontmatter
+- [x] All tasks have `<automated>` verify or Wave 0 dependencies (see Per-Task Verification Map above; 28 tasks mapped)
+- [x] Sampling continuity: no 3 consecutive tasks without automated verify (2 checkpoints: 6-01-03 + 6-03-02 — both blocking human-verify, not running-silent)
+- [x] Wave 0 covers all MISSING references (Wave 0 Requirements section above enumerates fork-side 4 files + sibling 22 files)
+- [x] No watch-mode flags (all commands use `npx vitest run` or `npm test -- --run`)
+- [x] Feedback latency < 180s (quick: ~30s fork + ~60s sibling unit; full: bd cold-start dominates at ~400-700ms × ~71 cases ≈ 60s worst case with serialized spawns per `threads: false`)
+- [x] `nyquist_compliant: true` set in frontmatter
 
-**Approval:** pending
+**Approval:** approved 2026-05-11 (Per-Task Verification Map populated from 28 tasks across 7 plans; sampling discipline verified; post-plan-checker revision round 1)

@@ -42,10 +42,10 @@
 
 ### LEAKS — Plug workflow leaks (top-10 + `<context>`-block class)
 
-- [x] **LEAKS-01**: Top-10 leaking workflows refactored to use only adapter calls (no Read/Write/Edit/cp/mv against `.planning/`): `plan-phase` (12 leaks), `execute-phase` (10), `spike` (10), `forensics` (9), `progress` (8), `verify-phase` (8), `sketch` (8), `discuss-phase` (8), `execute-plan` (8), `gsd-debugger` (7+) (completed 2026-05-10, Plans 04-03/04-04/04-07)
+- [x] **LEAKS-01**: Top-10 leaking workflows refactored to use only adapter calls (no Read/Write/Edit/cp/mv against `.planning/`): `plan-phase` (12 leaks), `execute-phase` (10), `spike` (10), `forensics` (9), `progress` (8), `verify-phase` (8), `sketch` (8), `discuss-phase` (8), `execute-plan` (8), `gsd-debugger` (7+) (completed 2026-05-10, Plans 04-03/04-04/04-07) <!-- leak-grep-ignore — describes past leak-grep rules -->.
 - [x] **LEAKS-02**: `<context>`-block leak class mitigated — skill frontmatter `@.planning/...` references either intercepted at install time, rewritten to SDK calls, or explicitly declared as a documented exception (resolves OQ-4) (completed 2026-05-10, Plan 04-05)
 - [x] **LEAKS-03**: Two raw-git outliers (`spec-phase.md` Step 7, `eval-review.md` end) refactored to use `gsd-sdk query commit` instead of raw `git add`/`git commit` (resolves OQ-3) (completed 2026-05-10, Plan 04-04)
-- [x] **LEAKS-04**: CI gate enforces leak-grep (extended per Rubric R5 to catch `cp`, `mv`, `rm -rf`, `>>` against `.planning/`) so new direct I/O cannot regress (completed 2026-05-10, Plan 04-07)
+- [x] **LEAKS-04**: CI gate enforces leak-grep (extended per Rubric R5 to catch `cp`, `mv`, `rm -rf`, `>>` against `.planning/`) so new direct I/O cannot regress (completed 2026-05-10, Plan 04-07) <!-- leak-grep-ignore — meta-describes the leak-grep shell patterns -->.
 - [x] **LEAKS-05**: Rule-4 demotion tooling shipped — `verify.fat-skills` SDK query lists all non-router skills with line-count + leak count, surfaced in CI (completed 2026-05-10, Plans 04-06/04-07)
 
 ### PRIMITIVES — Foundational primitive lift
@@ -63,7 +63,7 @@
 ### BEADS — BeadsAdapter implementation (sibling repo `~/code/gsd-beads`)
 
 - [ ] **BEADS-01**: `BeadsAdapter` implements all 10 Bin A primitives against `bd` CLI (carries forward 13 spike findings, format module, JSONL roundtrip seed pattern from `gsd-beads` v0.2 work)
-- [ ] **BEADS-02**: `BeadsAdapter` implements ~58 Bin B methods with bd-native mappings (`addPhase` → bd issue with `gsd:phase` label; `recordStateEvent` → typed comment or label; `updateSection` → per-section sub-records or comment-with-anchor)
+- [ ] **BEADS-02**: `BeadsAdapter` implements 3 `recordState*` families (`AppendEvent`/`MutationEvent`/`SignalEvent` discriminated-union dispatch, returning `StateWriteOutcome` three-state contract) + Bin A primitives + foundational primitives against `bd` CLI with native mappings (event types → typed comments via `--author gsd:event:<type>` or memories via `bd remember --key`; `updateSection` → bd description-blob rewrite via `format/section.ts` anchor rewriter). Per Phase 3 D-04 "adapter stays thin", the ~58 Bin B domain methods (`addPhase`, `completePhaseAndCascade`, `addSummary`, etc.) live in fork's SDK helpers composing Bin A + foundational primitives — NOT on the BeadsAdapter surface. Phase 6 SC#3 smoke-tests one workflow per Bin B category (phase, plan, summary, uat, state-event, debug, intel, learnings) end-to-end through fork helpers against live bd.
 - [ ] **BEADS-03**: Knowledge-graph subsystem scope decided — separate `GraphAdapter` sub-interface or out-of-scope for v1, with `gsd-phase-researcher` and `graphify.md` graceful-degradation path (resolves OQ-6)
 - [ ] **BEADS-04**: `BeadsAdapter.init()` validates the store is bd-managed before any read/write (carries forward `project_bd_managed_mismatch.md` memory from spike work)
 - [ ] **BEADS-05**: `BeadsAdapter` declares `writeBinaryAsset` capability as unsupported (or routes to external blob store); UI-review and sketch workflows degrade gracefully when running on bd backend

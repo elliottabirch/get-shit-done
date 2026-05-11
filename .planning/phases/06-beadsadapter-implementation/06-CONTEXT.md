@@ -403,37 +403,36 @@ independently validated every property D-OQ06 needs:
   inference). Sibling already does this at `src/adapter.mjs:96`;
   preserve during the port.
 
-### Landmines fixed during the port (NOT inherited)
+### Landmines fixed during the port (NOT inherited) — Canonical ID table
 
-Phase 6 plans fix these during port; NOT carry-forward bugs:
+**Source of truth for Phase 6 landmine numbering.** All plans (06-01..06-07),
+CLAUDE.md template, and PHASE-6-EXIT.md audit grep map MUST cite these IDs.
+Column **Landmine #** matches SKILL.md §9 numbering exactly. Column **Phase 6
+item** is the sequential fix-register position (used in doc prose for
+readability only — NOT the canonical ID).
 
-1. **`_abs()` path traversal (Landmine 1 / CR-01 BLOCKER):** add
-   runtime path-traversal guard + negative conformance tests.
-2. **`putRecord` on hybrid-tier bypasses D-10 dual-write (Landmine 2
-   / CR-02 BLOCKER):** force hybrid through named-doc dispatch OR
-   delete the hybrid tier (planner's call based on fork's path
-   architecture).
-3. **bd helper `cwd` not propagated (Landmine 3):** bake
-   adapter-context CWD implicitly into the bd wrapper constructor.
-4. **`bd comments add --label` doesn't work (Landmine 4):**
-   `recordStateAppend` high-frequency types use
-   `--author gsd:event:<type>` exclusively.
-5. **`bd show <id> --json` returns array (Landmine 5):** unwrap via
-   `Array.isArray(shown) ? shown[0] : shown` in the wrapper.
-6. **`bd export --json` is JSONL, not JSON array (Landmine 6):**
-   wrapper tries `JSON.parse` first, falls back to line-by-line.
-7. **bd "no issues found" returns `{error, schema_version}` exit 0
-   (Landmine 7):** wrapper detects + maps to `BeadsEmpty` sentinel.
-8. **`.beads` `chmodSync(0o700)` post-init (Landmine 9):** fixtures
-   + snapshot/restore enforce.
-9. **WR-02/WR-03 frontmatter YAML escape (Landmine 13 subset):**
-   TS port catches many; escalate to `js-yaml` if nested-object
-   frontmatter surfaces.
-10. **WR-05 atomic-write ms-resolution race:** fix via
-    `process.pid + crypto.randomBytes` suffix or `O_EXCL` open flag
-    during the port.
-11. **WR-04 snapshot/restore prefix hardcoded (Landmine 12):** derive
-    from snapshot metadata or first issue's id format.
+| Landmine # | Phase 6 item | Shorthand | What breaks | Fix (during port) | Owning plan |
+|-----------:|-------------:|-----------|-------------|-------------------|-------------|
+| **1 / CR-01 BLOCKER** | 1 | `_abs()` path traversal | `putRecord('/etc/passwd', body)` or `../` escapes repo root | Runtime guard: `startsWith(root + sep)` check + throw `TypeError`; negative conformance tests | 06-05 (primitives) |
+| **2 / CR-02 BLOCKER** | 2 | `putRecord` hybrid-tier bypass | `putRecord('.planning/intel/foo.md')` writes disk but misses `bd remember` index entry | Force hybrid through named-doc dispatch in `paths.ts` OR delete hybrid tier entirely | 06-04 (paths.ts) |
+| **3** | 3 | bd helper `cwd` not propagated | `spawnSync('bd')` uses `process.cwd()`; wrong `.beads/` found during conformance tests | Bake adapter-context CWD implicitly in `BdRunner` wrapper constructor | 06-02 (bd/helper.ts port) |
+| **4** | 4 | `bd comments add --label` unsupported in v1.0.3 | Labels silently dropped on comments | Use `--author gsd:event:<type>` exclusively for high-freq append event types | 06-06 (recordStateAppend) |
+| **5** | 5 | `bd show <id> --json` returns single-element array | `JSON.parse(stdout)` consumers unwrap wrong | `Array.isArray(shown) ? shown[0] : shown` unwrap in `BdRunner` | 06-02 (bd/helper.ts port) |
+| **6** | 6 | `bd export --json` is JSONL, not JSON array | `JSON.parse(stdout)` throws | Try `JSON.parse` first; on throw, split by newline + parse each line | 06-02 (bd/helper.ts port) |
+| **7** | 7 | "no issues found" returns `{error, schema_version}` exit 0 | Looks like success; actually empty | Detect + map to `BeadsEmpty` sentinel in `BdRunner` | 06-02 (bd/helper.ts port) |
+| **8** | — (out of scope) | `listCollection` on bd-routed singleton silently returns `[]` (WR-08) | Misroute doesn't error | Throw on misroute (defensive — WR-08 sibling bug; Plan 06-05 `listCollection` does this) | 06-05 (primitives) |
+| **9** | 8 | `.beads` mode warnings every bd call | Warn text pollutes stdout; bd nags | `chmodSync(0o700)` immediately after bd init | 06-07 (conformance fixture) + 06-06 (snapshot/restore) |
+| **10** | — (discipline, not code fix) | `tests/fixtures/seed.jsonl` uncommitted-dirty | Seed regeneration not reproducible | Enforce seed-regenerated-in-CI from `build-seed.sh`; NOT hand-edited | 06-07 (tests/fixtures) |
+| **11** | — (discipline) | `BEADS_ACTOR` leak breaks CONF-03 byte-identity | `created_by` flips to dev's actor identity | `BEADS_ACTOR=seed` on EVERY bd call during seed rebuild | 06-07 (tests/fixtures/build-seed.sh) |
+| **12 / WR-04** | 11 | `restore()` hardcodes `--prefix 'sd'` | Breaks for non-sd prefixes | Derive prefix from snapshot metadata or first issue's id format | 06-06 (withTransaction Outcome C) |
+| **13 / WR-05** | 10 | atomic-write tmpfile ms-resolution race | `${pid}.${Date.now()}` collision | `process.pid + crypto.randomBytes(6)` suffix OR `O_EXCL` open flag | 06-02 (_atomicWrite.ts port) |
+| **13-WR02/03 (subset)** | 9 | `formatFrontmatter` YAML escape bugs | Nested/escaped values mangled | TS port's type system catches many; escalate to `js-yaml` if nested-object frontmatter surfaces in fork corpus | 06-04 (format/frontmatter.ts port) |
+
+**Audit invariant (Plan 06-07 PHASE-6-EXIT.md):** Every row above must have a
+corresponding grep-verifiable proof in the ported source. 10 landmines are
+CODE-fix rows (1, 2, 3, 4, 5, 6, 7, 9, 12, 13); 2 are DISCIPLINE rows (10, 11);
+1 is DEFENSIVE-check (8). Plan 06-07 Task 4 PHASE-6-EXIT.md checklist cites
+this table by landmine # + "Phase 6 item" where applicable.
 
 ### Claude's Discretion
 
