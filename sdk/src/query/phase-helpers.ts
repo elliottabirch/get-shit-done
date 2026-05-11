@@ -782,45 +782,13 @@ export async function updateStatePhaseFields(
   }, projectDir);
 }
 
-// ─── updateStateProgressFields ──────────────────────────────────────────────
-
-/**
- * Update progress frontmatter fields in STATE.md.
- *
- * Uses adapter.mergeFrontmatter to update the YAML frontmatter fields.
- *
- * Transaction-wrapping: YES — wraps in adapter.withTransaction.
- *
- * @param adapter - StorageAdapter instance
- * @param workstream - Active workstream or undefined
- * @param fields - Progress fields to update
- * @param _projectDir - Project root directory (unused, kept for API consistency)
- */
-export async function updateStateProgressFields(
-  adapter: StorageAdapter,
-  workstream: string | undefined,
-  fields: { totalPhases?: number; completedPhases?: number; totalPlans?: number; completedPlans?: number; percent?: number },
-  _projectDir: string,
-): Promise<void> {
-  await adapter.withTransaction(async () => {
-    const statePath = planningRelativePath(workstream, 'STATE.md');
-    // Build a nested `progress` object. mergeFrontmatter does a top-level
-    // Object.assign, so we need to merge our changes with the existing
-    // progress subtree to avoid clobbering untouched fields.
-    const existing = (await adapter.getFrontmatter(statePath)) as Record<string, unknown> | null;
-    const existingProgress = ((existing && (existing.progress as Record<string, unknown>)) ?? {}) as Record<string, unknown>;
-    const progress: Record<string, unknown> = { ...existingProgress };
-    if (fields.totalPhases !== undefined) progress.total_phases = fields.totalPhases;
-    if (fields.completedPhases !== undefined) progress.completed_phases = fields.completedPhases;
-    if (fields.totalPlans !== undefined) progress.total_plans = fields.totalPlans;
-    if (fields.completedPlans !== undefined) progress.completed_plans = fields.completedPlans;
-    if (fields.percent !== undefined) progress.percent = fields.percent;
-
-    if (Object.keys(progress).length > 0) {
-      await adapter.mergeFrontmatter(statePath, { progress });
-    }
-  });
-}
+// updateStateProgressFields removed — progress fields (completed_phases,
+// completed_plans, percent, etc.) are single-writer derived by
+// syncStateFrontmatter (sdk/src/query/state.ts:buildStateFrontmatter) from
+// the on-disk phase tree on every adapter write. Any code that used to call
+// this helper was competing with the sync path and producing non-deterministic
+// values (see Phase 3 UAT Bug 2, commit e325d561). If you need to set
+// progress, write SUMMARY.md files and let the sync do it.
 
 // ─── updatePerformanceMetrics ───────────────────────────────────────────────
 
