@@ -97,19 +97,21 @@ interface TxnCtx {
 /**
  * Internal helper return shape. Public recordState* methods convert this
  * into the user-facing StateWriteOutcome before returning.
- *   body             — post-mutation STATE.md body (or unchanged input
- *                      when applied === false)
- *   applied          — whether the body actually changed
+ *
+ * Discriminated union (IN-01): the applied:true branch carries the post-
+ * mutation body (and optionally a scaffolded heading); the applied:false
+ * branch carries ONLY the no-op reason. Making the shape asymmetric at
+ * the type level removes a silent-data-loss foot-gun — a future helper
+ * can no longer attach a partially-modified `body` to an applied:false
+ * result and have it silently discarded by the dispatcher.
+ *   body             — post-mutation STATE.md body (applied:true only)
  *   created_section  — heading scaffolded by the helper (preserves the
  *                      Phase 3 UAT-fix semantics as a typed signal)
- *   reason           — populated on applied:false paths
+ *   reason           — mirrors StateWriteOutcome's no-op reasons
  */
-type HelperResult = {
-  body: string;
-  applied: boolean;
-  created_section?: string;
-  reason?: 'duplicate' | 'nothing_to_remove';
-};
+type HelperResult =
+  | { applied: true; body: string; created_section?: string }
+  | { applied: false; reason: 'duplicate' | 'nothing_to_remove' };
 
 export class MarkdownAdapter implements StorageAdapter {
   /** D-06: diagnostic identity, never used for behavior branching */
@@ -769,8 +771,13 @@ export class MarkdownAdapter implements StorageAdapter {
       // normalizeMd + putRecord. Prior behavior rewrote the file unchanged
       // on dedupe hits, causing last_updated frontmatter churn. The new
       // behavior is cleaner but visible; documented in ADR D-2026-05-10-08.
+      // IN-05: the outer withTransaction still holds the adapter lock and
+      // created a tmp-txn directory on the way in. For pure dedupe /
+      // nothing_to_remove paths this is paid-for overhead. Short-circuiting
+      // would require reading STATE.md outside the lock, trading correctness
+      // for speed — deferred.
       if (!result.applied) {
-        return { applied: false, reason: result.reason ?? 'duplicate' };
+        return { applied: false, reason: result.reason };
       }
       const synced = await this.syncFrontmatter(result.body);
       const normalized = this.normalizeMd(synced);
@@ -830,11 +837,15 @@ export class MarkdownAdapter implements StorageAdapter {
 
       // Translate HelperResult → StateWriteOutcome. NOTE: when !result.applied
       // we skip syncFrontmatter + normalizeMd + putRecord (D-2026-05-10-08).
-      // The Mutation family's default no-op reason is 'nothing_to_remove'
-      // (removers dominate here); Append's is 'duplicate'. Helpers always set
-      // reason explicitly, so the `??` fallback is defensive.
+      // With HelperResult now a discriminated union (IN-01), `result.reason`
+      // is required on the applied:false branch — no fallback needed.
+      // IN-05: the outer withTransaction still holds the adapter lock and
+      // created a tmp-txn directory on the way in. For pure dedupe /
+      // nothing_to_remove paths this is paid-for overhead. Short-circuiting
+      // would require reading STATE.md outside the lock, trading correctness
+      // for speed — deferred.
       if (!result.applied) {
-        return { applied: false, reason: result.reason ?? 'nothing_to_remove' };
+        return { applied: false, reason: result.reason };
       }
       const synced = await this.syncFrontmatter(result.body);
       const normalized = this.normalizeMd(synced);
@@ -1000,7 +1011,7 @@ export class MarkdownAdapter implements StorageAdapter {
       // (D-2026-05-10-08) makes the dedupe visible.
       const existingLines = sectionBody.split('\n').map(l => l.trim());
       if (existingLines.some(l => l === entry.trim())) {
-        return { body: content, applied: false, reason: 'duplicate' };
+        return { applied: false, reason: 'duplicate' };
       }
       // Strip placeholder
       sectionBody = sectionBody.replace(/^None(?:\s+yet)?\.?\s*$/gim, '');
@@ -1130,7 +1141,7 @@ export class MarkdownAdapter implements StorageAdapter {
     const sectionPattern = /(###?\s*(?:Blockers|Blockers\/Concerns|Concerns)\s*\n)([\s\S]*?)(?=\n###?|\n##[^#]|$)/i;
     const match = content.match(sectionPattern);
     if (!match) {
-      return { body: content, applied: false, reason: 'nothing_to_remove' };
+      return { applied: false, reason: 'nothing_to_remove' };
     }
     const sectionBody = match[2];
     const lines = sectionBody.split('\n');
@@ -1140,7 +1151,7 @@ export class MarkdownAdapter implements StorageAdapter {
     });
     if (filtered.length === lines.length) {
       // Section exists but the target blocker wasn't found — structural no-op.
-      return { body: content, applied: false, reason: 'nothing_to_remove' };
+      return { applied: false, reason: 'nothing_to_remove' };
     }
     let newBody = filtered.join('\n');
     if (!newBody.trim() || !newBody.includes('- ')) {
@@ -1195,7 +1206,7 @@ export class MarkdownAdapter implements StorageAdapter {
 
     // action === 'remove'
     if (!match) {
-      return { body: content, applied: false, reason: 'nothing_to_remove' };
+      return { applied: false, reason: 'nothing_to_remove' };
     }
     const sectionBody = match[2];
     const lines = sectionBody.split('\n');
@@ -1207,7 +1218,7 @@ export class MarkdownAdapter implements StorageAdapter {
     });
     if (filtered.length === lines.length) {
       // Section exists but none of the items matched a line — no-op.
-      return { body: content, applied: false, reason: 'nothing_to_remove' };
+      return { applied: false, reason: 'nothing_to_remove' };
     }
     let newBody = filtered.join('\n');
     if (!newBody.trim() || !newBody.includes('- ')) {
