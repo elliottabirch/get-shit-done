@@ -14,7 +14,14 @@ findings:
   warning: 4
   info: 5
   total: 9
-status: issues_found
+  warning_fixed: 4
+  info_remaining: 5
+status: fixed
+fixed_commits:
+  - 8dd1c2be  # WR-01
+  - e24c4192  # WR-02
+  - 04edcf7a  # WR-03
+  - f3838c84  # WR-04
 ---
 
 # Phase 3 (Gap Plan 03-06): Code Review Report
