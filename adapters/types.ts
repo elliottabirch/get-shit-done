@@ -62,6 +62,13 @@ export interface Capabilities {
   transaction: boolean;
   namedDoc: boolean;
   markdownLockfile: boolean;
+
+  /**
+   * D-OQ06-CAPS (Phase 6): fine-grained graph-edge capability.
+   * MarkdownAdapter: { semantic: true, dependency: false } — graphify.cjs owns semantic edges; no dependency edges on markdown.
+   * BeadsAdapter:    { semantic: false, dependency: true } — dep-edge synthesizer from bd `blocks` edges; semantic edges deferred post-v1.0.
+   */
+  graphEdges: { semantic: boolean; dependency: boolean };
 }
 
 export interface StorageAdapter {

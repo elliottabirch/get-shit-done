@@ -1,0 +1,30 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "Preserve",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "outDir": "./dist",
+    "rootDir": "../..",
+    "composite": false,
+    "declaration": true,
+    "sourceMap": false,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "typeRoots": ["../../sdk/node_modules/@types"],
+    "types": ["node"],
+    "baseUrl": ".",
+    "paths": {
+      "vitest": ["../../sdk/node_modules/vitest/dist/index.d.ts"]
+    }
+  },
+  "include": [
+    "./adapter.conformance.ts",
+    "../../adapters/types.ts",
+    "../../adapters/state-event-types.ts"
+  ],
+  "exclude": ["./dist", "node_modules"]
+}

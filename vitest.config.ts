@@ -23,8 +23,11 @@ export default defineConfig({
         test: {
           name: 'adapters',
           root: './adapters',
-          // types.test.ts is compile-time only (no vitest describe/it blocks)
-          include: ['markdown/**/*.test.ts'],
+          // types.test.ts is primarily compile-time but now also carries
+          // runtime describe blocks (Phase 5 Plan 01 D-13/D-14 assertions;
+          // Phase 6 Plan 01 D-OQ06-CAPS graphEdges assertion). Include it
+          // alongside the markdown suite so those runtime checks execute.
+          include: ['markdown/**/*.test.ts', 'types.test.ts'],
           exclude: ['dist/**'],
         },
       },
