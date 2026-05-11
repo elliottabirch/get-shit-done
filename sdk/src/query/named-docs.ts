@@ -4,10 +4,16 @@
  *
  * Covers session-report, milestone-summary, forensics, inbox, pause-work, discuss-phase.
  * All paths route through StorageAdapter; no node:fs imports (D-09).
+ *
+ * Phase 5 Plan 06 (D-12): handlers delegate path computation to
+ * `adapter.putNamedDoc` / `adapter.getNamedDoc` (primitive-first framing).
+ * External SDK verb names and return shapes are preserved — callers see the
+ * same `{ written, name, found, content, source }` envelope as before.
  */
 
 import { GSDError, ErrorClassification } from '../errors.js';
 import { adapterFor, planningRelativePath } from './helpers.js';
+import type { NamedDocCategory } from '../../../adapters/types.js';
 import type { QueryResult } from './utils.js';
 
 // ─── Path validation (T-04-01) ──────────────────────────────────────────────
@@ -22,6 +28,20 @@ function validateName(name: string): void {
       ErrorClassification.Validation,
     );
   }
+}
+
+/**
+ * Mirror of adapter.putNamedDoc's path formula, for reconstructing the
+ * display-relative `written` field returned to callers (backward-compatible
+ * return shape — the adapter primitive itself doesn't report a path back).
+ */
+function namedDocDisplayPath(
+  workstream: string | null | undefined,
+  category: NamedDocCategory,
+  key: string,
+): string {
+  const base = category === 'root' ? `${key}.md` : `${category}/${key}.md`;
+  return planningRelativePath(workstream ?? null, base);
 }
 
 // ─── reportPut ──────────────────────────────────────────────────────────────
@@ -42,9 +62,9 @@ export async function reportPut(
 
   const adapter = await adapterFor(projectDir);
   const body = bodyParts.join(' ');
-  const docPath = planningRelativePath(workstream ?? null, `reports/${name}.md`);
 
-  await adapter.putRecord(docPath, body);
+  await adapter.putNamedDoc('reports', name, body, { workstream: workstream ?? undefined });
+  const docPath = namedDocDisplayPath(workstream, 'reports', name);
   return { data: { written: docPath, name } };
 }
 
@@ -65,8 +85,7 @@ export async function reportGet(
   validateName(name);
 
   const adapter = await adapterFor(projectDir);
-  const docPath = planningRelativePath(workstream ?? null, `reports/${name}.md`);
-  const content = await adapter.getRecord(docPath);
+  const content = await adapter.getNamedDoc('reports', name, { workstream: workstream ?? undefined });
 
   if (content === null) {
     return { data: { found: false, name, content: null } };
@@ -89,9 +108,9 @@ export async function handoffPut(
 ): Promise<QueryResult> {
   const adapter = await adapterFor(projectDir);
   const body = args.join(' ');
-  const docPath = planningRelativePath(workstream ?? null, 'HANDOFF.md');
 
-  await adapter.putRecord(docPath, body);
+  await adapter.putNamedDoc('root', 'HANDOFF', body, { workstream: workstream ?? undefined });
+  const docPath = namedDocDisplayPath(workstream, 'root', 'HANDOFF');
   return { data: { written: docPath } };
 }
 
@@ -110,9 +129,9 @@ export async function continueHerePut(
 ): Promise<QueryResult> {
   const adapter = await adapterFor(projectDir);
   const body = args.join(' ');
-  const docPath = planningRelativePath(workstream ?? null, 'CONTINUE-HERE.md');
 
-  await adapter.putRecord(docPath, body);
+  await adapter.putNamedDoc('root', 'CONTINUE-HERE', body, { workstream: workstream ?? undefined });
+  const docPath = namedDocDisplayPath(workstream, 'root', 'CONTINUE-HERE');
   return { data: { written: docPath } };
 }
 
@@ -132,11 +151,11 @@ export async function forensicsPut(
   const adapter = await adapterFor(projectDir);
   const body = args.join(' ');
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-  const fileName = `FORENSICS-${timestamp}.md`;
-  const docPath = planningRelativePath(workstream ?? null, `reports/${fileName}`);
+  const fileStem = `FORENSICS-${timestamp}`;
 
-  await adapter.putRecord(docPath, body);
-  return { data: { written: docPath, fileName } };
+  await adapter.putNamedDoc('reports', fileStem, body, { workstream: workstream ?? undefined });
+  const docPath = namedDocDisplayPath(workstream, 'reports', fileStem);
+  return { data: { written: docPath, fileName: `${fileStem}.md` } };
 }
 
 // ─── decisionsIndexGet ──────────────────────────────────────────────────────
@@ -146,6 +165,11 @@ export async function forensicsPut(
  *
  * Args: none
  * Reads from: DECISIONS-INDEX.md or DECISIONS.md
+ *
+ * Note: DECISIONS (without -INDEX suffix) is NOT in the RootNamedDocKey
+ * closed union — the fallback intentionally stays on adapter.getRecord. Per
+ * CONTEXT §D-12, fallback lookup is a workflow-layer concern kept inside the
+ * handler; the adapter primitive stays thin.
  */
 export async function decisionsIndexGet(
   _args: string[],
@@ -154,18 +178,15 @@ export async function decisionsIndexGet(
 ): Promise<QueryResult> {
   const adapter = await adapterFor(projectDir);
 
-  // Try DECISIONS-INDEX.md first, fall back to DECISIONS.md
-  const indexPath = planningRelativePath(workstream ?? null, 'DECISIONS-INDEX.md');
-  let content = await adapter.getRecord(indexPath);
-
-  if (content === null) {
-    const fallbackPath = planningRelativePath(workstream ?? null, 'DECISIONS.md');
-    content = await adapter.getRecord(fallbackPath);
-    if (content === null) {
-      return { data: { found: false, content: null } };
-    }
-    return { data: { found: true, source: 'DECISIONS.md', content } };
+  const primary = await adapter.getNamedDoc('root', 'DECISIONS-INDEX', { workstream: workstream ?? undefined });
+  if (primary !== null) {
+    return { data: { found: true, source: 'DECISIONS-INDEX.md', content: primary } };
   }
 
-  return { data: { found: true, source: 'DECISIONS-INDEX.md', content } };
+  const fallbackPath = planningRelativePath(workstream ?? null, 'DECISIONS.md');
+  const fallback = await adapter.getRecord(fallbackPath);
+  if (fallback === null) {
+    return { data: { found: false, content: null } };
+  }
+  return { data: { found: true, source: 'DECISIONS.md', content: fallback } };
 }
