@@ -859,52 +859,81 @@ export class MarkdownAdapter implements StorageAdapter {
   /**
    * Signal-family event: writes/removes stateless flags.
    * Dual-write: .planning/WAITING.json via adapter + .gsd/WAITING.json via direct fs (Pitfall #4).
+   *
+   * Transaction semantics (IN-03):
+   * The body is wrapped in `this.withTransaction(...)` so the
+   * `.planning/WAITING.json` path participates in the adapter shadow-dir:
+   * the `putRecord`/`removeRecord` calls against it honor the active
+   * transaction, and an outer `adapter.withTransaction(...)` can roll
+   * them back.
+   *
+   * LIMITATION: the dual-write to `.gsd/WAITING.json` uses direct
+   * `writeFileSync` / `unlinkSync` and is OUTSIDE the adapter shadow-dir.
+   * On rollback of an outer transaction, `.planning/WAITING.json` reverts
+   * but `.gsd/WAITING.json` does NOT. This is intentional — `.gsd/` lives
+   * at the project root (not under `.planning/`), and the shadow-dir is
+   * scoped to `.planning/`. The two copies can drift in this narrow
+   * rollback window; the next successful `recordStateSignal` call re-
+   * synchronizes them. The `resume` path's existence check (WR-03) also
+   * treats a drifted state where only `.gsd/WAITING.json` survives as
+   * `applied: true` rather than `nothing_to_remove`.
+   *
+   * LIMITATION (IN-04): the `resume` branch's existence check has a
+   * pre-existing TOCTOU window between `getRecord`/`existsSync` and the
+   * subsequent `removeRecord`/`unlinkSync` calls. Functional impact is
+   * zero because `removeRecord` silently swallows ENOENT (idempotent
+   * remove) and `unlinkSync` is wrapped in `try/catch`. The outcome
+   * string could be inaccurate in a rare multi-writer scenario;
+   * `recordStateSignal` is NOT multi-writer-safe.
    */
   async recordStateSignal(event: SignalEvent): Promise<StateWriteOutcome> {
-    switch (event.type) {
-      case 'waiting': {
-        const { waitType, question, options, phase } = event.payload;
-        const signal = {
-          status: 'waiting',
-          type: waitType,
-          question: question ?? null,
-          options: options ?? [],
-          since: new Date().toISOString(),
-          phase: phase ?? null,
-        };
-        const payload = JSON.stringify(signal, null, 2);
-        // Write to .planning/WAITING.json via adapter
-        await this.putRecord('WAITING.json', payload);
-        // Dual-write to .gsd/WAITING.json (outside adapter scope per Pitfall #4)
-        mkdirSync(join(this.projectDir, '.gsd'), { recursive: true });
-        writeFileSync(join(this.projectDir, '.gsd', 'WAITING.json'), payload, 'utf-8');
-        return { applied: true };
-      }
-      case 'resume': {
-        // Distinguish "removed a real pause" from "nothing to resume"
-        // (D-2026-05-10-08). Prior behavior was blind-unlink.
-        //
-        // WR-03: check BOTH `.planning/WAITING.json` AND `.gsd/WAITING.json`
-        // so a drifted dual-write state (only the `.gsd/` copy present) is
-        // reported as `applied: true` rather than a misleading
-        // `nothing_to_remove` — the user's pause WAS cleared, even if the
-        // two locations had gotten out of sync. Only report
-        // `nothing_to_remove` when neither location held a copy.
-        const planningExisted = (await this.getRecord('WAITING.json')) !== null;
-        const gsdPath = join(this.projectDir, '.gsd', 'WAITING.json');
-        const gsdExisted = existsSync(gsdPath);
-        if (!planningExisted && !gsdExisted) {
-          return { applied: false, reason: 'nothing_to_remove' };
+    return this.withTransaction(async () => {
+      switch (event.type) {
+        case 'waiting': {
+          const { waitType, question, options, phase } = event.payload;
+          const signal = {
+            status: 'waiting',
+            type: waitType,
+            question: question ?? null,
+            options: options ?? [],
+            since: new Date().toISOString(),
+            phase: phase ?? null,
+          };
+          const payload = JSON.stringify(signal, null, 2);
+          // Write to .planning/WAITING.json via adapter (shadow-aware).
+          await this.putRecord('WAITING.json', payload);
+          // Dual-write to .gsd/WAITING.json (outside adapter scope per
+          // Pitfall #4; not participant in shadow-dir — see JSDoc above).
+          mkdirSync(join(this.projectDir, '.gsd'), { recursive: true });
+          writeFileSync(join(this.projectDir, '.gsd', 'WAITING.json'), payload, 'utf-8');
+          return { applied: true };
         }
-        if (planningExisted) await this.removeRecord('WAITING.json');
-        try { unlinkSync(gsdPath); } catch { /* ENOENT OK */ }
-        return { applied: true };
+        case 'resume': {
+          // Distinguish "removed a real pause" from "nothing to resume"
+          // (D-2026-05-10-08). Prior behavior was blind-unlink.
+          //
+          // WR-03: check BOTH `.planning/WAITING.json` AND `.gsd/WAITING.json`
+          // so a drifted dual-write state (only the `.gsd/` copy present) is
+          // reported as `applied: true` rather than a misleading
+          // `nothing_to_remove` — the user's pause WAS cleared, even if the
+          // two locations had gotten out of sync. Only report
+          // `nothing_to_remove` when neither location held a copy.
+          const planningExisted = (await this.getRecord('WAITING.json')) !== null;
+          const gsdPath = join(this.projectDir, '.gsd', 'WAITING.json');
+          const gsdExisted = existsSync(gsdPath);
+          if (!planningExisted && !gsdExisted) {
+            return { applied: false, reason: 'nothing_to_remove' };
+          }
+          if (planningExisted) await this.removeRecord('WAITING.json');
+          try { unlinkSync(gsdPath); } catch { /* ENOENT OK */ }
+          return { applied: true };
+        }
+        default: {
+          const _exhaustive: never = event;
+          throw new Error(`Unknown SignalEvent type: ${(event as { type: string }).type}`);
+        }
       }
-      default: {
-        const _exhaustive: never = event;
-        throw new Error(`Unknown SignalEvent type: ${(event as { type: string }).type}`);
-      }
-    }
+    });
   }
 
   // ─── recordState* internal helpers ──────────────────────────────────────────
