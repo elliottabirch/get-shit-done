@@ -1629,7 +1629,7 @@ Wave 3 (advanced coverage — property + failure-injection)
 verification during Plan 07-01..07-02 ramp-up before CI lands. None
 changes the overall architecture.
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Which ~2766 LOC of existing MarkdownAdapter-only conformance
    files migrate into `runAdapterConformanceSuite`?**
@@ -1644,6 +1644,15 @@ changes the overall architecture.
      BeadsAdapter's section storage is bd description-blob round-trip.
    - Recommendation: planner proposes the migration list in Plan 07-04's
      opening; verifier confirms.
+   - **RESOLVED:** Migrate the three `write-*.test.ts` files only
+     (`write-outcome.test.ts`, `write-events.test.ts`,
+     `write-transaction.test.ts`) into `runAdapterConformanceSuite` per
+     Pitfall 7 hybrid; leave `phase-reads.test.ts`,
+     `init-bundlers.test.ts`, `document-reads.test.ts`, and
+     `section-depth.test.ts` MarkdownAdapter-scoped (BeadsAdapter
+     equivalence for reads is satisfied by Bin A primitives; section
+     depth is tested end-to-end via the migrated write-*.ts files).
+     Migration shipped in Plan 07-04b Task 3.
 
 2. **Exact ADR ID for normalize() — `D-2026-05-12-NORMALIZE` vs.
    `D-2026-05-12-OQ06-NORMALIZE`?**
@@ -1655,6 +1664,11 @@ changes the overall architecture.
    - Recommendation: use plain `D-2026-05-12-NORMALIZE`. Matches the
      precedent for D-2026-05-10-08 (StateWriteOutcome — also a Phase-
      originated contract ADR with no OQ infix).
+   - **RESOLVED:** Use `D-2026-05-12-NORMALIZE` (no `-OQ06-` infix).
+     Plan 07-01 Task 2 appends the ADR under this exact ID citing the
+     `D-2026-05-12-OQ06-CAPS` precedent without adopting the OQ prefix,
+     matching the `D-2026-05-10-08` (StateWriteOutcome) convention for
+     phase-originated contract ADRs.
 
 3. **Dynamic-anchor CI gate: what's the allowlist file format?**
    - What we know: CONTEXT.md D-08 says "registered manually in the
@@ -1669,6 +1683,14 @@ changes the overall architecture.
      of truth per D-06 spirit); introduce a separate file only if
      allowlist grows past 5 entries. As of 2026-05-12 zero entries
      expected (see Assumption A4).
+   - **RESOLVED:** Inline in `CONFORMANCE_MANIFEST` — a dynamic-anchor
+     caller is registered as a `section-tuple` entry with
+     `name: 'dynamic:<site>'` and an `adr` field carrying the
+     justification. No separate allowlist file at Phase 7 ship; Plan
+     07-02's grep-gate script emits to `dynamic-anchors.warn` and CI
+     fails unless every listed site resolves to a matching manifest
+     entry. A separate file is reconsidered only if the count exceeds
+     5; zero entries expected at first run per Assumption A4.
 
 ## Sources
 
