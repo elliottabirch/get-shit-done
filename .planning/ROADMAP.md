@@ -192,10 +192,10 @@ Plans:
 - [ ] 06-03-PLAN.md — Format module (heading-walker + 12 canonical-file schemas + UnknownSectionError) + section + frontmatter primitives
 
 **Wave 4** *(blocked on Waves 2+3 — needs record + section primitives)*
-- [ ] 06-04-PLAN.md — withTransaction (Outcome A or B per spike) + commitPlanningState + updateSection withTransaction-wrap
+- [x] 06-04-PLAN.md — withTransaction (Outcome A or B per spike) + commitPlanningState + updateSection withTransaction-wrap
 
 **Wave 5** *(blocked on Wave 4 — needs withTransaction)*
-- [ ] 06-05-PLAN.md — 3 recordState* event families (16-case StateWriteOutcome matrix) + putNamedDoc/getNamedDoc + writeBinaryAsset + markdownLockfile throw-stubs (BEADS-02, BEADS-05)
+- [x] 06-05-PLAN.md — 3 recordState* event families (16-case StateWriteOutcome matrix) + putNamedDoc/getNamedDoc + writeBinaryAsset + markdownLockfile throw-stubs (BEADS-02, BEADS-05)
 
 **Wave 6** *(blocked on Wave 5 — composes event families for full-state tests)*
 - [ ] 06-06-PLAN.md — Dep-edge synthesizer + graphs/graph.json merge-preserves-semantic (BEADS-03 / D-OQ06)
