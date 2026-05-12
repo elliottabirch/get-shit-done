@@ -1239,3 +1239,87 @@ Outcome A.
   the analog resurfaces only if Phase 6.1 migrates to Outcome C).
 
 ---
+
+## D-2026-05-12-OQ06-CREATED-SECTION — BeadsAdapter never emits `created_section`
+
+**Date:** 2026-05-12
+**Phase:** 6 (Plan 06-06)
+**Lock:** Clarifies BeadsAdapter behavior under the `StateWriteOutcome`
+three-state contract (D-2026-05-10-08) now that D-MAPPING is LOCKED at
+Outcome A (D-2026-05-12-OQ06-MAPPING).
+
+**Decision:** `BeadsAdapter`'s three `recordState*` families **NEVER** emit
+`created_section` on an `applied: true` return. The return shape for a
+successful first-write is the bare `{ applied: true }`.
+
+**Rationale:**
+
+`created_section` is a MarkdownAdapter affordance: it signals to the
+caller that a markdown heading was scaffolded on-demand prior to the
+append. It lets the caller distinguish two semantically-different states:
+(a) the append hit a pre-existing section, and (b) the helper created
+the section and then performed the append.
+
+Under D-MAPPING Outcome A, BeadsAdapter's dispatch looks nothing like
+markdown headings:
+  - **High-frequency AppendEvents** (`session | quick_task |
+    forensic_session`) dispatch to `bd comments add <milestoneBead>
+    --author gsd:event:<type>`. Comments are flat items under an issue;
+    there is no "section" to scaffold.
+  - **Low-frequency AppendEvents** (`decision | metric |
+    roadmap_evolution`) dispatch to `bd remember <json> --key
+    <milestone>:<type>:<id>`. Memories are keyed by the caller; there is
+    no "section" to scaffold.
+  - **Mutations** (`blocker_added | ...`) mutate labels on the milestone
+    bead, or keyed memories via `bd remember` / `bd forget`. Same
+    argument — no section.
+  - **Signals** (`waiting | resume`) add/remove `gsd:waiting:*` labels on
+    the milestone bead. Same argument.
+
+Even the sub-record path via `bd update <id> --metadata <json>` does not
+have a natural `created_section` analog. `--metadata` replaces the whole
+JSON object (OVERWRITE, not MERGE) — any "new top-level key" the caller
+wrote is indistinguishable from a patched existing key without a
+separate read-merge-write cycle whose sole purpose would be to synthesize
+a `created_section` flag. That's a brittle signal with no downstream
+consumer.
+
+**Consequence for Phase 7 (CONFORM-04 + conformance matrix):**
+
+Fork's 16-case `StateWriteOutcome` matrix in
+`tests/conformance/write-outcome.test.ts` includes four positions that
+assert `created_section` present (e.g. `decision: applied:true +
+created_section when no Decisions heading`). Those positions are
+**MarkdownAdapter-only** under BeadsAdapter's mapping. The conformance
+suite will need per-adapter predicates (either skip-list or relaxed
+assertion — Phase 7 CONFORM-04 decides) so BeadsAdapter passes with
+`{applied: true}` bare on those cells.
+
+BeadsAdapter's own smoke tests
+(`tests/smoke/state-events-{append,mutation,signal}.test.ts`) assert
+`applied:true` bare on first-write positions to lock the contract.
+
+**Reverts if:**
+
+- A future bd primitive exposes first-class sub-section semantics (e.g.
+  `bd section add <id> <name>` with distinct "existed" / "created"
+  replies); or
+- D-MAPPING is ever revisited and a different dispatch (e.g. one-issue-
+  per-section) is adopted; or
+- Phase 6.1 migrates to D-TXN Outcome C and the snapshot restore surface
+  changes the dispatch.
+
+**References:**
+
+- `StateWriteOutcome` contract: `adapters/types.ts` §50-52 (three-state
+  discriminated union).
+- D-2026-05-12-OQ06-MAPPING (this file): D-MAPPING Outcome A lock.
+- RESEARCH Pitfall 7: predicted this outcome ahead of the D-MAPPING lock
+  (the prediction targeted Outcome B; Outcome A landed instead but the
+  policy conclusion is the same).
+- Plan 06-06 `src/events.ts` (`/Volumes/code/gsd-beads/src/events.ts`):
+  inline comment citing this ADR at each `return { applied: true }` site.
+- Plan 06-07 scope: update conformance invocation to skip or relax the
+  `created_section` assertions for BeadsAdapter.
+
+---
