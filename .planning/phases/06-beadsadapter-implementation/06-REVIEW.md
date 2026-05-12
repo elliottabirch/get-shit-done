@@ -2,417 +2,251 @@
 phase: 06-beadsadapter-implementation
 reviewed: 2026-05-12T00:00:00Z
 depth: standard
-iteration: 2
-files_reviewed: 47
+iteration: 3-final
+files_reviewed: 11
 files_reviewed_list:
-  - /Volumes/code/gsd-beads/.gitignore
-  - /Volumes/code/gsd-beads/CLAUDE.md
-  - /Volumes/code/gsd-beads/CONTRIBUTING.md
-  - /Volumes/code/gsd-beads/README.md
-  - /Volumes/code/gsd-beads/package.json
-  - /Volumes/code/gsd-beads/tsconfig.json
-  - /Volumes/code/gsd-beads/vitest.config.ts
-  - /Volumes/code/gsd-beads/src/_atomicWrite.ts
-  - /Volumes/code/gsd-beads/src/bd/errors.ts
-  - /Volumes/code/gsd-beads/src/bd/findRoot.ts
-  - /Volumes/code/gsd-beads/src/bd/helper.ts
-  - /Volumes/code/gsd-beads/src/capabilities.ts
-  - /Volumes/code/gsd-beads/src/dep-graph.ts
-  - /Volumes/code/gsd-beads/src/errors.ts
-  - /Volumes/code/gsd-beads/src/events.ts
-  - /Volumes/code/gsd-beads/src/format/frontmatter.ts
-  - /Volumes/code/gsd-beads/src/format/phase.ts
-  - /Volumes/code/gsd-beads/src/format/schemas/ai-spec.ts
-  - /Volumes/code/gsd-beads/src/format/schemas/context.ts
-  - /Volumes/code/gsd-beads/src/format/schemas/debug-session.ts
-  - /Volumes/code/gsd-beads/src/format/schemas/decisions.ts
-  - /Volumes/code/gsd-beads/src/format/schemas/index.ts
-  - /Volumes/code/gsd-beads/src/format/schemas/plan.ts
-  - /Volumes/code/gsd-beads/src/format/schemas/project.ts
-  - /Volumes/code/gsd-beads/src/format/schemas/requirements.ts
-  - /Volumes/code/gsd-beads/src/format/schemas/roadmap.ts
-  - /Volumes/code/gsd-beads/src/format/schemas/spec.ts
-  - /Volumes/code/gsd-beads/src/format/schemas/uat.ts
-  - /Volumes/code/gsd-beads/src/format/schemas/verification.ts
-  - /Volumes/code/gsd-beads/src/format/section.ts
-  - /Volumes/code/gsd-beads/src/format/state.ts
-  - /Volumes/code/gsd-beads/src/helpers/deriveDiskStatus.ts
-  - /Volumes/code/gsd-beads/src/helpers/detectDrift.ts
-  - /Volumes/code/gsd-beads/src/helpers/loadMilestoneHeading.ts
-  - /Volumes/code/gsd-beads/src/helpers/parsePhaseId.ts
-  - /Volumes/code/gsd-beads/src/index.ts
-  - /Volumes/code/gsd-beads/src/init.ts
-  - /Volumes/code/gsd-beads/src/paths.ts
   - /Volumes/code/gsd-beads/src/primitives.ts
   - /Volumes/code/gsd-beads/src/txn.ts
-  - /Volumes/code/gsd-beads/tests/conformance.test.ts
-  - /Volumes/code/gsd-beads/tests/fixture.ts
+  - /Volumes/code/gsd-beads/src/events.ts
+  - /Volumes/code/gsd-beads/src/_atomicWrite.ts
+  - /Volumes/code/gsd-beads/src/bd/findRoot.ts
+  - /Volumes/code/gsd-beads/src/dep-graph.ts
+  - /Volumes/code/gsd-beads/src/format/state.ts
+  - /Volumes/code/gsd-beads/src/format/schemas/requirements.ts
+  - /Volumes/code/gsd-beads/src/helpers/deriveDiskStatus.ts
   - /Volumes/code/gsd-beads/tests/unit/with-transaction-concurrent.test.ts
-  - /Volumes/code/get-shit-done/adapters/types.ts
-  - /Volumes/code/get-shit-done/adapters/markdown/index.ts
-  - /Volumes/code/get-shit-done/package.json
-  - /Volumes/code/get-shit-done/tests/conformance/tsconfig.json
-  - /Volumes/code/get-shit-done/vitest.config.ts
+  - /Volumes/code/gsd-beads/tests/unit/assert-frontmatter-serializable.test.ts
 findings:
   critical: 0
-  warning: 2
-  info: 6
-  total: 8
-status: issues_found
+  warning: 0
+  info: 0
+  total: 0
+status: clean
 ---
 
-# Phase 6: Code Review Report (Iteration 2)
+# Phase 6: Code Review Report (Iteration 3 — Final)
 
 **Reviewed:** 2026-05-12
 **Depth:** standard
-**Files Reviewed:** 47 (same 45 from iteration 1 + new tests/unit/with-transaction-concurrent.test.ts + the test was also part of the code-under-review)
-**Iteration:** 2 (re-review after fix pass)
-**Status:** issues_found (2 warnings; all critical findings from iteration 1 are resolved)
+**Iteration:** 3-final (post-iter-2 warning fixes)
+**Files Reviewed:** 11 (narrowed per config: 9 src + 2 regression tests)
+**Status:** clean
 
 ## Summary
 
-Iteration-1 fix verification: all 4 CRITICAL findings (CR-01 symlink guard, CR-02
-32-bit hash keyspace, CR-03 `{} as never` placeholder, CR-04 withTransaction
-concurrency) and all 9 WARNING findings land cleanly. The CR-04 rewrite from a
-WeakMap-keyed txn store to `AsyncLocalStorage` is the biggest change and is
-executed well — no stale `state.activeTransaction` references remain in src/,
-all call sites (primitives.ts and events.ts) consume the context exclusively
-through `isTxnActive`, `peekBuffer`, `queueOrRun`, and the ALS-scoped `withTransaction`
-entry point; the companion test `tests/unit/with-transaction-concurrent.test.ts`
-directly exercises concurrent-isolation, intra-flow reentry, and rollback
-isolation. CR-01's `realpathSync` hardening correctly walks up to the deepest
-existing ancestor before canonicalizing (the off-by-one "probe doesn't exist
-but its parent does" case is handled). CR-02's `h >>> 0` coercion preserves
-the full 32-bit unsigned keyspace and never emits a `-`-prefixed fragment —
-though the underlying 32-bit djb2 collision surface is itself a design
-tradeoff, not a bug (doc'd as Phase 6.1 scope for escalation to SHA).
+Final adversarial re-review of iteration 3 fixes for Phase 6
+BeadsAdapter. Scope was narrowed by config to the files touched by the
+iter-3 fix pass: the 9 source files previously modified in iter 1 (with
+2 — `primitives.ts` and `txn.ts` — receiving the iter-3 patches) and 2
+regression test files.
 
-Two residual warnings remain after re-review:
+**Both iter-2 warnings resolved. No new critical or warning issues
+surfaced. Unit suite reports 131/131 green per fixer report.**
 
-- **WR-1 (iter-2):** `_assertFrontmatterSerializable` (WR-06 fix) does NOT
-  reject functions or Symbols — `JSON.stringify(function(){})` returns
-  `undefined` (does not throw), and Symbols / function values inside objects
-  are silently stripped. The fix's JSDoc claims it rejects "functions /
-  Symbols / circular refs"; only circular refs are actually rejected. The
-  broken-YAML path through `js-yaml.dump` that WR-06 sought to prevent is
-  only PARTIALLY closed.
-- **WR-2 (iter-2):** `withTransaction` silently swallows an inner `dryRun:
-  true` opt when the inner call JOINs an outer (non-dry-run) context. This
-  is not documented and can surprise callers composing dry-run helpers with
-  outer real transactions — the inner's ops still commit.
+Iter-3 fix verification matrix:
 
-Both iteration-1 IN-{1,2,3,4,5,6} info findings are still present
-(expected — info-tier was out of fixer scope). None has escalated to
-warning/critical; reclassification unchanged.
-
-Focus-area verification matrix:
-
-| Focus area | Iter 1 | Iter 2 |
+| Finding | iter 2 | iter 3 |
 |---|---|---|
-| CR-01 path-traversal + symlink guard | Partial | **Resolved** — realpathSync probe + deepest-existing-ancestor walk implemented in `_abs()` |
-| CR-02 `_deriveEventId` halved keyspace | Blocker | **Resolved** — `h >>> 0` gives full 32-bit unsigned range, no `-`-prefix edge case |
-| CR-03 `{} as never` placeholder | Blocker | **Resolved** — placeholder pushes deleted; fence toggles are pure `inFence` flips + conditional prose preservation |
-| CR-04 withTransaction concurrency | Blocker | **Resolved** — AsyncLocalStorage-scoped txn context; concurrent callers get isolated buffers; nested reentry in same flow joins (test-verified) |
-| All WR-01..WR-09 iteration-1 fixes | N/A | **Resolved** |
-| No regressions introduced by ALS rewrite | — | **Confirmed** — no `state.activeTransaction`, no `WeakMap<BdRunner, TxnContext>` references remain in src/ |
+| WR-1 (iter-2) `_assertFrontmatterSerializable` does not reject functions / Symbols | Warning | **Resolved** — explicit object-tree walker + TypeError on function/symbol at any depth; 10 regression tests (commit e532aed) |
+| WR-2 (iter-2) nested `{ dryRun: true }` silently ignored | Warning | **Resolved** — nested-dryRun-inside-non-dryRun rejected with TypeError; 4 regression tests (commit 460cdb5) |
+| All iter-1 CR-01..04 / WR-01..09 fixes | Resolved | **Still resolved** — no regressions detected |
 
 ## Critical Issues
 
-None. All 4 iteration-1 BLOCKER findings verify resolved.
+None.
 
 ## Warnings
 
-### WR-1 (iter-2): `_assertFrontmatterSerializable` does not reject the two shapes its JSDoc claims to reject
+None.
 
-**File:** `/Volumes/code/gsd-beads/src/primitives.ts:460-468`
-**Issue:** The iteration-1 WR-06 fix introduced this guard and claims (in
-JSDoc):
+## Verification details
 
-```
-a cheap, battle-tested way to reject functions, Symbols, and circulars
-before they reach the YAML serializer
-```
+### WR-1 (iter-2) resolution — `_assertFrontmatterSerializable` hardening
 
-But `JSON.stringify` does NOT throw on functions or Symbols — it either
-silently returns `undefined` (when the top-level value is a function /
-Symbol / undefined) or silently DROPS them from object/array entries:
+**File:** `/Volumes/code/gsd-beads/src/primitives.ts:468-509`
 
-```ts
-JSON.stringify(() => 'a')                    // 'undefined' (not thrown)
-JSON.stringify({fn: () => 'a'})              // '{}'         (silent drop)
-JSON.stringify({sym: Symbol('x')})           // '{}'         (silent drop)
-JSON.stringify({nested: [Symbol('x'), 1]})   // '{"nested":[null,1]}'
-```
+The fixer replaced the `JSON.stringify`-only probe with an explicit
+object-tree walker that throws `TypeError` on any `function` or
+`symbol` value at any depth, then retains the `JSON.stringify` probe
+as defense-in-depth for circular refs + BigInt.
 
-`JSON.stringify` only THROWS on:
-- circular references (`TypeError: Converting circular structure to JSON`)
-- `BigInt` values (`TypeError: Do not know how to serialize a BigInt`)
+Correctness traced:
 
-Therefore the guard catches (a) circular refs and (b) BigInt — useful but
-narrower than advertised. A caller passing `updateFrontmatter(path, 'foo',
-function(){})` will PASS the guard (value is `function`, top-level stringify
-returns `undefined` silently), hit `js-yaml.dump`, which may emit a
-`!!js/function` tag, half-writing a file that subsequent `load` calls reject
-as unparseable — exactly the WR-06 failure mode the guard was supposed to
-block.
+- Walker is **iterative** (heap-allocated worklist), not recursive.
+  Pathological deep-nesting input cannot blow the JS call stack before
+  the circular-ref check fires.
+- `WeakSet` visited-tracking (line 487-488) prevents the walker itself
+  from looping on circular structures. The subsequent `JSON.stringify`
+  probe (line 503) surfaces the circular-ref as a TypeError with a
+  diagnostic message — verified by the `a.self = a` regression test.
+- Order of checks is correct: walker runs BEFORE `JSON.stringify`.
+  An input that is BOTH circular AND contains a function → the walker
+  throws the function error first (walker stops at the function node;
+  circular detection by `seen` keeps the walker bounded). Verified by
+  tracing: `{fn: () => 1, self: self}` → worklist pops obj → adds to
+  `seen` → pushes `[fn, obj]` → pops obj (seen → skip) → pops fn →
+  throws. No stack overflow risk.
+- Array handling uses `for (const entry of cur)` — correct for arrays
+  of primitives, arrays of objects, sparse arrays (undefined slots
+  are `typeof === 'undefined'` and bypass the function/symbol check,
+  matching `JSON.stringify` semantics).
+- Object handling uses `Object.values(cur as Record<string, unknown>)`.
+  Null-prototype objects: `Object.values(Object.create(null))` returns
+  `[]` — safe. Class instances: walked by enumerable-own-values only,
+  which matches what `JSON.stringify` sees — consistent semantic.
+- Map/Set edge case: `Object.values(new Map([[1, () => 2]]))` returns
+  `[]` because Map internals are not enumerable-own-properties. A
+  caller passing `new Map()` containing functions would bypass the
+  walker — but `JSON.stringify` also silently strips Map contents
+  (`JSON.stringify(new Map([[1,2]])) === '{}'`), so js-yaml never
+  sees the bad value either. No silent-bypass regression vs the
+  stated guard contract.
 
-**Fix:** Either (a) tighten the assertion to explicitly reject functions and
-Symbols pre-stringify:
+Error messages are distinct and prescriptive:
+- function/symbol: `"value of type function is not YAML-serializable (functions and Symbols are silently dropped by JSON.stringify and would produce malformed YAML via js-yaml's \`!!js/function\` tag)."`
+- circular/BigInt: `"value is not JSON-serializable (circular references or BigInt): ..."`
 
-```ts
-function _assertFrontmatterSerializable(v: unknown, context: string): void {
-  const t = typeof v;
-  if (t === 'function' || t === 'symbol') {
-    throw new TypeError(
-      `BeadsAdapter.${context}: value of type ${t} is not YAML-serializable`,
-    );
-  }
-  // Recurse into objects/arrays to catch embedded functions/symbols.
-  if (v && typeof v === 'object') {
-    for (const entry of Object.values(v as Record<string, unknown>)) {
-      _assertFrontmatterSerializable(entry, context);
-    }
-  }
-  try {
-    JSON.stringify(v);
-  } catch (e) {
-    throw new TypeError(
-      `BeadsAdapter.${context}: value is not JSON-serializable: ${String(e)}`,
-    );
-  }
-}
-```
+Regression coverage at `tests/unit/assert-frontmatter-serializable.test.ts`
+(10 cases):
 
-Or (b) relax the JSDoc to match the actual behavior ("rejects circular
-references and BigInt; functions and Symbols pass through silently, relying
-on js-yaml.dump to raise or emit `!!js/...` tag"). The mismatch between
-promise and behavior is the bug — a future maintainer reading the guard's
-comment will incorrectly conclude that `updateFrontmatter(path, f, () => 1)`
-is safe.
+1. Top-level function (line 39-49)
+2. Top-level Symbol (line 51-61)
+3. Nested function inside object (line 63-69)
+4. Nested Symbol inside array (line 71-77)
+5. `mergeFrontmatterFn` patch-level function (line 79-86)
+6. `mergeFrontmatterFn` deep-nested Symbol (line 88-94)
+7. Circular reference (line 96-108)
+8. BigInt (line 110-120)
+9. Diamond shared-ref (benign — walker must not false-reject) (line 122-140)
+10. Clean nested object (walker passes clean) (line 142-159)
 
----
+The negative-case tests (9, 10) use `.rejects.not.toThrow(/is not
+YAML-serializable/)` — a loose regex-negation assertion. The positive
+tests (1-8) with their specific regex patterns anchor the guard
+contract; the negative tests only verify absence of the guard's own
+TypeError. This is defensible — ANY downstream rejection (from
+`_abs`, `existsSync`, `atomicWriteFile`) satisfies the "guard did not
+false-reject" requirement. Noted for completeness but NOT flagged as a
+regression.
 
-### WR-2 (iter-2): Inner `withTransaction` ignores `opts.dryRun` when JOINing outer context
+The `ensureStub` pattern (`throw new Error('ensure() called — guard
+did not reject')`) correctly proves that the guard fires BEFORE any IO
+attempt — the tests fail with a diagnostic message if the guard is
+bypassed.
 
-**File:** `/Volumes/code/gsd-beads/src/txn.ts:200-219`
-**Issue:** When `withTransaction` is called re-entrantly within the same
-async flow (outer's `fn()` calls another helper that also wraps
-`withTransaction`), the inner path enters the branch at lines 212-219:
+### WR-2 (iter-2) resolution — nested-dryRun rejection
 
-```ts
-if (existing && existing.bd === bd && !existing.finalizing) {
-  existing.depth++;
-  try {
-    return await fn();
-  } finally {
-    existing.depth--;
-  }
-}
-```
+**File:** `/Volumes/code/gsd-beads/src/txn.ts:228-255`
 
-The inner call's `opts?.dryRun` is NEVER consulted. If a library author
-writes `adapter.withTransaction(async () => { /* ... */ }, { dryRun: true })`
-inside another running (non-dry) transaction, the dry-run semantic the
-caller asked for is silently ignored — all the inner ops queue onto the
-outer buffer and COMMIT when the outer commits. That is the opposite of
-what `{ dryRun: true }` asks for.
+The fixer added a TypeError throw when `opts?.dryRun && !existing.dryRun`
+inside the reentry branch. Silent ignore is replaced with fail-loud.
 
-Real scenarios:
-- A validation helper that does "let me try these writes in dry-run mode to
-  check for partial-commit errors" — gets real writes if called inside
-  another transaction.
-- A conformance assertion that wraps `withTransaction(fn, { dryRun: true })`
-  around code that may itself internally transact — the inner ops commit.
+Correctness traced:
 
-Options:
+- Throw is positioned INSIDE the join branch (after confirming outer
+  context exists, matches same `BdRunner`, and is not finalizing).
+  Prevents false-positives from stray ALS contexts belonging to
+  unrelated adapter instances.
+- Throw fires BEFORE `existing.depth++` (line 249). The outer's depth
+  counter is not polluted even if the TypeError is caught somewhere
+  up the chain.
+- Asymmetric acceptance handled correctly: the condition `opts?.dryRun
+  && !existing.dryRun` means nested dryRun is accepted silently ONLY
+  when the outer is ALSO dryRun (redundant but compatible — inner ops
+  discard with outer's on commit). Matches the comment rationale at
+  lines 236-248.
+- Error message is prescriptive: tells callers to "Move `dryRun:
+  true` to the outermost withTransaction call, or restructure so the
+  inner logic runs outside the outer transaction." This is strictly
+  better than a bare "cannot nest" string — it tells the reader the
+  two resolution paths.
+- Failure propagation: the TypeError thrown inside nested
+  `withTransaction` surfaces from the inner call into the outer's
+  `fn()` body. The outer's try/catch at `src/txn.ts:268-276` catches
+  it, sets `finalizing=true`, clears buffer, resets depth to 0, and
+  re-throws. Outer's buffer is fully discarded — no partial-commit
+  hazard. The regression test at line 198-200 asserts `recorded ===
+  []` post-throw.
 
-1. **Reject inner `dryRun` with a clear error** — `if (opts?.dryRun &&
-   existing) throw new Error('dryRun withTransaction cannot be nested inside
-   a non-dryRun parent — call dryRun at the outermost only')`. Fails loud.
-2. **Honor the inner `dryRun`** — track dryRun at each depth level and
-   DISCARD inner ops on successful return. Much more complex; would require
-   per-depth buffer partitioning.
-3. **Document + enforce "dryRun only at root"** — current behavior but
-   explicitly surface via a dev-mode warning when `opts?.dryRun` is passed
-   into a nested call.
+Regression coverage at
+`tests/unit/with-transaction-concurrent.test.ts:170-267` (4 cases):
 
-Option 1 is the safest minimal fix given Plan 06-06 / Outcome A already
-requires callers to own dry-run semantics at the pipeline layer. At minimum
-the current behavior should be explicit in the JSDoc (lines 200-204) — the
-`opts` comment says `discards the buffer unconditionally on exit — never
-replays` which is untrue for nested calls.
+1. Reject on non-dryRun outer (line 171-201) — asserts `innerEntered
+   === false` (rejected BEFORE inner body) and `recorded === []`
+   (outer rollback discarded its own queued op).
+2. Accept on dryRun outer (line 203-230) — redundant-but-compatible
+   path; asserts inner ran and nothing replayed.
+3. Unaffected non-dryRun join (line 232-250) — regression check
+   against over-broad fix that might reject ALL nested calls.
+4. Root-level dryRun regression (line 252-266) — ensures the
+   common case still works.
 
-**Fix:**
+Together with the 4 existing concurrency-isolation tests in the same
+file (from iter-2 CR-04 coverage), the ALS-scoped txn semantics +
+WR-2 nesting guard are now covered end-to-end.
 
-```ts
-if (existing && existing.bd === bd && !existing.finalizing) {
-  if (opts?.dryRun) {
-    throw new Error(
-      'BeadsAdapter.withTransaction: { dryRun: true } is only honored at the ' +
-      'outermost call. This call is nested inside an active transaction on the ' +
-      'same BdRunner and would silently commit. Move dryRun to the outer call ' +
-      'or split the logic.',
-    );
-  }
-  existing.depth++;
-  // ... rest unchanged ...
-}
-```
+### Regression scan across all 11 reviewed files
 
-## Info (carry-over from iteration 1 — unchanged severity)
+Traced for new bugs introduced during iter-3 fix cycle:
 
-These were identified in iteration 1 and expected to remain. Listed here for
-completeness; none has escalated to warning/critical severity.
+- **`_abs` symlink hardening** (`primitives.ts:79-137`) — probe-walk
+  loop terminates correctly at filesystem root
+  (`probe !== pathDirname(probe)` guard). `realpathSync` fallbacks
+  (try/catch at lines 110-117 and 126-130) are safe — they degrade
+  to the lexical form without weakening containment. No iter-3 change;
+  no regression.
+- **`atomicWriteFile`** (`_atomicWrite.ts`) — `randomBytes(6)` (48-bit)
+  entropy + `fsyncSync(fd)` before rename, `openSync` fd properly
+  released in `finally`. Clean. No iter-3 change.
+- **`findBeadsRoot`** (`bd/findRoot.ts`) — BEADS_DIR authoritative with
+  fail-loud `BdManagedMismatchError`; worktree `.git`-file resolution
+  preserved. No iter-3 change.
+- **`materializeGraphJson`** (`dep-graph.ts`) — spike-014 filters
+  (`type === 'blocks'`, NOT `dependency_type`) + WR-09 self-loop
+  filter + BeadsEmpty → `{edges:[]}` identity preserved. No iter-3
+  change.
+- **`parseState` / `formatState`** (`format/state.ts`) — WR-02
+  trailing-newline preservation + code-fence bypass in section scan.
+  No iter-3 change.
+- **`parseRequirementsBody`** (`format/schemas/requirements.ts`) —
+  CR-03 fence-toggle no-op preserved. No iter-3 change.
+- **`deriveDiskStatus`** (`helpers/deriveDiskStatus.ts`) — priority
+  chain preserved; WR-08 orphan-summary collapse documented as Phase
+  7 deferred. No iter-3 change.
+- **`events.ts` recordState families** — `_rememberOpMatchesKey`
+  shared helper remains; dedupe guards consult both bd state AND
+  buffer for own-writes-visible invariant; CR-02 unsigned-hash
+  coercion `h >>> 0` preserved. No iter-3 change.
+- **`primitives.ts` non-guard regions** — `getRecord` / `putRecord` /
+  `removeRecord` / `removeCollection` / `listCollection` / `exists` /
+  `stat` / `getSection` / `updateSection` / named-doc helpers all
+  unchanged relative to iter 2. The only iter-3 delta is
+  `_assertFrontmatterSerializable`.
+- **`txn.ts` non-guard regions** — `BeadsPartialCommitError`,
+  `txnStorage`, `_currentCtxFor`, `isTxnActive`, `peekBuffer`,
+  `queueOrRun`, commit-phase replay loop, snapshot/restore stubs all
+  unchanged relative to iter 2. The only iter-3 delta is the nested-
+  dryRun throw at lines 238-248.
 
-### IN-01 (carry): Unused import `pathRelative` kept deliberately
+No cross-file type-contract drift. All public exports from
+`primitives.ts` / `txn.ts` / `events.ts` retain the same signatures;
+the iter-3 changes are strictly additive (new throws surfacing
+previously-silent misuse).
 
-Status: **RESOLVED in iter 1 fix pass.** Grep confirms `pathRelative` import
-and `void pathRelative` pattern are no longer present in src/primitives.ts.
-Finding is downgraded: no residual info.
+## Info
 
-### IN-02 (carry): `updateSection` round-trips through `getRecord`/`putRecord`
+None in scope. The 5 info-tier carry-overs from iter 1 (IN-02..IN-06)
+are explicitly out-of-scope per review config (critical+warning only).
 
-**File:** `/Volumes/code/gsd-beads/src/primitives.ts:417-428`
-**Issue:** Unchanged from iteration 1. Out-of-scope for v1 per performance
-exclusion; flagged for Phase 6.1 coalescing.
+## Known-deferred items (NOT flagged — per review config)
 
----
-
-### IN-03 (carry): `BdRunner` corruption heuristic over-matches "database" and "dolt"
-
-**File:** `/Volumes/code/gsd-beads/src/bd/helper.ts:107`
-**Issue:** Unchanged from iteration 1 — regex still reads:
-
-```ts
-/database is locked|schema mismatch|corrupt|database|dolt|metadata\.json/i
-```
-
-Bare `database` and `dolt` match any bd error mentioning those tokens (e.g.
-permission denials, "dolt table not found") and route them to `BeadsCorrupt`.
-The recovery path for `BeadsCorrupt` is aggressive — flag for Phase 6.1.
-
----
-
-### IN-04 (carry): `parseState` silently skips events with malformed JSON payload
-
-**File:** `/Volumes/code/gsd-beads/src/format/state.ts:202-209`
-**Issue:** Unchanged from iteration 1. Malformed payload `continue` with no
-`console.warn`; hand-edited STATE.md typos lose events silently on round-trip.
-
----
-
-### IN-05 (carry): `stat` omits `mtime` for bd-tier paths — asymmetry with MarkdownAdapter
-
-**File:** `/Volumes/code/gsd-beads/src/primitives.ts:384-401`
-**Issue:** Unchanged from iteration 1. `stat()` returns `{ kind: 'file' }`
-(no `mtime`) for bd-tier records while MarkdownAdapter always emits
-`mtime`. Documented asymmetry; bd's `updated_at` could fill in.
-
----
-
-### IN-06 (carry): `RequirementCategory` type flattens L2/L3 hierarchy
-
-**File:** `/Volumes/code/gsd-beads/src/format/schemas/requirements.ts:30-36`
-**Issue:** Unchanged from iteration 1. Flat `categories` array with
-`level: 2 | 3` loses parent-child relationships; follow-up.
-
-## Verification observations (iteration 1 fixes re-checked)
-
-### CR-01 fix verification (symlink hardening)
-
-**File:** `/Volumes/code/gsd-beads/src/primitives.ts:79-137`
-
-The fix correctly:
-- realpath's `projectRoot` into `canonicalRoot` (with safe try/catch fallback
-  to lexical root when the root itself doesn't exist yet)
-- walks upward from `abs` until it finds an existing ancestor (`probe`)
-- realpath's the deepest existing ancestor; unresolved tail is treated as-is
-- asserts `canonical === canonicalRoot || canonical.startsWith(canonicalRoot + sep)`
-
-Edge cases handled:
-- `projectRoot` doesn't exist (mkdtemp-style) — falls back to lexical root
-- `abs` doesn't exist — walks up, realpath's parent
-- `probe === '/'` — loop terminates at root (`probe !== pathDirname(probe)`)
-- Cross-platform abs rejection is still lexical: unchanged `looksAbsolute`
-  block at lines 89-96
-
-TOCTOU window between `_abs()` check and subsequent syscall is acknowledged
-in JSDoc ("same window MarkdownAdapter accepts"). Acceptable tradeoff.
-
-### CR-02 fix verification (event-id keyspace)
-
-**File:** `/Volumes/code/gsd-beads/src/events.ts:138-147`
-
-`(h >>> 0).toString(36)` gives 0..4294967295 range (~7 base-36 chars max),
-never collapses `h` and `-h`, and never emits `-`-prefixed fragments. The
-fix correctly resolves both issues flagged in iteration 1. The underlying
-32-bit djb2 collision surface remains (birthday collisions at ~65k distinct
-payloads) but is now honestly documented; SHA-256 escalation deferred to
-Phase 6.1.
-
-### CR-03 fix verification (`{} as never` deletion)
-
-**File:** `/Volumes/code/gsd-beads/src/format/schemas/requirements.ts:69-85`
-
-Placeholder pushes into `current.items` / `proseLines` are both removed.
-Fence-toggle path now correctly:
-- flips `inFence`
-- preserves fence-line in `proseLines` IF outside a category (round-trip
-  preservation of leading fences)
-- no side-effects on `current.items` (would pollute `RequirementItem[]`)
-
-Confirmed via grep: no remaining `as never` pushes in src/.
-
-### CR-04 fix verification (AsyncLocalStorage rewrite)
-
-**File:** `/Volumes/code/gsd-beads/src/txn.ts:132-280`
-
-The rewrite is executed cleanly:
-- `txnStorage = new AsyncLocalStorage<TxnContext>()` is the single source of
-  truth for txn state.
-- `TxnContext` now includes `{ depth, buffer, dryRun, finalizing, bd }` —
-  the `bd` field enables the stray-context guard at `_currentCtxFor`.
-- `withTransaction` root-path wraps the body in `txnStorage.run(ctx, async
-  () => { ... })`, scoping the context to that async flow only.
-- Reentry path (existing context found AND same BdRunner AND !finalizing)
-  JOINs and increments depth.
-- Test coverage: `tests/unit/with-transaction-concurrent.test.ts` asserts:
-  1. Two concurrent `withTransaction` callers do NOT share buffer (smoking-
-     gun regression test for the pre-fix WeakMap contamination).
-  2. Nested-in-same-flow calls DO join buffer (reentry preserved).
-  3. Concurrent rollback on one txn does not affect the other.
-  4. `isTxnActive` is false outside the callback.
-
-Grep confirmed no stale `state.activeTransaction`, `WeakMap<BdRunner,
-TxnContext>`, or `getCurrentTxn` references anywhere in src/ or tests/.
-All event-family helpers in events.ts consume the txn state exclusively
-through the public `isTxnActive` / `peekBuffer` / `queueOrRun` surface.
-
-### Landmines / pre-existing behavior re-verified (NOT new bugs)
-
-- `removeRecord` / `removeCollection` bd-tier paths call `bd.run()` DIRECTLY
-  (not via `queueOrRun`), so cascade deletes are EAGER and bypass
-  `withTransaction`. This is pre-existing behavior not claimed to be fixed
-  in iteration 1; consistent with the "disk-tier writes pass through"
-  tradeoff called out in txn.ts JSDoc. Phase 6.1 can address if needed.
-- `getRecord` for phase-addressed paths (`phases/NN-foo/*`) silently falls
-  through to disk when `route.tier==='bd' && !route.label`. The iter-1 WR-03
-  fix only hardened `removeRecord` and `removeCollection` to throw on the
-  same case; `getRecord` still reads from disk. The remaining asymmetry is
-  "reads fall back to disk; writes/removes throw." Arguably cohesive under
-  D-MAPPING Outcome A (Plan 06-06 scope boundary) — not a new bug.
-- `parseRequirementsBody` after the CR-03 fix still always pushes the
-  fence-delim line into `proseLines` at the END of the conditional, even
-  when inside a category (line 78-79). Cross-checked: the `!current` guard
-  there means "only preserve fence line in prose when we're outside a
-  category." Inside a category the fence content is lost — which may be
-  intentional (fences inside category bodies are not requirement items).
-  No observable regression; possibly surprising round-trip drift for mixed
-  category-prose-with-fence authoring.
+- IN-02..IN-06 info-tier carry-overs from iter 1
+- Deferred-04: D-TXN Outcome A mid-txn partial-commit gap → Phase 6.1
+- Deferred-05: Phase 7 CONFORM-04 `created_section` relaxation
 
 ---
 
 _Reviewed: 2026-05-12_
 _Reviewer: Claude (gsd-code-reviewer)_
 _Depth: standard_
-_Iteration: 2_
+_Iteration: 3-final_
