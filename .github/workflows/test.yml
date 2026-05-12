@@ -85,6 +85,40 @@ jobs:
           node-version: ${{ matrix.node-version }}
           cache: 'npm'
 
+      # Phase 7 / Plan 07-04a — bd install (D-03).
+      # bd release org confirmed via checkpoint:decision: gastownhall (Assumption A1 resolved).
+      # Exact release asset: beads_1.0.4_linux_amd64.tar.gz
+      # Verified URL: https://github.com/gastownhall/beads/releases/download/v1.0.4/beads_1.0.4_linux_amd64.tar.gz
+      - name: Install bd (Linux release tarball)
+        if: runner.os == 'Linux'
+        run: |
+          set -euo pipefail
+          BD_VERSION=1.0.4
+          BD_URL="https://github.com/gastownhall/beads/releases/download/v${BD_VERSION}/beads_${BD_VERSION}_linux_amd64.tar.gz"
+          curl -fL -o /tmp/bd.tar.gz "$BD_URL"
+          sudo tar -xzf /tmp/bd.tar.gz -C /usr/local/bin
+          bd --version  # CI gate: fails job if install botched
+
+      - name: Install bd (macOS Homebrew)
+        if: runner.os == 'macOS'
+        run: |
+          brew install beads || brew upgrade beads
+          bd --version
+
+      # Checkout sibling gsd-beads BEFORE npm ci so file:../gsd-beads resolves.
+      - name: Checkout sibling gsd-beads
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          repository: gsd-build/gsd-beads
+          path: ../gsd-beads
+          ref: main
+
+      - name: Build sibling gsd-beads
+        working-directory: ../gsd-beads
+        run: |
+          npm ci
+          npm run build
+
       - name: Install dependencies
         run: npm ci
 
@@ -106,3 +140,11 @@ jobs:
       - name: Run tests with coverage
         shell: bash
         run: npm run test:coverage
+
+      # Phase 7 / Plan 07-04a — paired conformance (D-01).
+      # Runs on one matrix slot to keep CI time bounded (~30-60s extra).
+      # bd is installed above; describe.skip path never triggers here.
+      - name: Run paired conformance
+        if: matrix.os == 'ubuntu-latest' && matrix.node-version == 22
+        shell: bash
+        run: npm run test:conformance:paired
