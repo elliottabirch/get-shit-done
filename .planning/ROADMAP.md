@@ -213,9 +213,16 @@ Plans:
   2. Property-based round-trip tests (`putRecord(x); getRecord(...) === x` modulo adapter-defined normalization) pass for every record type in the noun catalog: Phase, Plan, Summary, Uat, StateEvent, Roadmap, Decision, Blocker, DebugSession, Project, Spec, AiSpec — and any new noun added to the catalog requires a passing round-trip test before merge (CI gate).
   3. The section-semantics matrix is complete: for every (record-type, section-id) tuple in the codebase, the suite asserts `append` / `overwrite` / `prepend` produce defined outcomes on both adapters, and the test harness rejects any future adapter PR that lacks a defined semantic for any tuple (SYNTHESIS §9 high-severity "section semantics differ across adapters" risk mitigated by enforcement, not just convention).
   4. A deliberate failure injection mid-transaction (e.g. throw after the second of three writes) causes both adapters' `restore()` / rollback to leave their respective stores byte-identical (or record-identical, for bd) to the pre-transaction state — verified by snapshot diff on each adapter.
-**Plans:** 0/TBD
+**Plans:** 8 plans
 Plans:
-- [ ] TBD
+- [ ] 07-01-PLAN.md — Contract extension + manifest scaffold (normalize() + ADR D-NORMALIZE)
+- [ ] 07-02-PLAN.md — Section-anchor grep + meta-coverage test (bidirectional invariant)
+- [ ] 07-03-PLAN.md — Sibling ./testing subpath + BeadsAdapter normalize + seed consolidation (D-05 cleanup)
+- [ ] 07-04a-PLAN.md — devDep wire + bd CI + paired harness (split from 07-04 for scope sanity)
+- [ ] 07-04b-PLAN.md — write-*.ts → *.conformance-suite.ts migration + manifest population (≥30 entries)
+- [ ] 07-05a-PLAN.md — fast-check devDeps + 12 noun arbitraries + encode.ts
+- [ ] 07-05b-PLAN.md — properties.test.ts + 12 noun-roundtrip manifest entries
+- [ ] 07-06-PLAN.md — Failure-injection + Phase 7 exit (ADR D-CONFORM-MANIFEST)
 
 ### Phase 8: Migration + distribution
 **Repo:** both
@@ -246,5 +253,5 @@ Phase 6 begins in sibling repo `~/code/gsd-beads` only after Phase 5 ships in th
 | 4. Plug workflow leaks (top-10 + `<context>`-block class) | 0/7 | Planning complete | - |
 | 5. Foundational primitive lift | 0/TBD | Not started | - |
 | 6. BeadsAdapter implementation | 0/7 | Planning complete | - |
-| 7. Conformance test suite | 0/TBD | Not started | - |
+| 7. Conformance test suite | 0/8 | Planning complete | - |
 | 8. Migration + distribution | 0/TBD | Not started | - |
