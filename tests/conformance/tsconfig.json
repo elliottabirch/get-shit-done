@@ -26,6 +26,7 @@
     "./manifest-types.ts",
     "./manifest.ts",
     "./test-registry.ts",
+    "./arbitraries/**/*.ts",
     "../../adapters/types.ts",
     "../../adapters/state-event-types.ts"
   ],
