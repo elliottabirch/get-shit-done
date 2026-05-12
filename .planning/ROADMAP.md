@@ -183,10 +183,10 @@ Plans:
 **Plans:** 7 plans
 Plans:
 **Wave 1** *(foundation — no dependencies)*
-- [ ] 06-01-PLAN.md — Fork subpath export + Capabilities.graphEdges extension + sibling scaffold + bd CLI spike (D-TXN Outcome A/B lock)
+- [x] 06-01-PLAN.md — Fork subpath export + Capabilities.graphEdges extension + sibling scaffold + bd CLI spike (D-TXN Outcome A/B lock)
 
 **Wave 2** *(blocked on Wave 1 — needs bd-client + spike outcome)*
-- [ ] 06-02-PLAN.md — BdClient + BeadsAdapter.init() (BEADS-04) + 7 Bin A record primitives
+- [x] 06-02-PLAN.md — BdClient + BeadsAdapter.init() (BEADS-04) + 7 Bin A record primitives
 
 **Wave 3** *(blocked on Wave 2 — composes record primitives)*
 - [ ] 06-03-PLAN.md — Format module (heading-walker + 12 canonical-file schemas + UnknownSectionError) + section + frontmatter primitives

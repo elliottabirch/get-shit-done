@@ -4,14 +4,14 @@ milestone: v1.0
 milestone_name: milestone
 status: executing
 stopped_at: Phase 6 context re-gathered post-hybrid-pivot
-last_updated: "2026-05-11T23:24:11.064Z"
+last_updated: "2026-05-12T00:20:42.505Z"
 last_activity: 2026-05-11 -- Phase 06 planning complete
 progress:
   total_phases: 8
   completed_phases: 5
   total_plans: 37
-  completed_plans: 31
-  percent: 84
+  completed_plans: 33
+  percent: 89
 ---
 
 # Project State
@@ -19,9 +19,9 @@ progress:
 ## Current Position
 
 Phase: 06
-Plan: Not started
-Status: Ready to execute
-Last activity: 2026-05-11 -- Phase 06 planning complete
+Plan: 02 complete (out of 7); 06-03 spike-executed evidence ready on fork; 06-04 next
+Status: Executing
+Last activity: 2026-05-11 -- Plan 06-02 complete (8 .mjs ported to TS; 7 landmines fixed; BEADS-04 BdManagedMismatchError shipped)
 
 ## Reference
 
@@ -78,6 +78,8 @@ This is encoded as ADAPTER-05 and is part of Phase 1's success criteria.
    adapter interface from §4; risks from §9; open questions from §6
 
 See `.planning/DECISIONS.md` for full record + rationale.
+- [Phase ?]: D-INIT-ERR (BEADS-04) BdManagedMismatchError shipped with __brand cross-module instanceof (sibling src/bd/errors.ts)
+- [Phase ?]: RESEARCH Open Q #5 validated — two-commit git-mv+rewrite preserves git log --follow; locked as Plan 06-04 port discipline
 
 ## v1.0 milestone scope
 
@@ -133,7 +135,7 @@ These are NOT blocking for Phase 1; resolved as relevant phases approach:
 
 ## Session Continuity
 
-Last session: 2026-05-11T21:43:13.321Z
+Last session: 2026-05-12T00:20:37.395Z
 mid-session, Phase 3 UAT caught 2 more blocker bugs — all fixed)
 Stopped at: Phase 6 context re-gathered post-hybrid-pivot
 complete (4/4); `StateWriteOutcome` three-state contract DESIGNED but not
@@ -152,3 +154,9 @@ Flip the phase-level checkbox before Phase 6 kickoff.
 
 Sibling repo state: `gsd-beads` v0.2 milestone is superseded; v1.0
 Phase 6 (BeadsAdapter) is now unblocked.
+
+## Performance Metrics
+
+| Phase/Plan | Duration | Tasks | Files |
+|-----------|----------|-------|-------|
+| Phase 06 P02 | 25 | 3 tasks | 13 files |
