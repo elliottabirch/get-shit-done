@@ -1039,6 +1039,8 @@ outcome and surface the distinction to their handler responses.
 **Phase:** 6 (BeadsAdapter implementation)
 **Locks:** OQ-06 partial (storage model); combines with `D-2026-05-12-OQ06-TXN`
 below for full resolution.
+**Status:** **Accepted (2026-05-12 Task-4 human-verify checkpoint)** — user
+confirmed Outcome A despite the schema-scope inflation it imposes on Plan 06-04.
 
 **Decision:** BeadsAdapter ships **Outcome A (named-JSON-field / sub-records
 available)** per SPIKE-RESULTS.md §7. L2 sections map to `issue.metadata.<section>`
@@ -1098,84 +1100,142 @@ repeatable form works), §2.5 (flag inventory).
 - **Landmine 7 changed in v1.0.4:** empty store now returns `[]` (empty
   array), not `{error, schema_version}`. `BdRunner`'s sentinel-detection
   logic in Plan 06-02's helper port must handle both shapes (or detect
-  v1.0.4 and switch).
+  v1.0.4 and switch). **Follow-up tracked in `deferred-items.md`
+  (Deferred-03)** since Plan 06-02 has already landed on the sibling at
+  commit `6ce2329` without v1.0.4 empty-shape detection.
+
+**Cross-reference to D-2026-05-12-OQ06-TXN:** D-TXN locked at Outcome A
+(NOT Outcome C as Task-3 initially proposed). The `created_section`
+variant discussion above is independent of the txn choice — Outcome A
+buffers the write regardless, so the StateWriteOutcome emission point
+sits after the buffer replays at commit time. The Phase 7 CONFORM-04
+known-gap for D-TXN does NOT affect D-MAPPING conformance.
 
 **Surprises (flagged to user via Task 4 checkpoint):**
 - Sibling's 71-test v1.0.3 base concluded Outcome A infeasible. v1.0.4
   changed the picture. Outcome A is the evidence-driven pick.
-- Plan 06-04 scope inflates as noted above. User may want to reconsider
-  whether the inflated schema scope is worth the stronger typing vs
-  staying on Outcome B's labels-first pattern.
+- Plan 06-04 scope inflates as noted above. User confirmed at the Task-4
+  checkpoint that the inflated schema scope is accepted.
 
 ---
 
-## D-2026-05-12-OQ06-TXN — BeadsAdapter transaction model (D-TXN locked: Outcome C)
+## D-2026-05-12-OQ06-TXN — BeadsAdapter transaction model (D-TXN locked: Outcome A, user override)
 
 **Date:** 2026-05-12
 **Phase:** 6 (BeadsAdapter implementation)
+**Status:** **Accepted (2026-05-12 Task-4 human-verify checkpoint)** via user override of the Task-3 Outcome-C proposal.
 
-**Decision:** BeadsAdapter's `withTransaction` ships **Outcome C (file-
-snapshot restore via `bd export --json` + `bd init --from-jsonl`)** per
-SPIKE-RESULTS.md §7. Snapshot on txn entry; restore on rollback; fs-level
-`.beads/` POSIX atomic rename for cutover.
+**Decision:** BeadsAdapter's `withTransaction` ships **Outcome A (in-memory
+write-buffer + replay)** per SPIKE-RESULTS.md §7 as locked at the Task-4
+checkpoint. All mutations buffered in-process during the txn scope; on
+commit, the buffer is replayed as a sequence of real `bd` invocations; on
+rollback, the buffer is discarded (no bd invocations issued — store is
+untouched by the txn).
 
-**Context:** `D-TXN-SPIKE` (`06-CONTEXT.md`) widened the spike from sibling's
-file-snapshot pattern (Outcome C) to evaluate in-memory buffer (A) and
-staging-store + bookmark cutover (B). Plan 06-03 probed all three against
-bd v1.0.4.
+**User override rationale (2026-05-12 Task-4 checkpoint):**
+1. **Scope simplicity.** Ships ~150 LOC in-memory buffer in `src/txn/
+   buffer.ts`. Outcome C would have added `src/txn/snapshot.ts` with
+   file-snapshot + `bd init` spawn + POSIX `.beads/` atomic rename +
+   Landmine-12 prefix derivation + tmpdir cleanup discipline — strictly
+   more code, more moving parts, more failure modes.
+2. **Accepts mid-txn multi-commit gap (documented Phase 6.1 follow-up
+   — NOT a regression).** If commit fails partway through replaying the
+   buffer, bd is left with a partial commit that Outcome A cannot roll
+   back. Acceptable trade for v1.0 ship given the simpler code path.
+3. **Bypasses v1.0.4 `bd init` side-effect surface entirely.** Outcome A
+   never invokes `bd init` during a transaction, so the Claude Code
+   hooks + `CLAUDE.md` + `.claude/settings.json` pollution surface that
+   Outcome C tmpdirs would need to contain is non-existent rather than
+   merely contained.
+4. **Phase 7 CONFORM-04 failure-injection test fails on BeadsAdapter under
+   Outcome A by design.** Flagged as a known gap in Phase 7 integration,
+   NOT a regression. Plan 06-07 decides whether CONFORM-04 is skipped for
+   BeadsAdapter via capability-gated test selection OR marked as an
+   Outcome-A-specific known-failure disposition.
 
-**Evidence:** SPIKE-RESULTS.md §§3.3 (Outcome B INFEASIBLE — `bd dolt`
-exposes only `start/stop/status/show/set/test/commit/push/pull/remote`;
-no `clone/branch/bookmark` subcommand), §4.1 PASS (`bd export --json -o
-<path>` writes a JSONL snapshot in ~424ms), §4.2 PASS with v1.0.4
-invocation adjustment (pre-place at `.beads/issues.jsonl`, then `bd init
---from-jsonl .beads/issues.jsonl` inside target dir; restores 2/2 seeded
-issues in ~440ms — within Pitfall 6's 400-700ms budget).
+**Context:** `D-TXN-SPIKE` (`06-CONTEXT.md`) widened the spike from
+sibling's file-snapshot pattern (Outcome C) to evaluate in-memory buffer
+(A) and staging-store + bookmark cutover (B). Plan 06-03 probed all three
+against bd v1.0.4. Task-3 initially proposed Outcome C based on §4.1/§4.2
+evidence; Task-4 human-verify checkpoint resulted in user override to
+Outcome A.
+
+**Evidence:**
+- SPIKE-RESULTS.md §3.3 (Outcome B INFEASIBLE — `bd dolt` exposes only
+  `start/stop/status/show/set/test/commit/push/pull/remote`; no
+  `clone/branch/bookmark` subcommand).
+- SPIKE-RESULTS.md §4.1 PASS + §4.2 PASS with v1.0.4 invocation adjustment
+  (Outcome C feasible at ~440ms restore, but `bd init` side-effects make
+  tmpdir discipline mandatory and surface non-zero risk).
+- SPIKE-RESULTS.md §3 "Store-clone + bead-hash bookmark availability =
+  FAIL" finding (Outcome B rejected on feasibility).
+- SPIKE-RESULTS.md §4 "File-snapshot restore feasibility = PASS but
+  carries v1.0.4 init side-effect risk" finding (Outcome C rejected on
+  user override despite feasibility).
 
 **Consequences:**
 - `capabilities.transaction: true` — declared per D-TXN-CAPS invariant
-  (pipeline.ts dry-run depends on it unconditionally).
-- `capabilities.snapshot: true` — Outcome C provides snapshot semantics
-  via file-snapshot. **Closes SYNTHESIS §9 HIGH-severity dry-run gate
-  for BeadsAdapter by construction.**
-- Plan 06-06 ships `src/txn/snapshot.ts` as the sole implementation path.
-  Port sibling's `primitives.mjs:435-494` pattern with:
-  - **v1.0.4 invocation fix:** snapshot writes to `<stagingDir>/.beads/
-    issues.jsonl` (NOT arbitrary absolute path, as probed in Plan 06-03
-    which initially FAILED); restore is `bd init --from-jsonl
-    .beads/issues.jsonl` from inside target dir.
-  - **Landmine 12 (WR-04) fix:** derive `--prefix` from snapshot metadata
-    (first issue's id-format prefix) rather than sibling's hardcoded `'sd'`.
-  - **v1.0.4 side-effects acknowledged:** `bd init` in v1.0.4
-    unconditionally installs Claude Code hooks, creates/updates `CLAUDE.md`,
-    writes `.claude/settings.json`. Plan 06-06 MUST run snapshot/restore
-    in throwaway tmpdirs (never project root) to avoid polluting the
-    caller's project layout.
-- **NO Phase 6.1 follow-up needed** (Outcome A's mid-txn-commit-gap risk
-  is avoided by picking Outcome C).
-- BeadsAdapter README documents Outcome C variant shipped + the ~440ms
-  rollback cost + the v1.0.4-specific invocation.
+  (pipeline.ts dry-run depends on it unconditionally). Outcome A satisfies
+  via dry-run-via-buffer-discard: `transaction.dryRun === true` enters
+  the same buffer and rollback discards it without replay — no bd
+  invocations issued.
+- **`capabilities.snapshot: false`** — Outcome A does NOT provide snapshot
+  semantics; it provides write-buffering. SYNTHESIS §9 HIGH-severity
+  dry-run gate is partially closed (pipeline.ts dry-run works) but full
+  snapshot-rollback semantics are deferred to Phase 6.1.
+- Plan 06-06 ships `src/txn/buffer.ts` as the sole txn implementation.
+  Per-op buffering schema: each entry tags the event family (`recordStateMutation`
+  / `recordStateAppend` / `recordStateSignal` / section-level `update` /
+  record-level `putRecord` / binary asset no-op) + the bd primitive + args.
+  Plan 06-06 author chooses between buffering as "structured events" or
+  "raw bd argv" — both work for Outcome A.
+- **Phase 6.1 follow-up tracked in `deferred-items.md`** for mid-txn
+  commit atomicity. Migration path: swap `src/txn/buffer.ts` →
+  `src/txn/snapshot.ts` (~300 LOC) using the Outcome C invocation
+  pattern + Landmine-12 fix captured in SPIKE-RESULTS.md §7 "Outcomes
+  not chosen" block.
+- **Phase 7 CONFORM-04 known-gap flag** — cross-reference to Phase 7
+  plan when authored. Plan 06-07 smoke-test wiring should emit a clear
+  skip/known-failure disposition for CONFORM-04 on BeadsAdapter so the
+  gap is visible, not silently green.
+- Plan 06-06 `withTransaction` JSDoc MUST document: (a) `capabilities.snapshot
+  === false`, (b) mid-txn commit failure behavior (partial commit, no
+  rollback), (c) structured error shape (e.g., `BeadsPartialCommitError`
+  with `{committedOps, failedOp, remainingOps}` shape) surfacing
+  partial-commit state to the caller.
+- BeadsAdapter README documents Outcome A variant shipped + the mid-txn-
+  commit-gap caveat + the Phase 6.1 follow-up plan + the CONFORM-04
+  known-gap in Phase 7.
+
+**Outcomes not chosen (preserved for Phase 6.1 revisit):**
+- **Outcome B — INFEASIBLE.** `bd dolt` primitives absent per §3.3. Would
+  require upstream bd feature-add (rejected for v1.0 timeline) or direct
+  Dolt-level invocation bypassing bd (rejected per "bd CLI shell-out
+  everywhere" discipline).
+- **Outcome C — FEASIBLE, rejected by user override.** Documented in
+  SPIKE-RESULTS.md §7 "Outcomes not chosen" block. Phase 6.1 revisit
+  trigger: if CONFORM-04 adoption becomes mandatory, or if the `bd init`
+  side-effect surface is mitigated upstream (e.g., `bd init
+  --no-install-hooks` flag), Outcome C becomes the recommended migration.
 
 **Surprises (flagged to user via Task 4 checkpoint):**
 - v1.0.4 broke `bd init --from-jsonl <abs-path>` — requires jsonl at
   exact relative path `.beads/issues.jsonl` inside target. Out-of-band
-  reprobe found the workaround; Plan 06-06 must implement the pre-seed
-  pattern.
-- v1.0.4 `bd init` side-effects on CLAUDE.md + hooks installation may
-  surprise a user expecting silent init. Plan 06-06's tmpdir discipline
-  contains the side-effects.
+  reprobe found the workaround; preserved for Phase 6.1 Outcome-C
+  migration path.
+- v1.0.4 `bd init` side-effects on `CLAUDE.md` + hooks installation + 
+  `.claude/settings.json` were a factor in the Outcome-C rejection.
 - `bd backup` subsystem (new in v1.0.4) exposes `init/sync/restore/status/
   remove` for off-machine durable backup. Not in scope for in-process
   txn, but noted for potential future use (e.g., disaster recovery hooks
   in Phase 8).
 
 **References:**
-- SPIKE-RESULTS.md: `/Volumes/code/get-shit-done/.planning/phases/06-beadsadapter-implementation/06-03-SPIKE-RESULTS.md`
-- Spike script (reproducible evidence): `/Volumes/code/gsd-beads/scripts/spike-bd-primitives.ts`
+- SPIKE-RESULTS.md: `/Volumes/code/get-shit-done/.planning/phases/06-beadsadapter-implementation/06-03-SPIKE-RESULTS.md` §7 (D-TXN locked) + §9 (Outcome A replay commands).
+- Phase 6.1 follow-up: `/Volumes/code/get-shit-done/.planning/phases/06-beadsadapter-implementation/deferred-items.md` (Deferred-04 mid-txn-commit-gap + Deferred-05 CONFORM-04 known-gap + Deferred-03 Landmine-7 v1.0.4 shape drift).
+- Spike script (reproducible evidence): `/Volumes/code/gsd-beads/scripts/spike-bd-primitives.ts`.
 - Prior related ADRs: D-2026-05-10-07 (withTransaction shadow-dir journal
-  — architectural analog for Outcome C's fs-rename cutover pattern on
-  MarkdownAdapter).
-
-**Status:** Accepted pending user approval at Plan 06-03 Task 4 checkpoint.
+  on MarkdownAdapter — NOT an analog here, since Outcome A is simpler;
+  the analog resurfaces only if Phase 6.1 migrates to Outcome C).
 
 ---
