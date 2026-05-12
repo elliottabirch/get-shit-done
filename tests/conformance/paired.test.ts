@@ -13,11 +13,9 @@
  * Runtime budget per RESEARCH §Test Infrastructure: ~30-60s including
  * BeadsAdapter cold-start ~400-700ms per test.
  *
- * 07-04b will add imports for runStateWriteOutcomeSuite /
+ * Plan 07-04b added imports for runStateWriteOutcomeSuite /
  * runStateEventDispatchSuite / runWithTransactionSuite at the bottom
- * of this file plus a per-adapter loop that invokes them. Keep the
- * structure loop-ready now (a NOUN/adapter-tuple array pattern) so
- * that the 07-04b diff is purely additive.
+ * of this file plus a per-adapter loop that invokes them.
  */
 import { describe, it } from 'vitest';
 import { spawnSync } from 'node:child_process';
@@ -25,6 +23,12 @@ import { runAdapterConformanceSuite } from './adapter.conformance.js';
 import { MarkdownAdapter } from '../../adapters/markdown/index.js';
 import { createBeadsAdapter } from 'gsd-beads/testing';
 import type { StorageAdapter } from '../../adapters/types.js';
+// Plan 07-04b: migrated suite imports (*.conformance-suite.ts files, not
+// auto-collected by vitest's *.test.ts glob — this is the only entry point).
+import { runStateWriteOutcomeSuite } from './write-outcome.conformance-suite.js';
+import { runStateEventDispatchSuite } from './write-events.conformance-suite.js';
+import { runWithTransactionSuite } from './write-transaction.conformance-suite.js';
+import type { AdapterName } from './manifest-types.js';
 
 /** Probe bd CLI. Returns true iff bd >= v1.0.4 is on PATH. */
 export function bdPresent(): boolean {
@@ -61,4 +65,15 @@ if (bdPresent()) {
       () => {},
     );
   });
+}
+
+// ============================================================================
+// Plan 07-04b: migrated suites invoked per adapter via the pairedAdapters
+// array exported above. Suite files use `.conformance-suite.ts` extension
+// so vitest's default glob skips them — this is the only entry point.
+// ============================================================================
+for (const [name, factory] of pairedAdapters) {
+  runStateWriteOutcomeSuite(name as AdapterName, factory);
+  runStateEventDispatchSuite(name as AdapterName, factory);
+  runWithTransactionSuite(name as AdapterName, factory);
 }
