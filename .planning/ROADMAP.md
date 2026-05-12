@@ -198,7 +198,7 @@ Plans:
 - [x] 06-05-PLAN.md — 3 recordState* event families (16-case StateWriteOutcome matrix) + putNamedDoc/getNamedDoc + writeBinaryAsset + markdownLockfile throw-stubs (BEADS-02, BEADS-05)
 
 **Wave 6** *(blocked on Wave 5 — composes event families for full-state tests)*
-- [ ] 06-06-PLAN.md — Dep-edge synthesizer + graphs/graph.json merge-preserves-semantic (BEADS-03 / D-OQ06)
+- [x] 06-06-PLAN.md — Dep-edge synthesizer + graphs/graph.json merge-preserves-semantic (BEADS-03 / D-OQ06)
 
 **Wave 7** *(blocked on all prior — final smoke coverage + README)*
 - [ ] 06-07-PLAN.md — 8 per-Bin-B-category smoke tests + BeadsAdapter README (D-SCAFFOLD + D-RUNTIME-RESOLUTION)
