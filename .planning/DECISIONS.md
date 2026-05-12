@@ -1323,3 +1323,93 @@ BeadsAdapter's own smoke tests
   `created_section` assertions for BeadsAdapter.
 
 ---
+
+## D-2026-05-12-OQ01-BEADS — BeadsAdapter commitPlanningState is a NOOP
+
+**Date:** 2026-05-12
+**Phase:** 6 (Plan 06-06)
+**Resolves (partial):** OQ-01 (SYNTHESIS.md §6) — specifically the BeadsAdapter
+half. MarkdownAdapter's OQ-01 resolution landed in Phase 3 Plan 03-05 (git
+commit semantics).
+
+**Decision:** `BeadsAdapter.commitPlanningState(message, files?)` is a NOOP.
+It returns `void` without side-effects on bd store or on disk. The method
+exists solely to satisfy the StorageAdapter contract (which is not
+capability-gated for this method).
+
+**Rationale:**
+
+bd manages its own SQLite+JSONL store with per-write atomicity guarantees
+(each `bd create` / `bd update` / `bd dep add` / `bd remember` / `bd forget`
+commits immediately through the Dolt layer). There is no "stage files and
+then commit" concept from the adapter's perspective — writes are either
+atomic or they fail.
+
+`commitPlanningState` originated as a MarkdownAdapter convenience that wraps
+`git add <files> && git commit -m <message>`. On the markdown backend, this
+lets a caller batch a related set of markdown edits into a single git
+commit so the audit log is readable. On bd, three issues make a direct
+translation unattractive:
+
+1. **No staging concept.** bd has no pending-changes area to flush. There
+   is nothing to "commit" — every prior write already landed.
+2. **Atomicity across writes is provided by `withTransaction`, not by
+   commit-phase semantics.** The `withTransaction` primitive on bd
+   (Outcome A in-memory buffer; see `D-2026-05-12-OQ06-TXN`) already
+   batches multiple bd writes and either replays all on success or
+   discards all on error. That is the correct analog for "batch a set of
+   related writes atomically."
+3. **The `message` parameter has no natural recipient on bd.** bd's audit
+   trail is per-write (`BEADS_ACTOR` + `created_at` / `updated_at`). There
+   is no per-batch message slot, and smuggling the message into a memory
+   key or a label would be a brittle coupling with no downstream
+   consumer.
+
+Options considered and rejected:
+
+- **Option B (bd-native checkpoint via `bd export --json -o <path>` +
+  `bd remember --key <milestone>:checkpoint:<msg>`).** Rejected: adds
+  storage-footprint cost for every commitPlanningState call; `message`
+  still lacks a natural consumer; snapshot/restore are capability-gated
+  off under D-TXN Outcome A so the export wouldn't plug into rollback
+  anyway.
+- **Option C (throw `UnsupportedCapabilityError`).** Rejected: the
+  StorageAdapter contract does NOT gate `commitPlanningState` on a
+  capability flag — throwing unconditionally would break callers that
+  don't yet know to check. A silent noop is forward-compatible; callers
+  who discover they need bd-native checkpoints can migrate to
+  `withTransaction` without code changes.
+
+**Consequence:**
+
+- Workflows that call `commitPlanningState` on MarkdownAdapter for a
+  "mark a stable point" semantic get no equivalent on BeadsAdapter. The
+  audit log diverges by design.
+- Callers who need explicit checkpoints should wrap the related writes
+  in `withTransaction` — that gives atomic commit/rollback on both
+  backends.
+- Conformance (Phase 7): the commitPlanningState conformance case needs
+  a relaxed assertion for BeadsAdapter (noop-contract test instead of
+  git-log-verification). Plan 06-07 / Phase 7 scope.
+
+**Reverts if:**
+
+- A future bd primitive exposes a native "checkpoint" (e.g., `bd
+  checkpoint create --message <msg>`) or the audit trail grows a
+  per-batch message surface that a `commitPlanningState` body could fill
+  without brittle coupling.
+
+**References:**
+
+- `commitPlanningState` contract: `adapters/types.ts` (StorageAdapter
+  interface, no capability gate).
+- `withTransaction` analog: `D-2026-05-12-OQ06-TXN` (this file) — the
+  correct primitive for atomic batch writes on BeadsAdapter.
+- MarkdownAdapter OQ-01 resolution: Phase 3 Plan 03-05 (commit-to-git
+  semantics on markdown backend).
+- Plan 06-06 `src/index.ts` `commitPlanningState` method: inline JSDoc
+  citing this ADR.
+- SYNTHESIS.md §6 Open Questions OQ-01 (now partially resolved;
+  MarkdownAdapter side done in Phase 3, BeadsAdapter side done here).
+
+---
