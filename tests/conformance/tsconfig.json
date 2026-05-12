@@ -23,6 +23,9 @@
   },
   "include": [
     "./adapter.conformance.ts",
+    "./manifest-types.ts",
+    "./manifest.ts",
+    "./test-registry.ts",
     "../../adapters/types.ts",
     "../../adapters/state-event-types.ts"
   ],
