@@ -201,7 +201,7 @@ Plans:
 - [x] 06-06-PLAN.md — Dep-edge synthesizer + graphs/graph.json merge-preserves-semantic (BEADS-03 / D-OQ06)
 
 **Wave 7** *(blocked on all prior — final smoke coverage + README)*
-- [ ] 06-07-PLAN.md — 8 per-Bin-B-category smoke tests + BeadsAdapter README (D-SCAFFOLD + D-RUNTIME-RESOLUTION)
+- [x] 06-07-PLAN.md — 8 per-Bin-B-category smoke tests + BeadsAdapter README (D-SCAFFOLD + D-RUNTIME-RESOLUTION)
 
 ### Phase 7: Conformance test suite
 **Repo:** both (test harness in this repo, adapter implementations in both)
