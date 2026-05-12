@@ -215,9 +215,9 @@ Plans:
   4. A deliberate failure injection mid-transaction (e.g. throw after the second of three writes) causes both adapters' `restore()` / rollback to leave their respective stores byte-identical (or record-identical, for bd) to the pre-transaction state — verified by snapshot diff on each adapter.
 **Plans:** 8 plans
 Plans:
-- [ ] 07-01-PLAN.md — Contract extension + manifest scaffold (normalize() + ADR D-NORMALIZE)
-- [ ] 07-02-PLAN.md — Section-anchor grep + meta-coverage test (bidirectional invariant)
-- [ ] 07-03-PLAN.md — Sibling ./testing subpath + BeadsAdapter normalize + seed consolidation (D-05 cleanup)
+- [x] 07-01-PLAN.md — Contract extension + manifest scaffold (normalize() + ADR D-NORMALIZE)
+- [x] 07-02-PLAN.md — Section-anchor grep + meta-coverage test (bidirectional invariant)
+- [x] 07-03-PLAN.md — Sibling ./testing subpath + BeadsAdapter normalize + seed consolidation (D-05 cleanup)
 - [ ] 07-04a-PLAN.md — devDep wire + bd CI + paired harness (split from 07-04 for scope sanity)
 - [ ] 07-04b-PLAN.md — write-*.ts → *.conformance-suite.ts migration + manifest population (≥30 entries)
 - [ ] 07-05a-PLAN.md — fast-check devDeps + 12 noun arbitraries + encode.ts
