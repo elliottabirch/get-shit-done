@@ -937,6 +937,11 @@ export class MarkdownAdapter implements StorageAdapter {
     });
   }
 
+  /** D-13 (Phase 7): identity — MarkdownAdapter storage is byte-preserving. */
+  normalize(body: string, _category?: string): string {
+    return body;
+  }
+
   // ─── recordState* internal helpers ──────────────────────────────────────────
 
   /** Strip YAML frontmatter from markdown content. */
