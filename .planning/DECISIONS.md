@@ -1413,3 +1413,89 @@ Options considered and rejected:
   MarkdownAdapter side done in Phase 3, BeadsAdapter side done here).
 
 ---
+
+## D-2026-05-12-NORMALIZE — StorageAdapter.normalize() additive contract method (Phase 7 CONFORM-02)
+
+**Date:** 2026-05-12
+**Phase:** 7 (conformance test suite)
+**Requirement:** CONFORM-02
+**Supersedes:** —
+**Precedent cited:** D-2026-05-12-OQ06-CAPS (Phase 6 additive `Capabilities.graphEdges` extension; same additive-contract pattern).
+
+### Context
+
+CONFORM-02 requires property-based round-trip tests asserting
+`adapter.getRecord(path) === adapter.normalize(input)` modulo
+adapter-defined normalization. Without a stable surface, callers cannot
+tell whether a byte-inequality indicates (a) adapter bug, (b) lossless
+re-serialization by the backend (e.g. bd's frontmatter YAML dump via
+js-yaml), or (c) test fixture drift.
+
+### Decision
+
+Add one optional but required method to `StorageAdapter`:
+
+```ts
+normalize(body: string, category?: string): string;
+```
+
+MarkdownAdapter returns body unchanged (byte-preserving storage).
+BeadsAdapter composes `parseFrontmatter → formatFrontmatter` (+ an
+identity section round-trip) so property tests can assert
+`adapter.getRecord(p) === adapter.normalize(putBody)`.
+
+Invariant: `normalize(normalize(x)) === normalize(x)` (idempotent;
+tested in adapters/markdown/index.test.ts, sibling smoke test in
+Plan 07-03).
+
+### Rationale
+
+- **Additive, non-breaking:** mirrors D-2026-05-12-OQ06-CAPS (graphEdges
+  on Capabilities) — no existing call site touches `normalize`.
+- **API exposure beats test-only helper:** Phase 8 DIST-02 migration tool
+  can call `targetAdapter.normalize(body)` before seeding a markdown→bd
+  switch. A test-private `recordEq` loses this leverage.
+- **Per-adapter discretion:** the method is the only place where
+  adapters can legitimately disagree about byte-equality; every such
+  disagreement is documented in CONFORMANCE_MANIFEST (D-06/D-07).
+
+### Alternatives rejected
+
+- **Per-noun `recordEq(noun, a, b)` in tests/conformance/ only:**
+  rejected — loses Phase 8 API exposure; requires 12 hand-written
+  equality functions instead of one adapter-method composition.
+- **Skip normalize + assert byte-identity:** rejected — BeadsAdapter's
+  read path re-serializes frontmatter via js-yaml; byte-identity would
+  require vendoring the exact dump options into fork tests,
+  permanently coupling fork test code to sibling's parser choice.
+
+### Consequences
+
+- New surface area on `StorageAdapter` (1 method, ~3 lines of JSDoc).
+- Both adapters must ship an impl before Plan 07-05 property tests run.
+- Third-party adapters added post-v1.0 MUST implement `normalize` —
+  the meta-coverage test catches an absent impl via TypeScript compile
+  failure, not runtime.
+
+### Appendix A — ManifestEntry kind enumeration
+
+The `tests/conformance/manifest.ts` const uses a 4-kind
+discriminator: `'binB' | 'section-tuple' | 'noun-roundtrip' |
+'rollback'`. CONTEXT.md D-06 names the first three (Bin B method,
+section tuple, noun round-trip). The 4th kind — `rollback` — is
+introduced here under this ADR to carry CONFORM-04 failure-
+injection outcomes per D-09 known-gap + D-10 throw-from-fn + D-11
+bd export diff. The `RollbackOutcomeExpected` discriminated union
+(`byte-identical` | `record-identical` |
+`incomplete-per-Deferred-04`) lives in the same
+`manifest-types.ts` file as `StateOutcomeExpected` and
+`RoundTripOutcomeExpected`. Keeping the kind set in one place
+(rather than scattered across per-test-class unions) preserves
+the D-06 single-manifest discipline. Third-party adapters MUST
+declare expected rows for every kind they support.
+
+### Status
+
+Locked (Phase 7 CONTEXT D-13, 2026-05-12).
+
+---

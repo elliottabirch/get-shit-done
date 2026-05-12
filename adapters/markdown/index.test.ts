@@ -145,3 +145,31 @@ describe('MarkdownAdapter', () => {
     await expect(adapter.readModifyWriteRoadmapMd((c) => c + '\n<!-- updated -->')).resolves.not.toThrow();
   });
 });
+
+describe('normalize (D-13 additive contract)', () => {
+  let adapter: MarkdownAdapter;
+
+  beforeEach(async () => {
+    const tmpDir = await mkdtemp(join(tmpdir(), 'gsd-md-normalize-'));
+    await mkdir(join(tmpDir, '.planning'), { recursive: true });
+    adapter = new MarkdownAdapter(tmpDir);
+  });
+
+  it('returns body unchanged (identity)', () => {
+    expect(adapter.normalize('hello')).toBe('hello');
+  });
+
+  it('preserves frontmatter byte-for-byte', () => {
+    const body = '---\nkey: 1\n---\nbody\n';
+    expect(adapter.normalize(body)).toBe(body);
+  });
+
+  it('accepts category arg without side effect', () => {
+    expect(adapter.normalize('x', 'root')).toBe('x');
+  });
+
+  it('is idempotent: normalize(normalize(x)) === normalize(x)', () => {
+    const x = 'abc\n';
+    expect(adapter.normalize(adapter.normalize(x))).toBe(adapter.normalize(x));
+  });
+});

@@ -125,6 +125,25 @@ export interface StorageAdapter {
   recordStateAppend(event: AppendEvent): Promise<StateWriteOutcome>;
   recordStateMutation(event: MutationEvent): Promise<StateWriteOutcome>;
   recordStateSignal(event: SignalEvent): Promise<StateWriteOutcome>;
+
+  /**
+   * D-13 (Phase 7, ADR D-2026-05-12-NORMALIZE):
+   * Canonicalize body per the adapter's storage normalization.
+   * MarkdownAdapter returns body unchanged (byte-preserving storage).
+   * BeadsAdapter applies frontmatter round-trip via parseFrontmatter +
+   * formatFrontmatter (js-yaml.dump normalizes quote style).
+   *
+   * Used by Phase 7 property-based round-trip tests:
+   *   expect(await adapter.getRecord(p)).toBe(adapter.normalize(input))
+   *
+   * Also enables Phase 8 migration tool (pre-seed normalize pass).
+   *
+   * `category` is forward-compatible for adapters that dispatch by
+   * NamedDocCategory; currently unused by both ship-Phase-7 adapters.
+   *
+   * Invariant: normalize(normalize(x)) === normalize(x) (idempotent).
+   */
+  normalize(body: string, category?: string): string;
 }
 
 export class UnsupportedCapabilityError extends Error {
