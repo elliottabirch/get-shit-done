@@ -100,13 +100,20 @@ for (const [adapterName, adapterFactory] of pairedAdapters) {
 
           await fc.assert(
             fc.asyncProperty(arb, async (value) => {
-              const body = encodeFrontmatterDoc(
+              // Pre-normalize so that the written form is already in the
+              // adapter's canonical representation. For MarkdownAdapter,
+              // normalize() is identity (byte-preserving), so this is a
+              // no-op. For BeadsAdapter, normalize() applies a frontmatter
+              // parse→format round-trip (js-yaml normalization), ensuring
+              // disk-tier paths round-trip correctly (D-13).
+              const rawBody = encodeFrontmatterDoc(
                 { noun: name },
                 JSON.stringify(value),
               );
+              const body = adapter.normalize(rawBody);
               await adapter.putRecord(path, body);
               const retrieved = await adapter.getRecord(path);
-              const expected = adapter.normalize(body);
+              const expected = adapter.normalize(body); // idempotent: normalize(normalize(x)) === normalize(x)
               if (retrieved !== expected) {
                 throw new Error(
                   `round-trip mismatch for ${adapterName}/${name}:\n` +
