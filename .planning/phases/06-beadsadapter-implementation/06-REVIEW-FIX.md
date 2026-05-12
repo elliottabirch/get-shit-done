@@ -2,257 +2,172 @@
 phase: 06-beadsadapter-implementation
 fixed_at: 2026-05-12T00:00:00Z
 review_path: /Volumes/code/get-shit-done/.planning/phases/06-beadsadapter-implementation/06-REVIEW.md
-iteration: 1
+iteration: 3
 scope: critical_warning
-findings_attempted: 13
-findings_fixed: 13
-findings_deferred: 6
-status: all_fixed
+findings_in_scope: 2
+findings_attempted: 2
+findings_fixed: 2
+findings_deferred: 0
+status: fixes_applied
 ---
 
-# Phase 6: Code Review Fix Report
+# Phase 6: Code Review Fix Report (Iteration 3)
 
 **Fixed at:** 2026-05-12
-**Source review:** `.planning/phases/06-beadsadapter-implementation/06-REVIEW.md`
-**Iteration:** 1
-**Scope:** critical_warning (Info findings deferred to Phase 6.1 / Phase 7)
+**Source review:** `06-REVIEW.md` (iteration 2)
+**Iteration:** 3 (final `--auto` fix pass)
+**Sibling repo:** `/Volumes/code/gsd-beads` (branch `feat/phase-6-reset`)
+**Fixer branch (during edit):** `gsd-reviewfix/06-6435` (fast-forwarded to `feat/phase-6-reset` on cleanup)
+
+## Preamble
+
+This is the third iteration of the fix-then-review loop on Phase 6. The
+fixes here target **iteration 2's two newly-surfaced warnings** (WR-1
+iter-2 and WR-2 iter-2) — NOT iteration 1's original 13 findings. Those
+were recorded in the previous report and re-verified clean in
+iteration 2's re-review.
+
+Iter-2 noted that its two warnings surfaced **as direct consequences of
+iter-1's fix pass** — WR-1 iter-2 flags a semantic mismatch in the
+WR-06 guard (iter-1 fix), and WR-2 iter-2 flags incomplete dryRun
+handling in the CR-04 AsyncLocalStorage rewrite (iter-1 fix). Both are
+closed here.
+
+The 6 info-tier carry-over findings from iter-1 (IN-01 already resolved
+in iter-1 fix pass; IN-02..IN-06) are out-of-scope per `fix_scope:
+critical_warning` and remain as documented follow-ups / Phase 6.1 work.
 
 ## Summary
 
-- Findings in scope: 13 (4 critical + 9 warnings)
-- Fixed: 13
-- Deferred: 6 (all Info — out of scope per `fix_scope: critical_warning`)
-- Status: all_fixed
+- Findings in scope: **2** (2 warnings; 0 critical)
+- Fixed: **2** (WR-1 iter-2, WR-2 iter-2)
+- Deferred: **0**
+- Skipped (info-tier, out of scope): 5
 
-This run resumed a prior interrupted fix session. The prior run
-successfully committed CR-01, CR-02, CR-03 and then died before the
-cleanup tail ran. The recovery sentinel at
-`.planning/phases/06-beadsadapter-implementation/.review-fix-recovery-pending.json`
-was detected on startup; the fast-forward + worktree-remove + branch
-delete cleanup from the prior run was completed, then a fresh worktree
-was established to apply CR-04 + all 9 warnings.
+## Fixes Applied
 
-All fix commits land on the sibling repo (`/Volumes/code/gsd-beads`)
-branch `feat/phase-6-reset`. The fork repo (`feat/storage-adapter`)
-was NOT touched by these fixes — all in-scope findings targeted files
-inside `/Volumes/code/gsd-beads/src/`.
-
-## Fixed Issues
-
-### CR-01: Symlink-escape gap in `_abs()` path-traversal guard
-
-**File:** `src/primitives.ts:67-94, 34, 468` (gsd-beads)
-**Commit:** `5f22aae` (from prior interrupted run)
-**Applied fix:** `realpathSync()` on the deepest existing ancestor of
-`abs`, re-check containment against `realpathSync(projectRoot)`. Removed
-the unused `pathRelative` breadcrumb import + its `void pathRelative`
-suppression. Canonicalization + existsSync walk covers POSIX + macOS
-symlink-escape vectors the pre-fix lexical `path.resolve()` check missed.
-
-### CR-02: `_deriveEventId` halved, narrow keyspace for blocker-label identity
-
-**File:** `src/events.ts:117-124` (gsd-beads)
-**Commit:** `00100a2` (from prior interrupted run)
-**Applied fix:** Replace `Math.abs(h).toString(36)` with
-`(h >>> 0).toString(36)`. `>>> 0` unsigned-32-bit coerces the full range,
-fixing (a) the `Math.abs(h) === Math.abs(-h)` keyspace halving and (b)
-the `Math.abs(-2147483648) === -2147483648` fixed-point `-`-prefix
-label fragment. Full SHA-256-truncated upgrade deferred to Phase 6.1 if
-blocker volume ever warrants more entropy.
-
-### CR-03: `parseRequirementsBody` placeholder pushes on fence toggle
-
-**File:** `src/format/schemas/requirements.ts:69-78` (gsd-beads)
-**Commit:** `1f41985` (from prior interrupted run)
-**Applied fix:** Remove the `{} as never` placeholder pushes on fence
-open/close. Fence toggles inside a category are now a no-op (not a
-requirement item); outside a category, the raw fence line is preserved
-in prose for round-trip. Eliminates runtime-heterogeneity in
-`current.items` (RequirementItem[]) and `proseLines` (string[]).
-
-### CR-04: `withTransaction` concurrent-caller buffer contamination
-
-**File:** `src/txn.ts:162-250` + new `tests/unit/with-transaction-concurrent.test.ts` (gsd-beads)
-**Commit:** `ec39906`
-**Applied fix (USER OVERRIDE — AsyncLocalStorage):** REVIEW.md suggested
-either (a) an async mutex keyed by BdRunner or (b) a docs-only
-"single-flight-only" contract. The user REJECTED both and chose
-Option C: AsyncLocalStorage (node:async_hooks).
-
-Rewrote txn context storage from `WeakMap<BdRunner, TxnContext>` to
-`AsyncLocalStorage<TxnContext>`. Each `withTransaction` call opens its
-own async-hooks context with its own buffer; concurrent callers NEVER
-share state. Nested `withTransaction` inside the same async flow still
-JOINs the outer buffer (reentrancy semantics preserved via depth
-tracking on the ambient context).
-
-Rationale for AsyncLocalStorage over the mutex suggestion:
-- correctness by construction (isolation is structural, not after-the-fact)
-- preserves parallelism (vs mutex serialization)
-- matches Node ecosystem idiom (express/fastify/OpenTelemetry standard)
-- Phase 7 conformance parity with MarkdownAdapter's filesystem-lock
-  (both isolate correctly, one per-context, one per-PID)
-
-Added `tests/unit/with-transaction-concurrent.test.ts` (4 tests) locking
-in the regression: concurrent-isolation, reentrancy-still-joins,
-concurrent rollback independence, isTxnActive false outside the
-callback. All 4 pass. All 9 existing `tests/smoke/transaction.test.ts`
-tests continue to pass. All 18 `state-events-{append,mutation,signal}`
-smoke tests continue to pass.
-
-### WR-01: `_resolveMilestoneBead` AND-semantics assumption on `bd list -l`
-
-**File:** `src/events.ts:83-105` (gsd-beads)
-**Commit:** `3bc3a97`
-**Applied fix:** Single `-l gsd:milestone` query + in-process post-filter
-on `labels[]` for `version:<key>`. Avoids the undocumented-AND-vs-OR
-risk for `bd list -l A -l B`. Same spawn count (1); AND guarantee is now
-explicit in JS.
-
-### WR-02: `formatState` tautological trailing-newline expression
-
-**File:** `src/format/state.ts:255` (gsd-beads)
-**Commit:** `eee002a`
-**Applied fix:** Replace `(body.endsWith('\n') ? '' : '')` (both arms '')
-with `(body.endsWith('\n') ? '\n' : '')`. Preserves trailing newline on
-section-append — eliminates round-trip byte drift for STATE.md files
-ending in '\n'.
-
-### WR-03: `removeRecord` / `removeCollection` phantom-persistence on phase-addressed bd paths
-
-**File:** `src/primitives.ts:195-301` (gsd-beads)
-**Commit:** `6b23351`
-**Applied fix:** Add explicit `throw new Error(...)` guard for
-`route.tier === 'bd' && !route.label` in both `removeRecord` and
-`removeCollection`, mirroring the existing `putRecord` guard. All three
-Bin A write-side ops now surface the Plan 06-06 scope boundary
-consistently; read-side (`getRecord`) already handled phase-addressed
-bd paths.
-
-### WR-04: `_bufferContainsRememberKey` indexOf-without-guard hazard
-
-**File:** `src/events.ts:162-166, 397-401` (gsd-beads)
-**Commit:** `51e2420`
-**Applied fix:** Extract shared `_rememberOpMatchesKey(op, key)` helper.
-Both the `_bufferContainsRememberKey` check AND the `todo_count_update`
-inline filter now route through it. Eliminates the latent trap where
-the inline filter silently decayed to matching `op.args[0]` (the
-literal `'remember'` string) when `--key` was absent.
-
-### WR-05: `atomicWriteFile` fsync tmpfile before rename
-
-**File:** `src/_atomicWrite.ts:42-49` (gsd-beads)
-**Commit:** `8956d1d`
-**Applied fix:** Open tmpfile via `openSync('w')` + `writeFileSync(fd,body)`
-+ `fsyncSync(fd)` + `closeSync(fd)` BEFORE rename. Data pages are
-durably flushed before the directory-entry swap commits the replacement;
-system crash between write and flush can no longer fsck-recover an
-empty inode at the target. Directory-level fsync (ext4/xfs rename-entry
-durability) intentionally NOT added — matches MarkdownAdapter
-Pitfall-7 triage.
-
-### WR-06: `updateFrontmatter` / `mergeFrontmatter` runtime serializability guard
-
-**File:** `src/primitives.ts:390` (gsd-beads)
-**Commit:** `df6757b`
-**Applied fix:** Added `_assertFrontmatterSerializable(value, context)`
-helper that `JSON.stringify`-round-trips the value before handing it to
-`formatFrontmatter` / js-yaml's `dump`. Rejects functions, Symbols, and
-circular refs with a typed `TypeError` instead of allowing a mid-write
-js-yaml crash or unparseable `!!js/function` YAML tags.
-
-### WR-07: `findBeadsRoot` silent fall-through on invalid `BEADS_DIR`
-
-**File:** `src/bd/findRoot.ts:37-48` + `tests/unit/findRoot.test.ts` (gsd-beads)
-**Commit:** `4b58a52`
-**Applied fix:** Throw `BdManagedMismatchError` when `BEADS_DIR` is set
-but points at a directory without `metadata.json`. Previously fell
-through silently to parent-walk, masking user configuration errors.
-Also updated `tests/unit/findRoot.test.ts::case 1b` — previously
-asserted the silent fallthrough; now asserts the throw.
-
-### WR-08: `deriveDiskStatus` orphan-summary semantic lock via unit test
-
-**File:** `src/helpers/deriveDiskStatus.ts:41-43` + new `tests/unit/deriveDiskStatus.test.ts` (gsd-beads)
-**Commit:** `5d71d41`
-**Applied fix:** Added 8 unit tests locking in the D-07 priority chain,
-specifically the WR-08 orphan-summary case (`summaryCount > 0 &&
-planCount === 0` → `'partial'`). Expanded JSDoc to spell out the two
-distinct caller-semantics that both collapse to `'partial'` today, with
-a Phase 7 CONFORM-04 follow-up note for future
-`'orphan-summary'` enum split.
-
-### WR-09: `dep-graph.ts` self-blocks edges
-
-**File:** `src/dep-graph.ts:96-110` (gsd-beads)
-**Commit:** `97069bf`
-**Applied fix:** Added `if (d.depends_on_id === issue.id) continue;`
-defensive filter. Spike-014 protects cascade walks from self-loops, but
-`graphify.cjs` and pipeline dry-run may not — filter at the synthesizer
-tier so downstream consumers never see one.
-
-## Deferred Issues
-
-All 6 Info findings are deferred per `fix_scope: critical_warning`:
-
-- **IN-01** (`src/primitives.ts:34, 468` — unused `pathRelative` import):
-  Addressed as part of CR-01 fix; the breadcrumb import was deleted when
-  CR-01 landed the actual symlink-escape hardening. Effectively already
-  resolved.
-- **IN-02** (`src/primitives.ts:353-364` — `updateSection` round-trip
-  O(N) per call): Performance, not correctness. Deferred to Phase 6.1
-  (coalescing pass).
-- **IN-03** (`src/bd/helper.ts:107` — `BdRunner` corruption heuristic
-  over-matches `database`/`dolt`): Tightening the regex + routing
-  permissions errors to `BeadsUnavailableError` rather than `BeadsCorrupt`.
-  Deferred; low real-world hit rate, flagged for a follow-up.
-- **IN-04** (`src/format/state.ts:200-208` — silent skip on malformed
-  JSON payload in parseState): Surface errors via log or accumulated
-  error array. Deferred; out of critical_warning scope.
-- **IN-05** (`src/primitives.ts:320-337` — `stat` omits `mtime` for
-  bd-tier): Documentation-only; contract marks `mtime?` as optional.
-  Deferred to README capability table.
-- **IN-06** (`src/format/schemas/requirements.ts:30-36` — flat
-  categories lose nested H2/H3): Out of v1 scope per sibling-carry-
-  forward policy.
-
-## Verification
-
-- Type check (tsc --noEmit) clean after every commit (all 10 fresh
-  commits validated; 3 prior-run commits also validated as part of the
-  resume).
-- Affected unit + smoke tests run after each fix; all pass.
-- Full `tests/unit` suite run at end: 117/117 passing across 11 files.
-- Concurrent-isolation regression test (`with-transaction-concurrent`)
-  added for CR-04; 4 tests covering isolation, reentrancy-still-joins,
-  concurrent rollback independence, and `isTxnActive` lifecycle.
-- Existing 9 `transaction.test.ts` smoke tests still pass after ALS
-  rewrite (reentrancy + rollback semantics preserved).
-- Existing 18 `state-events-{append,mutation,signal}` tests still pass
-  (withTransaction integration verified).
-- Existing 16 `record-primitives` + `named-doc` smoke tests still pass
-  after WR-03 throw-on-phase-addressed-bd changes.
-
-## Commit Log (sibling: `/Volumes/code/gsd-beads`, branch `feat/phase-6-reset`)
-
-| ID | Severity | File | Commit | Outcome |
+| ID | Severity | File:line | Outcome | Commit |
 |---|---|---|---|---|
-| CR-01 | Critical | `src/primitives.ts:67-94` | `5f22aae` | fixed (prior run) |
-| CR-02 | Critical | `src/events.ts:117-124` | `00100a2` | fixed (prior run) |
-| CR-03 | Critical | `src/format/schemas/requirements.ts:69-78` | `1f41985` | fixed (prior run) |
-| CR-04 | Critical | `src/txn.ts:162-250` | `ec39906` | fixed (AsyncLocalStorage per user override of REVIEW.md mutex suggestion) |
-| WR-01 | Warning | `src/events.ts:83-105` | `3bc3a97` | fixed |
-| WR-02 | Warning | `src/format/state.ts:255` | `eee002a` | fixed |
-| WR-03 | Warning | `src/primitives.ts:195-301` | `6b23351` | fixed |
-| WR-04 | Warning | `src/events.ts:162-166,397-401` | `51e2420` | fixed |
-| WR-05 | Warning | `src/_atomicWrite.ts:42-49` | `8956d1d` | fixed |
-| WR-06 | Warning | `src/primitives.ts:390` | `df6757b` | fixed |
-| WR-07 | Warning | `src/bd/findRoot.ts:37-48` | `4b58a52` | fixed |
-| WR-08 | Warning | `src/helpers/deriveDiskStatus.ts:41-43` | `5d71d41` | fixed |
-| WR-09 | Warning | `src/dep-graph.ts:96-110` | `97069bf` | fixed |
+| WR-1 (iter-2) | Warning | `/Volumes/code/gsd-beads/src/primitives.ts:460-509` | fixed | `e532aed` |
+| WR-2 (iter-2) | Warning | `/Volumes/code/gsd-beads/src/txn.ts:200-241` | fixed | `460cdb5` |
+
+### WR-1 (iter-2): `_assertFrontmatterSerializable` walk object tree + reject function/Symbol
+
+**Commit:** `e532aed`
+**Option applied:** (a) per REVIEW.md — tighten guard to walk tree, throw on any function/Symbol at any depth.
+**Files modified:**
+- `/Volumes/code/gsd-beads/src/primitives.ts` (guard body rewritten, JSDoc expanded)
+- `/Volumes/code/gsd-beads/tests/unit/assert-frontmatter-serializable.test.ts` (new, 10 tests)
+
+**What changed:**
+
+The iter-1 WR-06 fix relied on `JSON.stringify` as the sole reject mechanism. `JSON.stringify` only throws on circular references and BigInt — it silently drops functions/Symbols from object keys and converts Symbols in arrays to `null`. A caller passing `updateFrontmatter(path, 'foo', () => 1)` or a patch with a nested Symbol would slip past the guard and hit `js-yaml.dump`, which may emit `!!js/function` tags that subsequent `load` calls reject as unparseable YAML — exactly the failure mode the guard was written to prevent.
+
+Applied fix:
+
+- Iterative walker (heap worklist, not recursion) — pathological nesting cannot blow the call stack before the circular-ref probe runs.
+- `TypeError` on any function or Symbol value at any depth; message distinguishes this failure from the circular/BigInt failure.
+- `WeakSet`-based visited tracking so the walker itself terminates on circular structures (the final `JSON.stringify` probe produces the user-facing "circular" error message).
+- `JSON.stringify` probe retained as defense-in-depth for circular refs and BigInt.
+
+**Regression coverage:**
+
+New `tests/unit/assert-frontmatter-serializable.test.ts` (10 tests) exercises the guard through the public `updateFrontmatter` and `mergeFrontmatterFn` exports with a failing `ensure` stub — proves the guard rejects **before** any IO, at any depth, for:
+
+- top-level function value
+- top-level Symbol value
+- nested function (deep in object tree)
+- nested Symbol (inside array)
+- function in merge patch
+- Symbol deep in merge patch (3 levels)
+- circular reference (via `JSON.stringify` probe)
+- BigInt value (via `JSON.stringify` probe)
+- benign diamond (WeakSet de-dup: no false reject)
+- benign deeply-nested clean object (no false reject)
+
+**Verification:**
+
+- Tier 1: file re-read, fix text present, surrounding code intact.
+- Tier 2: `tsc --noEmit` clean.
+- Tier 2 extended: vitest 10/10 on new file; full unit suite -> 127/127 green after commit.
+
+**Requires human verification?** No — semantics are tightly constrained by the tests and the JSDoc-stated contract.
+
+---
+
+### WR-2 (iter-2): Nested `withTransaction` throws on `dryRun:true` conflict
+
+**Commit:** `460cdb5`
+**Option applied:** (a) per REVIEW.md — fail-loud rejection when inner `dryRun:true` is incompatible with outer.
+**Files modified:**
+- `/Volumes/code/gsd-beads/src/txn.ts` (reentry branch + JSDoc extended)
+- `/Volumes/code/gsd-beads/tests/unit/with-transaction-concurrent.test.ts` (+4 tests in new describe block)
+
+**What changed:**
+
+The CR-04 AsyncLocalStorage-backed `withTransaction` reentry path (iter-1 fix) silently dropped the inner `opts.dryRun` when JOINing a non-dry-run outer buffer. Inner ops queued to the outer buffer and committed with the outer — the opposite of the requested dry-run semantic. Any helper composing a "dry-run probe" inside a real transaction would get real writes with zero warning.
+
+Applied fix: in the reentry branch (`existing && existing.bd === bd && !existing.finalizing`):
+
+- If `opts?.dryRun === true` **and** `existing.dryRun === false`: throw `TypeError` with a message explaining the conflict and what the caller should do (move dryRun to outermost, or restructure).
+- If `opts?.dryRun === true` **and** `existing.dryRun === true`: silently accept — the inner request is redundant but compatible (buffer discards on outer exit regardless). Avoids false-reject noise for pipeline authors who layer dry-runs.
+- If `opts?.dryRun !== true`: unchanged — join the outer buffer as before.
+
+Option (b) from REVIEW.md (per-depth buffer partitioning to actually honor inner dryRun) is more complex — would require rewriting commit-replay to split buffers per depth level — and deferred to Phase 6.1 if pipeline needs emerge. Option (c) docs-only was rejected per user directive: silent data-commit-under-dryRun is a footgun, not a documentation problem.
+
+**Regression coverage:**
+
+4 new tests in the new describe block `withTransaction — nested dryRun semantics (WR-2 iter-2 regression)`:
+
+1. nested `dryRun:true` inside non-dryRun outer -> `TypeError` matching the explanatory regex; inner callback never entered; outer rolled back (no committed ops).
+2. nested `dryRun:true` inside outer-dryRun -> accepted silently; both ops discard as expected.
+3. nested call WITHOUT `dryRun` -> unchanged; joins outer buffer; both ops replay in order (guards against over-broad fix).
+4. root-level `dryRun:true` unchanged (no regression of existing root dryRun behavior).
+
+**Verification:**
+
+- Tier 1: file re-read, fix text + updated JSDoc present.
+- Tier 2: `tsc --noEmit` clean.
+- Tier 2 extended: vitest 8/8 on extended file; full unit suite -> 131/131 green.
+
+**Requires human verification?** No — the fix is structural (fail-loud on conflict) and the regression tests cover both the conflict case and the two non-conflict carve-outs.
+
+## Skipped (info-tier, out of scope)
+
+Iter-1 info findings carried over into iter-2 unchanged. Out-of-scope for iter-3 per `fix_scope: critical_warning`.
+
+| ID | File | Reason |
+|---|---|---|
+| IN-01 (carry) | — | Already resolved in iter-1 fix pass per iter-2 re-review; no action needed. |
+| IN-02 (carry) | `/Volumes/code/gsd-beads/src/primitives.ts:417-428` | `updateSection` round-trip; v1 performance exclusion; Phase 6.1 coalescing. |
+| IN-03 (carry) | `/Volumes/code/gsd-beads/src/bd/helper.ts:107` | Corruption-heuristic regex over-matches; Phase 6.1 refinement. |
+| IN-04 (carry) | `/Volumes/code/gsd-beads/src/format/state.ts:202-209` | `parseState` silent skip on malformed JSON; hand-edit ergonomics; Phase 6.1. |
+| IN-05 (carry) | `/Volumes/code/gsd-beads/src/primitives.ts:384-401` | `stat` omits `mtime` for bd-tier; documented asymmetry; Phase 6.1. |
+| IN-06 (carry) | `/Volumes/code/gsd-beads/src/format/schemas/requirements.ts:30-36` | `RequirementCategory` L2/L3 flattening; schema follow-up. |
+
+All 6 have no escalation to warning/critical per iter-2 re-review; unchanged severity.
+
+## Verification Matrix
+
+| Step | Result |
+|---|---|
+| WR-1 target file edited | Yes (`src/primitives.ts`, `_assertFrontmatterSerializable` body + JSDoc) |
+| WR-1 `tsc --noEmit` | Clean |
+| WR-1 unit test added | Yes (`tests/unit/assert-frontmatter-serializable.test.ts`, 10 tests) |
+| WR-1 unit suite after commit | `11 files / 117 tests` -> `12 files / 127 tests` green |
+| WR-1 committed atomically | `e532aed` (src + tests in single commit) |
+| WR-2 target file edited | Yes (`src/txn.ts`, reentry branch + JSDoc) |
+| WR-2 `tsc --noEmit` | Clean |
+| WR-2 unit tests added | Yes (`tests/unit/with-transaction-concurrent.test.ts`, +4 tests in new describe) |
+| WR-2 unit suite after commit | `12 files / 127 tests` -> `12 files / 131 tests` green |
+| WR-2 committed atomically | `460cdb5` (src + tests in single commit) |
+| Combined: final unit suite | **12 files / 131 tests, all green** |
+| Isolation worktree used | Yes (`/tmp/sv-06-reviewfix-BkfxWj` on temp branch `gsd-reviewfix/06-6435`, fast-forwarded to `feat/phase-6-reset` on cleanup) |
+
+Conformance / smoke suites not re-run in this pass — WR-1 and WR-2 are pure unit-level fixes and the conformance harness covers higher-level adapter behavior that neither change alters. Iter-2 re-review already verified the iter-1 fix set against those suites.
 
 ---
 
 _Fixed: 2026-05-12_
 _Fixer: Claude (gsd-code-fixer)_
-_Iteration: 1_
+_Iteration: 3_
