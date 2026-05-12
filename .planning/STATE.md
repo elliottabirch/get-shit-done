@@ -4,14 +4,14 @@ milestone: v1.0
 milestone_name: milestone
 status: executing
 stopped_at: Phase 6 context re-gathered post-hybrid-pivot
-last_updated: "2026-05-12T00:20:42.505Z"
-last_activity: 2026-05-11 -- Phase 06 planning complete
+last_updated: "2026-05-12T01:31:29.273Z"
+last_activity: 2026-05-12 -- Plan 06-05 complete (BEADS-01/04/05 delivered; 33 smoke tests green; CR-01 resolved)
 progress:
   total_phases: 8
   completed_phases: 5
   total_plans: 37
-  completed_plans: 33
-  percent: 89
+  completed_plans: 35
+  percent: 95
 ---
 
 # Project State
@@ -19,9 +19,9 @@ progress:
 ## Current Position
 
 Phase: 06
-Plan: 02 complete (out of 7); 06-03 spike-executed evidence ready on fork; 06-04 next
+Plan: 05 complete (out of 7); summaries landed for 06-01, 06-02, 06-04, 06-05; 06-03 spike-executed evidence ready on fork; 06-06 + 06-07 remain
 Status: Executing
-Last activity: 2026-05-11 -- Plan 06-02 complete (8 .mjs ported to TS; 7 landmines fixed; BEADS-04 BdManagedMismatchError shipped)
+Last activity: 2026-05-12 -- Plan 06-05 complete (BEADS-01/04/05 delivered; 33 smoke tests green; CR-01 resolved)
 
 ## Reference
 
@@ -78,8 +78,10 @@ This is encoded as ADAPTER-05 and is part of Phase 1's success criteria.
    adapter interface from §4; risks from §9; open questions from §6
 
 See `.planning/DECISIONS.md` for full record + rationale.
+
 - [Phase ?]: D-INIT-ERR (BEADS-04) BdManagedMismatchError shipped with __brand cross-module instanceof (sibling src/bd/errors.ts)
 - [Phase ?]: RESEARCH Open Q #5 validated — two-commit git-mv+rewrite preserves git log --follow; locked as Plan 06-04 port discipline
+- [Phase ?]: DEV-CLI-FLAGS-BD-V1.0.4 — bd v1.0.4 --from-jsonl is a boolean flag; seed.jsonl must pre-exist at .beads/issues.jsonl before bd init. bd delete requires --force. bd delete --cascade supports recursive deletion of dependents.
 
 ## v1.0 milestone scope
 
@@ -135,7 +137,7 @@ These are NOT blocking for Phase 1; resolved as relevant phases approach:
 
 ## Session Continuity
 
-Last session: 2026-05-12T00:20:37.395Z
+Last session: 2026-05-12T01:31:25.733Z
 mid-session, Phase 3 UAT caught 2 more blocker bugs — all fixed)
 Stopped at: Phase 6 context re-gathered post-hybrid-pivot
 complete (4/4); `StateWriteOutcome` three-state contract DESIGNED but not
@@ -160,3 +162,5 @@ Phase 6 (BeadsAdapter) is now unblocked.
 | Phase/Plan | Duration | Tasks | Files |
 |-----------|----------|-------|-------|
 | Phase 06 P02 | 25 | 3 tasks | 13 files |
+| Phase 06 P05 | 13 | 3 tasks | 11 files |
+
