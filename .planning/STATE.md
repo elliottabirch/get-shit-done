@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Phase 6 context re-gathered post-hybrid-pivot
-last_updated: "2026-05-12T01:31:29.273Z"
-last_activity: 2026-05-12 -- Plan 06-05 complete (BEADS-01/04/05 delivered; 33 smoke tests green; CR-01 resolved)
+stopped_at: Plan 06-06 complete (BEADS-02/BEADS-03/OQ-01 delivered; zero throw-stubs; 71/71 smoke green)
+last_updated: "2026-05-12T03:24:16.120Z"
+last_activity: 2026-05-12
 progress:
   total_phases: 8
   completed_phases: 5
   total_plans: 37
-  completed_plans: 35
-  percent: 95
+  completed_plans: 36
+  percent: 97
 ---
 
 # Project State
@@ -19,9 +19,9 @@ progress:
 ## Current Position
 
 Phase: 06
-Plan: 05 complete (out of 7); summaries landed for 06-01, 06-02, 06-04, 06-05; 06-03 spike-executed evidence ready on fork; 06-06 + 06-07 remain
-Status: Executing
-Last activity: 2026-05-12 -- Plan 06-05 complete (BEADS-01/04/05 delivered; 33 smoke tests green; CR-01 resolved)
+Plan: 6 complete (out of 7); summaries landed for 06-01, 06-02, 06-04, 06-05; 06-03 spike-executed evidence ready on fork; 06-06 + 06-07 remain
+Status: Ready to execute
+Last activity: 2026-05-12
 
 ## Reference
 
@@ -82,6 +82,10 @@ See `.planning/DECISIONS.md` for full record + rationale.
 - [Phase ?]: D-INIT-ERR (BEADS-04) BdManagedMismatchError shipped with __brand cross-module instanceof (sibling src/bd/errors.ts)
 - [Phase ?]: RESEARCH Open Q #5 validated — two-commit git-mv+rewrite preserves git log --follow; locked as Plan 06-04 port discipline
 - [Phase ?]: DEV-CLI-FLAGS-BD-V1.0.4 — bd v1.0.4 --from-jsonl is a boolean flag; seed.jsonl must pre-exist at .beads/issues.jsonl before bd init. bd delete requires --force. bd delete --cascade supports recursive deletion of dependents.
+- [Phase ?]: [Phase 6 Plan 06-06]: D-2026-05-12-OQ06-CREATED-SECTION — BeadsAdapter never emits created_section under D-MAPPING Outcome A
+- [Phase ?]: [Phase 6 Plan 06-06]: D-2026-05-12-OQ01-BEADS — commitPlanningState NOOP on BeadsAdapter (OQ-01 resolved)
+- [Phase ?]: [Phase 6 Plan 06-06]: withTransaction ships D-TXN Outcome A in-memory buffer (275 LOC); capabilities.snapshot=false; mid-txn commit gap tracked as Deferred-04 Phase 6.1 follow-up
+- [Phase ?]: [Phase 6 Plan 06-06]: BeadsAdapter feature-complete — zero NotYetImplementedError throw-stubs in src/index.ts; 71/71 smoke tests green
 
 ## v1.0 milestone scope
 
@@ -137,9 +141,9 @@ These are NOT blocking for Phase 1; resolved as relevant phases approach:
 
 ## Session Continuity
 
-Last session: 2026-05-12T01:31:25.733Z
+Last session: 2026-05-12T03:24:16.116Z
 mid-session, Phase 3 UAT caught 2 more blocker bugs — all fixed)
-Stopped at: Phase 6 context re-gathered post-hybrid-pivot
+Stopped at: Plan 06-06 complete (BEADS-02/BEADS-03/OQ-01 delivered; zero throw-stubs; 71/71 smoke green)
 complete (4/4); `StateWriteOutcome` three-state contract DESIGNED but not
 implemented (hit context budget). Tree clean at 5d3e05f3.
 
@@ -163,4 +167,5 @@ Phase 6 (BeadsAdapter) is now unblocked.
 |-----------|----------|-------|-------|
 | Phase 06 P02 | 25 | 3 tasks | 13 files |
 | Phase 06 P05 | 13 | 3 tasks | 11 files |
+| Phase 06 P06 | 46m | 3 tasks | 9 files |
 
