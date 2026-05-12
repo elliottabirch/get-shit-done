@@ -20,11 +20,25 @@ import { mkdtemp, rm, mkdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { StorageAdapter } from '../../adapters/types.js';
+import type { AdapterName } from './manifest-types.js';
+import { assertFromManifest, preRegisterTest } from './test-registry.js';
 
 export function runAdapterConformanceSuite(
   adapterName: string,
   adapterFactory: (projectDir: string) => StorageAdapter,
 ): void {
+  // Pre-register baseline entries at COLLECTION time.
+  const baselineEntries = [
+    'getRecord-putRecord:round-trip',
+    'getRecord:missing-path-returns-null',
+    'stat:file-kind',
+    'stat:dir-kind',
+    'stat:missing-returns-null',
+  ] as const;
+  for (const name of baselineEntries) {
+    preRegisterTest(adapterName as AdapterName, name, 'binB');
+  }
+
   describe(`StorageAdapter conformance: ${adapterName}`, () => {
     let tmpDir: string;
     let adapter: StorageAdapter;
@@ -45,11 +59,18 @@ export function runAdapterConformanceSuite(
       it('putRecord then getRecord returns same body', async () => {
         await adapter.putRecord('STATE.md', '# State\n');
         const result = await adapter.getRecord('STATE.md');
+        // Baseline: identity-equal for markdown, normalize-modulo-equal for beads
+        assertFromManifest(adapterName as AdapterName, 'getRecord-putRecord:round-trip', 'binB', (expected) => {
+          expect(expected).toBeTruthy(); // presence-registered; identity check below
+        });
         expect(result).toBe('# State\n');
       });
 
       it('getRecord returns null for non-existent path', async () => {
         const result = await adapter.getRecord('NONEXISTENT.md');
+        assertFromManifest(adapterName as AdapterName, 'getRecord:missing-path-returns-null', 'binB', (expected) => {
+          expect(expected).toBeTruthy();
+        });
         expect(result).toBeNull();
       });
     });
@@ -58,6 +79,9 @@ export function runAdapterConformanceSuite(
       it('returns kind=file for a putRecord-written file', async () => {
         await adapter.putRecord('STATE.md', '# x\n');
         const r = await adapter.stat('STATE.md');
+        assertFromManifest(adapterName as AdapterName, 'stat:file-kind', 'binB', (expected) => {
+          expect(expected).toBeTruthy();
+        });
         expect(r).not.toBeNull();
         expect(r!.kind).toBe('file');
         // mtime is optional but MarkdownAdapter always provides it
@@ -71,12 +95,18 @@ export function runAdapterConformanceSuite(
         // putRecord('phases/01-foo/PLAN.md', ...) creates the parent dir as a side effect
         await adapter.putRecord('phases/01-foo/PLAN.md', '# Plan\n');
         const r = await adapter.stat('phases/01-foo');
+        assertFromManifest(adapterName as AdapterName, 'stat:dir-kind', 'binB', (expected) => {
+          expect(expected).toBeTruthy();
+        });
         expect(r).not.toBeNull();
         expect(r!.kind).toBe('dir');
       });
 
       it('returns null for non-existent path (matches getRecord null-on-miss)', async () => {
         const r = await adapter.stat('NONEXISTENT.md');
+        assertFromManifest(adapterName as AdapterName, 'stat:missing-returns-null', 'binB', (expected) => {
+          expect(expected).toBeTruthy();
+        });
         expect(r).toBeNull();
       });
     });
