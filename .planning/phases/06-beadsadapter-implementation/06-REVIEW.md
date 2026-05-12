@@ -2,7 +2,8 @@
 phase: 06-beadsadapter-implementation
 reviewed: 2026-05-12T00:00:00Z
 depth: standard
-files_reviewed: 45
+iteration: 2
+files_reviewed: 47
 files_reviewed_list:
   - /Volumes/code/gsd-beads/.gitignore
   - /Volumes/code/gsd-beads/CLAUDE.md
@@ -46,654 +47,372 @@ files_reviewed_list:
   - /Volumes/code/gsd-beads/src/txn.ts
   - /Volumes/code/gsd-beads/tests/conformance.test.ts
   - /Volumes/code/gsd-beads/tests/fixture.ts
+  - /Volumes/code/gsd-beads/tests/unit/with-transaction-concurrent.test.ts
   - /Volumes/code/get-shit-done/adapters/types.ts
   - /Volumes/code/get-shit-done/adapters/markdown/index.ts
   - /Volumes/code/get-shit-done/package.json
   - /Volumes/code/get-shit-done/tests/conformance/tsconfig.json
   - /Volumes/code/get-shit-done/vitest.config.ts
 findings:
-  critical: 4
-  warning: 9
+  critical: 0
+  warning: 2
   info: 6
-  total: 19
+  total: 8
 status: issues_found
 ---
 
-# Phase 6: Code Review Report
+# Phase 6: Code Review Report (Iteration 2)
 
 **Reviewed:** 2026-05-12
 **Depth:** standard
-**Files Reviewed:** 45 (sibling-side + fork-side contract additions)
-**Status:** issues_found
+**Files Reviewed:** 47 (same 45 from iteration 1 + new tests/unit/with-transaction-concurrent.test.ts + the test was also part of the code-under-review)
+**Iteration:** 2 (re-review after fix pass)
+**Status:** issues_found (2 warnings; all critical findings from iteration 1 are resolved)
 
 ## Summary
 
-Phase 6 ships a substantial, well-documented BeadsAdapter implementation with
-clear landmine-fix discipline. However, the CR-01 path-traversal guard has a
-genuine symlink-escape gap, the blocker-label dedupe keyspace is halved by
-`Math.abs` and narrow by design (32-bit djb2), `parseRequirementsBody` pushes
-placeholder objects into typed arrays on every fence toggle, `formatState`
-contains a tautological trailing-newline expression, and a concurrent-caller
-interleaving hazard exists in `withTransaction`. The Bin A contract asymmetry
-for phase-addressed writes (getRecord handles; putRecord throws) and the
-`_resolveMilestoneBead` reliance on multi-`-l` AND semantics round out the
-high-signal findings.
+Iteration-1 fix verification: all 4 CRITICAL findings (CR-01 symlink guard, CR-02
+32-bit hash keyspace, CR-03 `{} as never` placeholder, CR-04 withTransaction
+concurrency) and all 9 WARNING findings land cleanly. The CR-04 rewrite from a
+WeakMap-keyed txn store to `AsyncLocalStorage` is the biggest change and is
+executed well — no stale `state.activeTransaction` references remain in src/,
+all call sites (primitives.ts and events.ts) consume the context exclusively
+through `isTxnActive`, `peekBuffer`, `queueOrRun`, and the ALS-scoped `withTransaction`
+entry point; the companion test `tests/unit/with-transaction-concurrent.test.ts`
+directly exercises concurrent-isolation, intra-flow reentry, and rollback
+isolation. CR-01's `realpathSync` hardening correctly walks up to the deepest
+existing ancestor before canonicalizing (the off-by-one "probe doesn't exist
+but its parent does" case is handled). CR-02's `h >>> 0` coercion preserves
+the full 32-bit unsigned keyspace and never emits a `-`-prefixed fragment —
+though the underlying 32-bit djb2 collision surface is itself a design
+tradeoff, not a bug (doc'd as Phase 6.1 scope for escalation to SHA).
 
-Focus-area verification matrix (from CONTEXT):
+Two residual warnings remain after re-review:
 
-| Focus area | Finding |
-|---|---|
-| CR-01 path-traversal guard | **Partial** — symlink-escape gap confirmed (CR-01-A) |
-| StateWriteOutcome three-state discipline | **OK** — all branches return valid discriminants |
-| BdRunner shell-injection | **OK** — `spawnSync(bd, args, ...)` with no `shell: true`; argv-based |
-| Exhaustive `never` switches | **OK** — all three event families + SectionMode |
-| Dep-graph synthesizer edge validation | **OK** — filters by `type === 'blocks'` per Spike 014 |
+- **WR-1 (iter-2):** `_assertFrontmatterSerializable` (WR-06 fix) does NOT
+  reject functions or Symbols — `JSON.stringify(function(){})` returns
+  `undefined` (does not throw), and Symbols / function values inside objects
+  are silently stripped. The fix's JSDoc claims it rejects "functions /
+  Symbols / circular refs"; only circular refs are actually rejected. The
+  broken-YAML path through `js-yaml.dump` that WR-06 sought to prevent is
+  only PARTIALLY closed.
+- **WR-2 (iter-2):** `withTransaction` silently swallows an inner `dryRun:
+  true` opt when the inner call JOINs an outer (non-dry-run) context. This
+  is not documented and can surprise callers composing dry-run helpers with
+  outer real transactions — the inner's ops still commit.
+
+Both iteration-1 IN-{1,2,3,4,5,6} info findings are still present
+(expected — info-tier was out of fixer scope). None has escalated to
+warning/critical; reclassification unchanged.
+
+Focus-area verification matrix:
+
+| Focus area | Iter 1 | Iter 2 |
+|---|---|---|
+| CR-01 path-traversal + symlink guard | Partial | **Resolved** — realpathSync probe + deepest-existing-ancestor walk implemented in `_abs()` |
+| CR-02 `_deriveEventId` halved keyspace | Blocker | **Resolved** — `h >>> 0` gives full 32-bit unsigned range, no `-`-prefix edge case |
+| CR-03 `{} as never` placeholder | Blocker | **Resolved** — placeholder pushes deleted; fence toggles are pure `inFence` flips + conditional prose preservation |
+| CR-04 withTransaction concurrency | Blocker | **Resolved** — AsyncLocalStorage-scoped txn context; concurrent callers get isolated buffers; nested reentry in same flow joins (test-verified) |
+| All WR-01..WR-09 iteration-1 fixes | N/A | **Resolved** |
+| No regressions introduced by ALS rewrite | — | **Confirmed** — no `state.activeTransaction`, no `WeakMap<BdRunner, TxnContext>` references remain in src/ |
 
 ## Critical Issues
 
-### CR-01: Symlink-escape gap in `_abs()` path-traversal guard
-
-**File:** `/Volumes/code/gsd-beads/src/primitives.ts:67-94`
-**Issue:** The CR-01 guard uses `path.resolve()` which does NOT follow symlinks.
-If any directory inside `projectRoot` is (or becomes) a symlink pointing outside
-the root, a caller passing a path like `my-symlink/target.md` will pass the
-`startsWith(root + pathSep)` check (because the resolved path is lexically
-`projectRoot/my-symlink/target.md`) but the actual `writeFileSync`/`readFileSync`
-syscall follows the symlink and touches a file OUTSIDE the sandbox. The guard's
-own comment claims coverage for "any symlink-resolved path that escapes root"
-but no `realpathSync` is ever invoked on intermediate components. The unused
-import `pathRelative` (line 34, line 468 `void pathRelative`) is reserved for
-"Plan 06-07 hardening" per the trailing comment — this hardening has not
-shipped. On macOS/Linux the attack surface is real: an attacker who can place
-a symlink anywhere under `.planning/` (or any ancestor the adapter touches)
-can use the disk-tier primitives to read or clobber arbitrary filesystem
-paths.
-
-CONTEXT explicitly calls this out as a focus area ("verify the guard
-runtime-active + covers POSIX + Windows + symlink escapes"); the guard does
-NOT cover symlink escapes.
-
-**Fix:** Apply `realpathSync` to the parent directory of `abs` (or to `abs`
-itself if it exists) and re-check containment. For write paths where the
-target may not yet exist, realpath the deepest existing ancestor and verify
-the canonical path of each intermediate component stays inside
-`realpathSync(projectRoot)`. Minimum viable patch:
-
-```ts
-import { realpathSync, existsSync } from 'node:fs';
-
-export function _abs(projectRoot: string, relPath: string): string {
-  // ... existing length/absolute-path guards unchanged ...
-  const root = realpathSync(pathResolve(projectRoot));
-  const abs = pathResolve(projectRoot, relPath);
-  // Walk up from abs to the deepest existing component and realpath it.
-  let probe = abs;
-  while (probe !== dirname(probe) && !existsSync(probe)) {
-    probe = dirname(probe);
-  }
-  const canonical = existsSync(probe) ? realpathSync(probe) : probe;
-  if (canonical !== root && !canonical.startsWith(root + pathSep)) {
-    throw new TypeError(
-      `BeadsAdapter: path '${relPath}' resolves via symlink outside projectRoot`,
-    );
-  }
-  // The rest of abs (post-probe) is guaranteed non-existent so no symlinks
-  // can be introduced below it at this instant. (TOCTOU race remains; the
-  // actual write should be at a component that was realpath-verified.)
-  return abs;
-}
-```
-
----
-
-### CR-02: `_deriveEventId` produces halved, narrow keyspace for blocker-label identity
-
-**File:** `/Volumes/code/gsd-beads/src/events.ts:117-124`
-**Issue:** `_deriveEventId` is used to derive the LABEL suffix for
-`blocker_added`/`blocker_resolved` mutation events (lines 350, 370):
-
-```ts
-const label = `gsd:blocker:${_deriveEventId({ text: event.payload.text })}`;
-```
-
-The hash is a 32-bit signed djb2 (`h | 0`) folded through `Math.abs()` and
-rendered as base-36. Two independent issues:
-
-1. `Math.abs(h)` over a signed 32-bit int collapses `h` and `-h` to the same
-   key — blocker text `A` and blocker text `B` where `hash(A) === -hash(B)`
-   produce IDENTICAL labels. This halves the effective keyspace below the
-   already-narrow 31 bits.
-2. `Math.abs(-2147483648) === -2147483648` in JS (JS integer-abs doesn't
-   promote to BigInt) — the most-negative value is a fixed point; `(-2^31)
-   .toString(36)` produces a negative string containing '-' which becomes an
-   invalid/ambiguous label fragment if it ever lands there.
-
-Consequences under `recordStateMutation`:
-
-- Two distinct blockers with colliding hashes → second `blocker_added` returns
-  `{ applied: false, reason: 'duplicate' }` silently — the blocker is
-  SILENTLY LOST.
-- `blocker_resolved` on blocker A removes label `gsd:blocker:X`; if blocker B
-  hashed to the same X, bloker B's label is ALSO removed silently —
-  RESOLVING-THE-WRONG-BLOCKER.
-
-The JSDoc for `_deriveEventId` acknowledges collision false-positives as
-"dedupe duplicate" (line 116), but that reasoning applies to APPEND semantics
-where duplicate is benign. For mutation labels — where the label IS the
-dedupe primary key — silent loss is a correctness failure.
-
-**Fix:** Use a full cryptographic or 128-bit hash. Cheapest option:
-
-```ts
-import { createHash } from 'node:crypto';
-function _deriveEventId(payload: unknown): string {
-  const json = JSON.stringify(payload) ?? '';
-  return createHash('sha256').update(json).digest('hex').slice(0, 16);
-}
-```
-
-64 bits of entropy (16 hex chars) gives birthday-collision probability < 1
-per ~4 billion distinct events — safe for human-generated blocker counts. If
-label length matters, use base-64url or base-36 of 10 bytes. Also: SHA-256 is
-not the bottleneck; bd spawns dominate wall time.
-
----
-
-### CR-03: `parseRequirementsBody` pushes `{}` placeholder into typed arrays on fence toggle
-
-**File:** `/Volumes/code/gsd-beads/src/format/schemas/requirements.ts:69-78`
-**Issue:**
-
-```ts
-if (/^```/.test(line)) {
-  inFence = !inFence;
-  (current ? current.items : proseLines).push({} as never); // no-op marker placeholder
-  if (!current) proseLines.push(line);
-  continue;
-}
-```
-
-Every time a fenced code block opens or closes while inside a category, an
-EMPTY OBJECT `{}` is cast `as never` and pushed into `current.items`. The
-cast silences the type checker; the runtime array now contains heterogeneous
-entries (real `RequirementItem`s + bogus `{}` placeholders). Any downstream
-consumer iterating `.items` will trip on entries with no `done`/`id`/`description`
-fields.
-
-When not inside a category (`!current`), the code pushes `{} as never` into
-`proseLines` (a `string[]`) — then in the next statement pushes the actual
-line. Result: `proseLines` contains an empty object followed by the fence
-line, polluting string-join operations like `proseLines.join('\n').trim()`
-with `[object Object]` fragments.
-
-The `// no-op marker placeholder` comment suggests a scaffold that was
-abandoned. The entire placeholder push is dead-wrong; the intended behavior
-is "toggle `inFence` and preserve the fence line in prose if outside a
-category."
-
-**Fix:**
-
-```ts
-if (/^```/.test(line)) {
-  inFence = !inFence;
-  if (!current) proseLines.push(line);
-  continue;
-}
-```
-
-Delete the placeholder push. Also: `current.items` loses nothing from this
-fix — a fence-delimiting line is not a requirement item and has no place in
-the typed array anyway.
-
----
-
-### CR-04: `withTransaction` concurrent-caller interleaving contaminates shared buffer
-
-**File:** `/Volumes/code/gsd-beads/src/txn.ts:162-250`
-**Issue:** `withTransaction` treats re-entry and concurrency as the same
-case. When depth is already > 0, a new call JOINs the existing buffer. JS is
-single-threaded but `async` awaits interleave freely; any two unrelated
-`adapter.recordStateAppend(...)` / `adapter.recordStateMutation(...)` calls
-issued WITHOUT awaiting the first will both see `depth > 0` (the second
-runs during the first's await) and SHARE the buffer.
-
-Scenario:
-
-```ts
-const a = adapter.recordStateAppend(sessionEvent);   // starts, awaits bd
-const b = adapter.recordStateMutation(blockerEvent); // starts during a's await
-await Promise.all([a, b]);
-```
-
-1. `a` opens outer txn, `depth=1`, allocates `ctx.buffer = []`.
-2. `a` awaits `_getCurrentMilestone` / `_resolveMilestoneBead` (bd spawn).
-3. `b` enters `withTransaction`, sees `depth=1`, treats as nested, JOINS
-   buffer, `depth=2`.
-4. `b` queues its label op → lands in `a`'s buffer.
-5. `b`'s fn resolves → `depth=1`, `b` awaits its outer `return { applied: true }`.
-6. `a`'s fn resolves → `b`'s buffered op gets committed as part of `a`'s
-   commit phase, but `a` will THROW BeadsPartialCommitError if any of those
-   ops fail — callers see the failure attributed to the wrong event.
-
-Worse: if `b` had thrown (e.g., `BeadsEmpty`), the catch handler in the inner
-`fn()` path does NOT clear the buffer — `ctx.depth--` runs in finally, and
-`a`'s ops can still land on commit. But `b` reports `applied: false`
-semantically even though buffered ops may already be in `ctx.buffer` from
-`b`'s pre-throw work.
-
-The MarkdownAdapter shadow-dir analog explicitly states "reentrant — join
-outer txn" (index.ts:523-533) and holds a single adapter-lock (EEXCL
-filesystem lock) to serialize across PIDs. BeadsAdapter has NO equivalent
-mutual-exclusion primitive for INTRA-process concurrent callers and relies
-on them to await sequentially. This invariant is NOT documented and NOT
-enforced by the type system.
-
-**Fix:** Either (a) serialize with an async mutex (keyed by BdRunner
-instance) so concurrent `withTransaction` entries await each other and behave
-like two sequential transactions, or (b) document that BeadsAdapter method
-calls MUST NOT interleave at await points and fail-fast if a second txn
-starts while one is already open from a DIFFERENT call stack. Minimal (a):
-
-```ts
-const txnLocks = new WeakMap<BdRunner, Promise<void>>();
-
-export async function withTransaction<T>(
-  state: BeadsRuntimeState,
-  fn: () => Promise<T>,
-  opts?: { dryRun?: boolean },
-): Promise<T> {
-  const bd = state.bd;
-  const existing = txnLocks.get(bd);
-  let release: () => void = () => {};
-  const next = new Promise<void>(r => (release = r));
-  txnLocks.set(bd, (existing ?? Promise.resolve()).then(() => next));
-  if (existing) await existing;
-  try {
-    // ... existing body here (buffer / replay / discard) ...
-  } finally {
-    release();
-  }
-}
-```
-
-This serializes concurrent callers while preserving the intra-call reentrant
-semantics (a `withTransaction` nested inside an already-running `withTransaction`
-must still JOIN — detect via a separate call-stack-scoped flag if the
-existing runner matches).
+None. All 4 iteration-1 BLOCKER findings verify resolved.
 
 ## Warnings
 
-### WR-01: `_resolveMilestoneBead` assumes `bd list -l A -l B` is AND semantics
+### WR-1 (iter-2): `_assertFrontmatterSerializable` does not reject the two shapes its JSDoc claims to reject
 
-**File:** `/Volumes/code/gsd-beads/src/events.ts:87-104`
-**Issue:** The resolver passes TWO `-l` flags (`gsd:milestone` AND
-`version:v1.0`) expecting `bd` to intersect. Nothing in CLAUDE.md, the
-README, or the bd-primitive spike documentation confirms `bd list` performs
-AND across repeated `-l`. If `bd` treats repeated `-l` as OR (union), every
-milestone bead across all versions is returned and `items[0]` is arbitrary —
-subsequent `recordStateAppend` / `recordStateMutation` calls could append to
-the WRONG milestone. This is a one-line unit test ("`bd list -l A -l B`
-against a seed with two distinct `A`-labeled beads with distinct `B` values
-returns intersection") that is not documented as covered.
+**File:** `/Volumes/code/gsd-beads/src/primitives.ts:460-468`
+**Issue:** The iteration-1 WR-06 fix introduced this guard and claims (in
+JSDoc):
 
-**Fix:** Add an explicit smoke test asserting AND semantics against live bd
-v1.0.4; OR fall back to a post-filter:
-
-```ts
-const raw = state.bd.run(['list', '-l', 'gsd:milestone', '--json', '--all', '-n', '0']);
-const items = (Array.isArray(raw) ? raw : []) as Array<{ id: string; labels?: string[] }>;
-const match = items.find(it => (it.labels ?? []).includes(`version:${milestoneKey}`));
-return match ? match.id : null;
+```
+a cheap, battle-tested way to reject functions, Symbols, and circulars
+before they reach the YAML serializer
 ```
 
-Post-filter is 1 spawn, same as current; the guarantee is explicit.
-
----
-
-### WR-02: `formatState` contains tautologically-empty expression
-
-**File:** `/Volumes/code/gsd-beads/src/format/state.ts:255`
-**Issue:**
+But `JSON.stringify` does NOT throw on functions or Symbols — it either
+silently returns `undefined` (when the top-level value is a function /
+Symbol / undefined) or silently DROPS them from object/array entries:
 
 ```ts
-return appended.join('\n') + (body.endsWith('\n') ? '' : '');
+JSON.stringify(() => 'a')                    // 'undefined' (not thrown)
+JSON.stringify({fn: () => 'a'})              // '{}'         (silent drop)
+JSON.stringify({sym: Symbol('x')})           // '{}'         (silent drop)
+JSON.stringify({nested: [Symbol('x'), 1]})   // '{"nested":[null,1]}'
 ```
 
-Both ternary branches return `''`. Intent appears inverted: the trailing
-newline SHOULD be preserved when the original body had one. As written, no
-trailing newline is ever appended. This will cause round-trip byte drift for
-any STATE.md that originally ended with `\n` — the rewritten file omits the
-final newline, and subsequent parsers that require trailing-newline
-discipline (many unix tools, git diffs) will flag it.
+`JSON.stringify` only THROWS on:
+- circular references (`TypeError: Converting circular structure to JSON`)
+- `BigInt` values (`TypeError: Do not know how to serialize a BigInt`)
 
-**Fix:**
+Therefore the guard catches (a) circular refs and (b) BigInt — useful but
+narrower than advertised. A caller passing `updateFrontmatter(path, 'foo',
+function(){})` will PASS the guard (value is `function`, top-level stringify
+returns `undefined` silently), hit `js-yaml.dump`, which may emit a
+`!!js/function` tag, half-writing a file that subsequent `load` calls reject
+as unparseable — exactly the WR-06 failure mode the guard was supposed to
+block.
 
-```ts
-return appended.join('\n') + (body.endsWith('\n') ? '\n' : '');
-```
-
----
-
-### WR-03: `removeRecord`/`removeCollection` bd-tier ignore `route.phase`/`route.plan`
-
-**File:** `/Volumes/code/gsd-beads/src/primitives.ts:195-258`
-**Issue:** For phase-addressed paths (e.g. `phases/06-foo/06-01-PLAN.md`),
-`resolveRoute` returns `{ tier: 'bd', label: undefined /* or gsd:plan */,
-phase: '06-foo', plan: '01' }`. But `removeRecord` and `removeCollection`
-only guard on `route.tier === 'bd' && route.label` — for phase-document
-kinds (`phase-context`, `phase-plan`, etc.), `route.label` is undefined, so
-these fall through to `_abs(...) + unlinkSync/rmSync` on the disk side. If
-the file happens not to exist on disk (because the body was stored in bd),
-the remove silently succeeds even though the bd record is untouched. This
-creates a phantom-persistence bug: "I removed the phase but the bead is
-still there."
-
-Cross-reference: the SAME contract on `putRecord` explicitly throws
-`"phase-addressed bd writes not implemented in Bin A (Plan 06-06)"` —
-creating a DIFFERENT contract asymmetry. Reads work (getRecord finds the
-bd bead); writes and removes do different things.
-
-**Fix:** Make the three ops consistent. Either implement phase-addressed bd
-writes/removes (route on `route.kind === 'phase-*'` and dispatch to bd list
-with the phase/plan label match) or throw on the read path too so callers
-see a unified UnsupportedCapabilityError pattern. Until implemented:
+**Fix:** Either (a) tighten the assertion to explicitly reject functions and
+Symbols pre-stringify:
 
 ```ts
-if (route.tier === 'bd' && !route.label) {
-  throw new Error(
-    `BeadsAdapter.removeRecord: phase-addressed bd removes not implemented (Plan 06-06 scope). Path: ${path}`,
-  );
-}
-```
-
-Parallels the putRecord guard and surfaces the gap loudly instead of
-silently no-op'ing.
-
----
-
-### WR-04: `_bufferContainsRememberKey` indexOf-without-guard logic hazard
-
-**File:** `/Volumes/code/gsd-beads/src/events.ts:162-166, 397-401`
-**Issue:**
-
-```ts
-const keyIdx = op.args.indexOf('--key');
-if (keyIdx === -1 || keyIdx + 1 >= op.args.length) return false;
-return op.args[keyIdx + 1] === key;
-```
-
-The first `_bufferContainsRememberKey` call-site guards correctly. But line
-398-401:
-
-```ts
-const bufOps = peekBuffer(state.bd).filter(
-  (op) =>
-    op.kind === 'remember' &&
-    op.args.length >= 4 &&
-    op.args[op.args.indexOf('--key') + 1] === key,
-);
-```
-
-When `indexOf('--key') === -1`, expression evaluates `op.args[0] === key`.
-`op.args[0]` for a `'remember'` op is literally the string `"remember"`. As
-long as the dedupe key doesn't equal `"remember"` this is safe, but the
-inconsistency with the guarded variant is a latent trap — if someone adds a
-new buffered-op kind that happens to not have `--key`, the check silently
-decays. The inline filter should reuse the same guard (or extract a helper):
-
-**Fix:** Extract a single `hasKeyArg(op: BufferedOp, key: string)` helper
-and call it in both places. Or at minimum:
-
-```ts
-const bufOps = peekBuffer(state.bd).filter((op) => {
-  if (op.kind !== 'remember') return false;
-  const idx = op.args.indexOf('--key');
-  if (idx === -1 || idx + 1 >= op.args.length) return false;
-  return op.args[idx + 1] === key;
-});
-```
-
----
-
-### WR-05: `atomicWriteFile` does not `fsync` before rename; crash-window gap on non-journaled FS
-
-**File:** `/Volumes/code/gsd-beads/src/_atomicWrite.ts:42-49`
-**Issue:** The POSIX-rename atomicity comment holds for CONCURRENT READERS
-but not for CRASH RECOVERY. If the process dies between `writeFileSync(tmp)`
-and `renameSync(tmp, abs)`, the tmpfile is leaked. Worse: if the system
-crashes before the tmpfile's data pages are flushed to disk (not merely
-after rename), fsck can recover an EMPTY file at the target — the rename
-atomic-replaced an empty inode. The sibling's v0.2 code made the same
-tradeoff and CONTEXT notes Pitfall 7 was inherited.
-
-For bd store parity this is probably tolerable (bd itself uses SQLite/Dolt
-which have their own WAL discipline); for disk-tier `STATE.md` / `ROADMAP.md`
-writes this matches MarkdownAdapter Pitfall-7 status. Flag-only; not a
-regression from v0.2.
-
-**Fix (if elevated priority later):**
-
-```ts
-import { writeFileSync, renameSync, mkdirSync, openSync, fsyncSync, closeSync } from 'node:fs';
-
-const fd = openSync(tmpPath, 'w');
-try {
-  writeFileSync(fd, body);
-  fsyncSync(fd);
-} finally {
-  closeSync(fd);
-}
-renameSync(tmpPath, absPath);
-```
-
-Add fsync of the containing DIRECTORY too on Linux for full crash-safety;
-skipped in MarkdownAdapter as well per v0.2 Pitfall-7 triage.
-
----
-
-### WR-06: `formatFrontmatter` double-casts unknown to FrontmatterValue without runtime validation
-
-**File:** `/Volumes/code/gsd-beads/src/primitives.ts:390`
-**Issue:**
-
-```ts
-(frontmatter as Record<string, FrontmatterValue>)[field] = value as FrontmatterValue;
-```
-
-`updateFrontmatter(path, field, value)` takes `value: unknown`. The cast
-`value as FrontmatterValue` silences TypeScript but offers no runtime
-guarantee. If a caller passes a non-YAML-serializable value (a function, a
-Symbol, a class instance), js-yaml's `dump` will throw or (worse) emit a
-`!!js/function` tag that subsequent `load` calls reject. Callers with
-user-controlled frontmatter payloads can crash the write or produce
-unparseable YAML.
-
-**Fix:** Add a runtime guard or a structured-clone check:
-
-```ts
-function assertFrontmatterValue(v: unknown): asserts v is FrontmatterValue {
-  // Cheap check: JSON.stringify round-trip rejects functions and symbols
-  try { JSON.stringify(v); }
-  catch (e) { throw new TypeError(`updateFrontmatter: value is not JSON-serializable: ${String(e)}`); }
-}
-```
-
-Alternatively, narrow the public signature to `value: FrontmatterValue` on
-the adapter method so callers get a compile-time error.
-
----
-
-### WR-07: `findBeadsRoot` skips realpath on `BEADS_DIR` path when metadata.json missing
-
-**File:** `/Volumes/code/gsd-beads/src/bd/findRoot.ts:37-48`
-**Issue:** If `BEADS_DIR` is set but points to a directory without
-`metadata.json`, the function silently falls through to the parent-walk
-(line 49) using `start` not `envDir`. This masks configuration errors — a
-user who misconfigures `BEADS_DIR` (typo, stale) gets silent wrong-root
-resolution instead of a "BEADS_DIR invalid" signal. `BeadsAdapter.init()`
-has no visibility into this because it only sees the final resolved root.
-
-**Fix:** When `BEADS_DIR` is set but invalid, throw an explicit error
-rather than falling through. Matches the fail-loud pattern of the
-BdManagedMismatchError elsewhere.
-
-```ts
-if (envDir) {
-  const resolved = (() => { try { return realpathSync(resolve(envDir)); } catch { return null; } })();
-  if (!resolved || !existsSync(join(resolved, 'metadata.json'))) {
-    throw new BdManagedMismatchError(envDir, 'BEADS_DIR is set but does not point to a bd-managed directory.');
+function _assertFrontmatterSerializable(v: unknown, context: string): void {
+  const t = typeof v;
+  if (t === 'function' || t === 'symbol') {
+    throw new TypeError(
+      `BeadsAdapter.${context}: value of type ${t} is not YAML-serializable`,
+    );
   }
-  return dirname(resolved);
+  // Recurse into objects/arrays to catch embedded functions/symbols.
+  if (v && typeof v === 'object') {
+    for (const entry of Object.values(v as Record<string, unknown>)) {
+      _assertFrontmatterSerializable(entry, context);
+    }
+  }
+  try {
+    JSON.stringify(v);
+  } catch (e) {
+    throw new TypeError(
+      `BeadsAdapter.${context}: value is not JSON-serializable: ${String(e)}`,
+    );
+  }
 }
 ```
 
----
-
-### WR-08: `deriveDiskStatus` priority-chain: `summaryCount > 0` without `planCount > 0` returns 'partial'
-
-**File:** `/Volumes/code/gsd-beads/src/helpers/deriveDiskStatus.ts:41-43`
-**Issue:** The docstring acknowledges this is intentional ("`summaryCount > 0`
-alone (without planCount > 0) still returns 'partial', matching sibling's
-behavior for orphan-summary detection"), but no caller-side test asserts
-this is observed correctly as "orphan summary detected" vs. flagged as a
-bug. If downstream consumers interpret `partial` as "plans exist and some
-are complete," orphan-summary triggers the wrong workflow. Behavioral
-preservation from v0.2 is clear; downstream semantic alignment is not
-defensively verified.
-
-**Fix:** Either add a distinct enum value `'orphan-summary'` and update
-callers, or add a smoke test at the adapter boundary asserting the orphan
-case is surfaced to callers as orphan rather than "partial." Out-of-scope
-for v1.0 per the sibling-carry-forward policy, but flag for Phase 7
-CONFORM-04.
+Or (b) relax the JSDoc to match the actual behavior ("rejects circular
+references and BigInt; functions and Symbols pass through silently, relying
+on js-yaml.dump to raise or emit `!!js/...` tag"). The mismatch between
+promise and behavior is the bug — a future maintainer reading the guard's
+comment will incorrectly conclude that `updateFrontmatter(path, f, () => 1)`
+is safe.
 
 ---
 
-### WR-09: `dep-graph.ts` does not handle self-blocks edges (`from === to`)
+### WR-2 (iter-2): Inner `withTransaction` ignores `opts.dryRun` when JOINing outer context
 
-**File:** `/Volumes/code/gsd-beads/src/dep-graph.ts:96-110`
-**Issue:** The synthesizer emits every `blocks`-type edge verbatim with no
-guard against `depends_on_id === issue.id` (a self-loop). Spike 014 says
-cascade walks IGNORE `blocks` edges so a self-loop on `blocks` won't wedge
-cascade; but the emitted `graphs/graph.json` contains the self-loop and any
-downstream consumer (graphify.cjs for MarkdownAdapter, pipeline dry-run) may
-choke on it. Current tooling may not care, but the absence of a defensive
-filter is a time bomb.
+**File:** `/Volumes/code/gsd-beads/src/txn.ts:200-219`
+**Issue:** When `withTransaction` is called re-entrantly within the same
+async flow (outer's `fn()` calls another helper that also wraps
+`withTransaction`), the inner path enters the branch at lines 212-219:
+
+```ts
+if (existing && existing.bd === bd && !existing.finalizing) {
+  existing.depth++;
+  try {
+    return await fn();
+  } finally {
+    existing.depth--;
+  }
+}
+```
+
+The inner call's `opts?.dryRun` is NEVER consulted. If a library author
+writes `adapter.withTransaction(async () => { /* ... */ }, { dryRun: true })`
+inside another running (non-dry) transaction, the dry-run semantic the
+caller asked for is silently ignored — all the inner ops queue onto the
+outer buffer and COMMIT when the outer commits. That is the opposite of
+what `{ dryRun: true }` asks for.
+
+Real scenarios:
+- A validation helper that does "let me try these writes in dry-run mode to
+  check for partial-commit errors" — gets real writes if called inside
+  another transaction.
+- A conformance assertion that wraps `withTransaction(fn, { dryRun: true })`
+  around code that may itself internally transact — the inner ops commit.
+
+Options:
+
+1. **Reject inner `dryRun` with a clear error** — `if (opts?.dryRun &&
+   existing) throw new Error('dryRun withTransaction cannot be nested inside
+   a non-dryRun parent — call dryRun at the outermost only')`. Fails loud.
+2. **Honor the inner `dryRun`** — track dryRun at each depth level and
+   DISCARD inner ops on successful return. Much more complex; would require
+   per-depth buffer partitioning.
+3. **Document + enforce "dryRun only at root"** — current behavior but
+   explicitly surface via a dev-mode warning when `opts?.dryRun` is passed
+   into a nested call.
+
+Option 1 is the safest minimal fix given Plan 06-06 / Outcome A already
+requires callers to own dry-run semantics at the pipeline layer. At minimum
+the current behavior should be explicit in the JSDoc (lines 200-204) — the
+`opts` comment says `discards the buffer unconditionally on exit — never
+replays` which is untrue for nested calls.
 
 **Fix:**
 
 ```ts
-if (d.depends_on_id === issue.id) continue; // self-block → skip
+if (existing && existing.bd === bd && !existing.finalizing) {
+  if (opts?.dryRun) {
+    throw new Error(
+      'BeadsAdapter.withTransaction: { dryRun: true } is only honored at the ' +
+      'outermost call. This call is nested inside an active transaction on the ' +
+      'same BdRunner and would silently commit. Move dryRun to the outer call ' +
+      'or split the logic.',
+    );
+  }
+  existing.depth++;
+  // ... rest unchanged ...
+}
 ```
 
-Add to the filter chain on line 102.
+## Info (carry-over from iteration 1 — unchanged severity)
 
-## Info
+These were identified in iteration 1 and expected to remain. Listed here for
+completeness; none has escalated to warning/critical severity.
 
-### IN-01: Unused import `pathRelative` kept deliberately
+### IN-01 (carry): Unused import `pathRelative` kept deliberately
 
-**File:** `/Volumes/code/gsd-beads/src/primitives.ts:34, 468`
-**Issue:** `pathRelative` is imported from `node:path` solely to preserve an
-unused import for future symlink-boundary checks (per the line-468 comment).
-The `void pathRelative` pattern silences the no-unused-vars check but leaves
-a dead symbol in the bundle. Better to either delete until needed or move
-to a `// @ts-expect-error` comment on the eventual usage site.
+Status: **RESOLVED in iter 1 fix pass.** Grep confirms `pathRelative` import
+and `void pathRelative` pattern are no longer present in src/primitives.ts.
+Finding is downgraded: no residual info.
 
-**Fix:** Delete the import until Plan 06-07 hardening actually uses it.
+### IN-02 (carry): `updateSection` round-trips through `getRecord`/`putRecord`
 
----
-
-### IN-02: `updateSection` round-trips through `getRecord`/`putRecord` and re-parses text
-
-**File:** `/Volumes/code/gsd-beads/src/primitives.ts:353-364`
-**Issue:** `updateSection` calls `getRecord` (reads full body), calls
-`rewriteSection` (full-body parse), then `putRecord` (writes full body back
-including ALL sections). For a STATE.md with dozens of sections, this is an
-O(N) read + O(N) write per section update — the generic section primitive
-is inefficient but correct. The D-TXN Outcome A in-memory buffer does NOT
-coalesce successive updateSection calls on the same file; two updates to
-different sections of STATE.md in the same transaction each create a full
-write op. Not a correctness bug; flag for Phase 6.1 coalescing.
-
-**Fix:** Out of v1 scope (performance); note for Phase 6.1.
+**File:** `/Volumes/code/gsd-beads/src/primitives.ts:417-428`
+**Issue:** Unchanged from iteration 1. Out-of-scope for v1 per performance
+exclusion; flagged for Phase 6.1 coalescing.
 
 ---
 
-### IN-03: `BdRunner` corruption heuristic over-matches "database" and "dolt"
+### IN-03 (carry): `BdRunner` corruption heuristic over-matches "database" and "dolt"
 
 **File:** `/Volumes/code/gsd-beads/src/bd/helper.ts:107`
-**Issue:**
+**Issue:** Unchanged from iteration 1 — regex still reads:
 
 ```ts
-if (/database is locked|schema mismatch|corrupt|database|dolt|metadata\.json/i.test(stderr)) {
-  throw new BeadsCorrupt(...)
-}
+/database is locked|schema mismatch|corrupt|database|dolt|metadata\.json/i
 ```
 
-The lone tokens `database` and `dolt` match ANY error mentioning those
-words — e.g., a bd error about "database permissions denied" or "dolt table
-not found" surface as `BeadsCorrupt` when they're neither corruption nor
-schema drift. The recovery path for BeadsCorrupt is aggressive (re-init from
-jsonl); triggering it on a permissions error wipes the user's store. The
-sentinel dispatch is too eager.
-
-**Fix:** Tighten patterns to phrase-match ("dolt: corrupt", "database is
-locked", "schema version mismatch"). Route "permissions denied" to
-`BeadsUnavailableError` instead.
+Bare `database` and `dolt` match any bd error mentioning those tokens (e.g.
+permission denials, "dolt table not found") and route them to `BeadsCorrupt`.
+The recovery path for `BeadsCorrupt` is aggressive — flag for Phase 6.1.
 
 ---
 
-### IN-04: `parseState` silently skips events with malformed JSON payload
+### IN-04 (carry): `parseState` silently skips events with malformed JSON payload
 
-**File:** `/Volumes/code/gsd-beads/src/format/state.ts:200-208`
-**Issue:** When `JSON.parse(payloadJson)` throws, the event is silently
-skipped (`continue`) with no log, no counter, no surface. A user editing
-STATE.md by hand who introduces a JSON typo loses that event on next
-round-trip with no diagnostic. MarkdownAdapter's state handling surfaces
-malformed events via the CJS normalize layer; BeadsAdapter's
-bd-tier-singleton reads bypass this path entirely. Silent-drop + transparent
-format-round-trip = data-loss-on-save.
-
-**Fix:** Log a `console.warn` (consistent with
-`helpers/loadMilestoneHeading.ts`'s `[gsd-shadow] note:` pattern) or
-accumulate errors into the ParsedState for caller visibility.
+**File:** `/Volumes/code/gsd-beads/src/format/state.ts:202-209`
+**Issue:** Unchanged from iteration 1. Malformed payload `continue` with no
+`console.warn`; hand-edited STATE.md typos lose events silently on round-trip.
 
 ---
 
-### IN-05: `primitives.ts` `stat` returns `{ kind: 'file' }` without `mtime` for bd-tier paths
+### IN-05 (carry): `stat` omits `mtime` for bd-tier paths — asymmetry with MarkdownAdapter
 
-**File:** `/Volumes/code/gsd-beads/src/primitives.ts:320-337`
-**Issue:** For bd-tier records, `stat()` omits `mtime` because bd doesn't
-track per-bead modification time in a way the adapter exposes. Consumers
-using `stat().mtime` to detect drift (e.g., "has STATE.md changed since
-last check?") will always see `undefined` on bd-tier and either treat it as
-"unknown" or falsely as "no mtime means unchanged." The interface documents
-`mtime?` as optional, so this is correct per contract — but the asymmetry
-between MarkdownAdapter (always emits) and BeadsAdapter (never emits) is a
-semantic landmine.
-
-**Fix:** Document the asymmetry in README capabilities table or in the
-StorageAdapter contract docs. bd's `updated_at` field on the bead would map
-cleanly; currently unused.
+**File:** `/Volumes/code/gsd-beads/src/primitives.ts:384-401`
+**Issue:** Unchanged from iteration 1. `stat()` returns `{ kind: 'file' }`
+(no `mtime`) for bd-tier records while MarkdownAdapter always emits
+`mtime`. Documented asymmetry; bd's `updated_at` could fill in.
 
 ---
 
-### IN-06: `schemas/requirements.ts` `RequirementCategory` type permits cross-level ambiguity
+### IN-06 (carry): `RequirementCategory` type flattens L2/L3 hierarchy
 
 **File:** `/Volumes/code/gsd-beads/src/format/schemas/requirements.ts:30-36`
-**Issue:** `level: 2 | 3` and flat `categories` array means a consumer cannot
-distinguish "H3 under an H2" from "H3 top-level" — both appear as flat peers.
-Given REQUIREMENTS.md corpus uses nested H2/H3, this flattening loses
-parent-child relationships that the markdown presentation conveys.
-MarkdownAdapter's section walker preserves depth natively; the bd-tier
-typed record shape flattens.
+**Issue:** Unchanged from iteration 1. Flat `categories` array with
+`level: 2 | 3` loses parent-child relationships; follow-up.
 
-**Fix:** Out of v1 scope per the sibling-carry-forward policy. Flag for a
-follow-up nested-category refactor if downstream consumers need the
-hierarchy.
+## Verification observations (iteration 1 fixes re-checked)
+
+### CR-01 fix verification (symlink hardening)
+
+**File:** `/Volumes/code/gsd-beads/src/primitives.ts:79-137`
+
+The fix correctly:
+- realpath's `projectRoot` into `canonicalRoot` (with safe try/catch fallback
+  to lexical root when the root itself doesn't exist yet)
+- walks upward from `abs` until it finds an existing ancestor (`probe`)
+- realpath's the deepest existing ancestor; unresolved tail is treated as-is
+- asserts `canonical === canonicalRoot || canonical.startsWith(canonicalRoot + sep)`
+
+Edge cases handled:
+- `projectRoot` doesn't exist (mkdtemp-style) — falls back to lexical root
+- `abs` doesn't exist — walks up, realpath's parent
+- `probe === '/'` — loop terminates at root (`probe !== pathDirname(probe)`)
+- Cross-platform abs rejection is still lexical: unchanged `looksAbsolute`
+  block at lines 89-96
+
+TOCTOU window between `_abs()` check and subsequent syscall is acknowledged
+in JSDoc ("same window MarkdownAdapter accepts"). Acceptable tradeoff.
+
+### CR-02 fix verification (event-id keyspace)
+
+**File:** `/Volumes/code/gsd-beads/src/events.ts:138-147`
+
+`(h >>> 0).toString(36)` gives 0..4294967295 range (~7 base-36 chars max),
+never collapses `h` and `-h`, and never emits `-`-prefixed fragments. The
+fix correctly resolves both issues flagged in iteration 1. The underlying
+32-bit djb2 collision surface remains (birthday collisions at ~65k distinct
+payloads) but is now honestly documented; SHA-256 escalation deferred to
+Phase 6.1.
+
+### CR-03 fix verification (`{} as never` deletion)
+
+**File:** `/Volumes/code/gsd-beads/src/format/schemas/requirements.ts:69-85`
+
+Placeholder pushes into `current.items` / `proseLines` are both removed.
+Fence-toggle path now correctly:
+- flips `inFence`
+- preserves fence-line in `proseLines` IF outside a category (round-trip
+  preservation of leading fences)
+- no side-effects on `current.items` (would pollute `RequirementItem[]`)
+
+Confirmed via grep: no remaining `as never` pushes in src/.
+
+### CR-04 fix verification (AsyncLocalStorage rewrite)
+
+**File:** `/Volumes/code/gsd-beads/src/txn.ts:132-280`
+
+The rewrite is executed cleanly:
+- `txnStorage = new AsyncLocalStorage<TxnContext>()` is the single source of
+  truth for txn state.
+- `TxnContext` now includes `{ depth, buffer, dryRun, finalizing, bd }` —
+  the `bd` field enables the stray-context guard at `_currentCtxFor`.
+- `withTransaction` root-path wraps the body in `txnStorage.run(ctx, async
+  () => { ... })`, scoping the context to that async flow only.
+- Reentry path (existing context found AND same BdRunner AND !finalizing)
+  JOINs and increments depth.
+- Test coverage: `tests/unit/with-transaction-concurrent.test.ts` asserts:
+  1. Two concurrent `withTransaction` callers do NOT share buffer (smoking-
+     gun regression test for the pre-fix WeakMap contamination).
+  2. Nested-in-same-flow calls DO join buffer (reentry preserved).
+  3. Concurrent rollback on one txn does not affect the other.
+  4. `isTxnActive` is false outside the callback.
+
+Grep confirmed no stale `state.activeTransaction`, `WeakMap<BdRunner,
+TxnContext>`, or `getCurrentTxn` references anywhere in src/ or tests/.
+All event-family helpers in events.ts consume the txn state exclusively
+through the public `isTxnActive` / `peekBuffer` / `queueOrRun` surface.
+
+### Landmines / pre-existing behavior re-verified (NOT new bugs)
+
+- `removeRecord` / `removeCollection` bd-tier paths call `bd.run()` DIRECTLY
+  (not via `queueOrRun`), so cascade deletes are EAGER and bypass
+  `withTransaction`. This is pre-existing behavior not claimed to be fixed
+  in iteration 1; consistent with the "disk-tier writes pass through"
+  tradeoff called out in txn.ts JSDoc. Phase 6.1 can address if needed.
+- `getRecord` for phase-addressed paths (`phases/NN-foo/*`) silently falls
+  through to disk when `route.tier==='bd' && !route.label`. The iter-1 WR-03
+  fix only hardened `removeRecord` and `removeCollection` to throw on the
+  same case; `getRecord` still reads from disk. The remaining asymmetry is
+  "reads fall back to disk; writes/removes throw." Arguably cohesive under
+  D-MAPPING Outcome A (Plan 06-06 scope boundary) — not a new bug.
+- `parseRequirementsBody` after the CR-03 fix still always pushes the
+  fence-delim line into `proseLines` at the END of the conditional, even
+  when inside a category (line 78-79). Cross-checked: the `!current` guard
+  there means "only preserve fence line in prose when we're outside a
+  category." Inside a category the fence content is lost — which may be
+  intentional (fences inside category bodies are not requirement items).
+  No observable regression; possibly surprising round-trip drift for mixed
+  category-prose-with-fence authoring.
 
 ---
 
 _Reviewed: 2026-05-12_
 _Reviewer: Claude (gsd-code-reviewer)_
 _Depth: standard_
+_Iteration: 2_
