@@ -219,7 +219,7 @@ Plans:
 - [x] 07-02-PLAN.md — Section-anchor grep + meta-coverage test (bidirectional invariant)
 - [x] 07-03-PLAN.md — Sibling ./testing subpath + BeadsAdapter normalize + seed consolidation (D-05 cleanup)
 - [x] 07-04a-PLAN.md — devDep wire + bd CI + paired harness (split from 07-04 for scope sanity)
-- [ ] 07-04b-PLAN.md — write-*.ts → *.conformance-suite.ts migration + manifest population (≥30 entries)
+- [x] 07-04b-PLAN.md — write-*.ts → *.conformance-suite.ts migration + manifest population (≥30 entries)
 - [ ] 07-05a-PLAN.md — fast-check devDeps + 12 noun arbitraries + encode.ts
 - [ ] 07-05b-PLAN.md — properties.test.ts + 12 noun-roundtrip manifest entries
 - [ ] 07-06-PLAN.md — Failure-injection + Phase 7 exit (ADR D-CONFORM-MANIFEST)
