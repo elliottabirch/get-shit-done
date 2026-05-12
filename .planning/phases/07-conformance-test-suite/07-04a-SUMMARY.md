@@ -157,6 +157,17 @@ Each task was committed atomically:
 
 Plan 07-04b migrates write-*.test.ts files into the harness + populates manifest with ≥30 entries (StateWriteOutcome 16-case matrix + 9 section-tuple + baseline binB). The `pairedAdapters` array and `AdapterFactory` type in `paired.test.ts` are ready to receive the loop.
 
+## Self-Check: PASSED
+
+- FOUND: `tests/conformance/paired.test.ts`
+- FOUND: `gsd-beads` devDep in `package.json`
+- FOUND: `test:conformance:paired` script in `package.json`
+- FOUND: `gastownhall` CI URL in `.github/workflows/test.yml`
+- FOUND: commit `9d5ec203` (Task 1)
+- FOUND: commit `38bb4fc5` (Task 2)
+- FOUND: commit `e2c8bf5a` (Task 5)
+- FOUND: `07-04a-SUMMARY.md`
+
 ---
 *Phase: 07-conformance-test-suite*
 *Completed: 2026-05-12*
