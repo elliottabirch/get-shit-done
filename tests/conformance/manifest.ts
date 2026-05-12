@@ -471,6 +471,125 @@ export const CONFORMANCE_MANIFEST: readonly ManifestEntry[] = [
     },
     adr: 'D-2026-05-12-OQ06-CREATED-SECTION',
   },
+
+  // ========================================================================
+  // Property-based round-trip entries (CONFORM-02, D-12 + D-13)
+  // Plan 07-05b: 12 noun-roundtrip entries × 2 adapters = 24 property tests.
+  //
+  // MarkdownAdapter: identity-equal (byte-preserving storage; normalize = id).
+  // BeadsAdapter:    normalize-modulo-equal (frontmatter parse/format round-
+  //                  trip via parseFrontmatter + formatFrontmatter; idempotent).
+  //
+  // Assertion: adapter.getRecord(path) === adapter.normalize(encode(value))
+  // ========================================================================
+  {
+    kind: 'noun-roundtrip',
+    name: 'Phase',
+    description: 'Phase record round-trip under normalize()-modulo equality (arbPhase)',
+    expected: {
+      markdown: { kind: 'identity-equal' },
+      beads:    { kind: 'normalize-modulo-equal' },
+    },
+  },
+  {
+    kind: 'noun-roundtrip',
+    name: 'Plan',
+    description: 'Plan record round-trip under normalize()-modulo equality (arbPlan)',
+    expected: {
+      markdown: { kind: 'identity-equal' },
+      beads:    { kind: 'normalize-modulo-equal' },
+    },
+  },
+  {
+    kind: 'noun-roundtrip',
+    name: 'Summary',
+    description: 'Summary record round-trip under normalize()-modulo equality (arbSummary)',
+    expected: {
+      markdown: { kind: 'identity-equal' },
+      beads:    { kind: 'normalize-modulo-equal' },
+    },
+  },
+  {
+    kind: 'noun-roundtrip',
+    name: 'Uat',
+    description: 'UAT record round-trip under normalize()-modulo equality (arbUat)',
+    expected: {
+      markdown: { kind: 'identity-equal' },
+      beads:    { kind: 'normalize-modulo-equal' },
+    },
+  },
+  {
+    kind: 'noun-roundtrip',
+    name: 'StateEvent',
+    description: 'StateEvent record round-trip under normalize()-modulo equality (arbStateEvent)',
+    expected: {
+      markdown: { kind: 'identity-equal' },
+      beads:    { kind: 'normalize-modulo-equal' },
+    },
+  },
+  {
+    kind: 'noun-roundtrip',
+    name: 'Roadmap',
+    description: 'Roadmap record round-trip under normalize()-modulo equality (arbRoadmap)',
+    expected: {
+      markdown: { kind: 'identity-equal' },
+      beads:    { kind: 'normalize-modulo-equal' },
+    },
+  },
+  {
+    kind: 'noun-roundtrip',
+    name: 'Decision',
+    description: 'Decision record round-trip under normalize()-modulo equality (arbDecision)',
+    expected: {
+      markdown: { kind: 'identity-equal' },
+      beads:    { kind: 'normalize-modulo-equal' },
+    },
+  },
+  {
+    kind: 'noun-roundtrip',
+    name: 'Blocker',
+    description: 'Blocker record round-trip under normalize()-modulo equality (arbBlocker)',
+    expected: {
+      markdown: { kind: 'identity-equal' },
+      beads:    { kind: 'normalize-modulo-equal' },
+    },
+  },
+  {
+    kind: 'noun-roundtrip',
+    name: 'DebugSession',
+    description: 'DebugSession record round-trip under normalize()-modulo equality (arbDebugSession)',
+    expected: {
+      markdown: { kind: 'identity-equal' },
+      beads:    { kind: 'normalize-modulo-equal' },
+    },
+  },
+  {
+    kind: 'noun-roundtrip',
+    name: 'Project',
+    description: 'Project record round-trip under normalize()-modulo equality (arbProject)',
+    expected: {
+      markdown: { kind: 'identity-equal' },
+      beads:    { kind: 'normalize-modulo-equal' },
+    },
+  },
+  {
+    kind: 'noun-roundtrip',
+    name: 'Spec',
+    description: 'Spec record round-trip under normalize()-modulo equality (arbSpec)',
+    expected: {
+      markdown: { kind: 'identity-equal' },
+      beads:    { kind: 'normalize-modulo-equal' },
+    },
+  },
+  {
+    kind: 'noun-roundtrip',
+    name: 'AiSpec',
+    description: 'AiSpec record round-trip under normalize()-modulo equality (arbAiSpec)',
+    expected: {
+      markdown: { kind: 'identity-equal' },
+      beads:    { kind: 'normalize-modulo-equal' },
+    },
+  },
 ] as const;
 
 export type { ManifestEntry, AdapterName, ExpectedOutcome,
