@@ -1032,3 +1032,150 @@ outcome and surface the distinction to their handler responses.
 **Status:** Accepted. Landed in Plan 03-06.
 
 ---
+
+## D-2026-05-12-OQ06-MAPPING — BeadsAdapter storage model (D-MAPPING locked: Outcome A)
+
+**Date:** 2026-05-12
+**Phase:** 6 (BeadsAdapter implementation)
+**Locks:** OQ-06 partial (storage model); combines with `D-2026-05-12-OQ06-TXN`
+below for full resolution.
+
+**Decision:** BeadsAdapter ships **Outcome A (named-JSON-field / sub-records
+available)** per SPIKE-RESULTS.md §7. L2 sections map to `issue.metadata.<section>`
+sub-records overwritten via `bd update --metadata` or `bd update --set-metadata
+<key>=<value>`; L3/L4 nested content continues in anchor-tagged comments per
+the original D-MAPPING vision. Event-family mapping:
+- `recordStateMutation` → `bd update --metadata` / `--set-metadata` sub-record
+  array ops OR label add/remove OR memory-key update (dispatch by event `type`).
+- `recordStateAppend` high-frequency → `bd comments add --author gsd:event:<type>
+  <body>` (Landmine 4 discipline: `--author`, NEVER `--label` — v1.0.4 now
+  HARD-rejects `--label` with exit 1).
+- `recordStateAppend` low-frequency → `bd remember '<json>' --key
+  '<milestone>:<type>:<id>'`.
+- `recordStateSignal` → label delete OR memory-key delete.
+
+**Context:** D-MAPPING in `06-CONTEXT.md` was authored as spike-first per
+sibling's empirical finding that bd v1.0.3 exposed no named-JSON-field
+primitive beyond `--description`. Plan 06-03 re-probed against user's bd
+v1.0.4 install and **discovered that v1.0.4 introduced `--metadata <json>`
+and `--set-metadata <key>=<value>` flags** on `bd update`, exposing a
+structured `metadata` field that round-trips through both `bd show --json`
+and `bd export --json`. This is a breaking capability shift from v1.0.3 to
+v1.0.4 that unlocks Outcome A.
+
+**Version note:** Sibling was pinned at bd v1.0.3 `1b2dd2cb`; user's bd is
+v1.0.4 (Homebrew). The v1.0.4 patch release appears to have added the
+`--metadata` primitive. BeadsAdapter's advertised minimum version should
+become **bd v1.0.4** (not v1.0.3); `package.json` engines or README
+documents this.
+
+**Evidence:** `/Volumes/code/get-shit-done/.planning/phases/06-beadsadapter-implementation/06-03-SPIKE-RESULTS.md`
+§§2.1 (metadata accepted), §2.2 (round-trips `bd show --json`), §2.3 (byte-
+level round-trips `bd export --json`), §2.4 (`--set-metadata key=value`
+repeatable form works), §2.5 (flag inventory).
+
+**Consequences:**
+- **Plan 06-04 format-module scope inflates** from the 2-schema Outcome B
+  budget (just `phase.ts` + `state.ts` + generic parsers) to the **12+ per-
+  canonical-file TypeScript schemas** D-MAPPING-SCHEMA originally envisioned.
+  Per-canonical-file schemas: `roadmap.ts` (phase parser), `state.ts` (state
+  events with discriminated-union payloads), plus per-section schemas for
+  each canonical file's L2 structure (phase, plan, summary, uat, state-event,
+  debug, intel, learnings).
+- **Plan 06-06 recordState* dispatch** uses `bd update --metadata` for
+  sub-record writes; 16-case `StateWriteOutcome` matrix includes the
+  `created_section` variant (Pitfall 7's Outcome-B-only prediction is
+  INVERTED — Outcome A restores first-append vs subsequent distinction).
+- **`bd update --metadata` is an OVERWRITE, not a merge.** Plan 06-06's
+  `recordStateMutation` implementation must read-then-merge-then-write the
+  full metadata JSON when updating one sub-record, OR use `--set-metadata
+  <key>=<value>` (repeatable) for single-key updates without reading.
+  Decision deferred to Plan 06-06 author based on per-event-type analysis.
+- **minimum-bd-version bumped:** BeadsAdapter now requires bd v1.0.4+
+  (v1.0.3's missing `--metadata` primitive makes Outcome A infeasible).
+  README + `package.json` engines + `BeadsAdapter.init()` version probe
+  must declare this.
+- **Landmine 7 changed in v1.0.4:** empty store now returns `[]` (empty
+  array), not `{error, schema_version}`. `BdRunner`'s sentinel-detection
+  logic in Plan 06-02's helper port must handle both shapes (or detect
+  v1.0.4 and switch).
+
+**Surprises (flagged to user via Task 4 checkpoint):**
+- Sibling's 71-test v1.0.3 base concluded Outcome A infeasible. v1.0.4
+  changed the picture. Outcome A is the evidence-driven pick.
+- Plan 06-04 scope inflates as noted above. User may want to reconsider
+  whether the inflated schema scope is worth the stronger typing vs
+  staying on Outcome B's labels-first pattern.
+
+---
+
+## D-2026-05-12-OQ06-TXN — BeadsAdapter transaction model (D-TXN locked: Outcome C)
+
+**Date:** 2026-05-12
+**Phase:** 6 (BeadsAdapter implementation)
+
+**Decision:** BeadsAdapter's `withTransaction` ships **Outcome C (file-
+snapshot restore via `bd export --json` + `bd init --from-jsonl`)** per
+SPIKE-RESULTS.md §7. Snapshot on txn entry; restore on rollback; fs-level
+`.beads/` POSIX atomic rename for cutover.
+
+**Context:** `D-TXN-SPIKE` (`06-CONTEXT.md`) widened the spike from sibling's
+file-snapshot pattern (Outcome C) to evaluate in-memory buffer (A) and
+staging-store + bookmark cutover (B). Plan 06-03 probed all three against
+bd v1.0.4.
+
+**Evidence:** SPIKE-RESULTS.md §§3.3 (Outcome B INFEASIBLE — `bd dolt`
+exposes only `start/stop/status/show/set/test/commit/push/pull/remote`;
+no `clone/branch/bookmark` subcommand), §4.1 PASS (`bd export --json -o
+<path>` writes a JSONL snapshot in ~424ms), §4.2 PASS with v1.0.4
+invocation adjustment (pre-place at `.beads/issues.jsonl`, then `bd init
+--from-jsonl .beads/issues.jsonl` inside target dir; restores 2/2 seeded
+issues in ~440ms — within Pitfall 6's 400-700ms budget).
+
+**Consequences:**
+- `capabilities.transaction: true` — declared per D-TXN-CAPS invariant
+  (pipeline.ts dry-run depends on it unconditionally).
+- `capabilities.snapshot: true` — Outcome C provides snapshot semantics
+  via file-snapshot. **Closes SYNTHESIS §9 HIGH-severity dry-run gate
+  for BeadsAdapter by construction.**
+- Plan 06-06 ships `src/txn/snapshot.ts` as the sole implementation path.
+  Port sibling's `primitives.mjs:435-494` pattern with:
+  - **v1.0.4 invocation fix:** snapshot writes to `<stagingDir>/.beads/
+    issues.jsonl` (NOT arbitrary absolute path, as probed in Plan 06-03
+    which initially FAILED); restore is `bd init --from-jsonl
+    .beads/issues.jsonl` from inside target dir.
+  - **Landmine 12 (WR-04) fix:** derive `--prefix` from snapshot metadata
+    (first issue's id-format prefix) rather than sibling's hardcoded `'sd'`.
+  - **v1.0.4 side-effects acknowledged:** `bd init` in v1.0.4
+    unconditionally installs Claude Code hooks, creates/updates `CLAUDE.md`,
+    writes `.claude/settings.json`. Plan 06-06 MUST run snapshot/restore
+    in throwaway tmpdirs (never project root) to avoid polluting the
+    caller's project layout.
+- **NO Phase 6.1 follow-up needed** (Outcome A's mid-txn-commit-gap risk
+  is avoided by picking Outcome C).
+- BeadsAdapter README documents Outcome C variant shipped + the ~440ms
+  rollback cost + the v1.0.4-specific invocation.
+
+**Surprises (flagged to user via Task 4 checkpoint):**
+- v1.0.4 broke `bd init --from-jsonl <abs-path>` — requires jsonl at
+  exact relative path `.beads/issues.jsonl` inside target. Out-of-band
+  reprobe found the workaround; Plan 06-06 must implement the pre-seed
+  pattern.
+- v1.0.4 `bd init` side-effects on CLAUDE.md + hooks installation may
+  surprise a user expecting silent init. Plan 06-06's tmpdir discipline
+  contains the side-effects.
+- `bd backup` subsystem (new in v1.0.4) exposes `init/sync/restore/status/
+  remove` for off-machine durable backup. Not in scope for in-process
+  txn, but noted for potential future use (e.g., disaster recovery hooks
+  in Phase 8).
+
+**References:**
+- SPIKE-RESULTS.md: `/Volumes/code/get-shit-done/.planning/phases/06-beadsadapter-implementation/06-03-SPIKE-RESULTS.md`
+- Spike script (reproducible evidence): `/Volumes/code/gsd-beads/scripts/spike-bd-primitives.ts`
+- Prior related ADRs: D-2026-05-10-07 (withTransaction shadow-dir journal
+  — architectural analog for Outcome C's fs-rename cutover pattern on
+  MarkdownAdapter).
+
+**Status:** Accepted pending user approval at Plan 06-03 Task 4 checkpoint.
+
+---
