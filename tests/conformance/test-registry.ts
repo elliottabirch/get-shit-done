@@ -10,8 +10,16 @@
  *       receives the documented expected outcome for that adapter.
  *
  * The meta-coverage test (tests/conformance/meta-coverage.test.ts) reads
- * this Set AFTER vitest collection to validate the manifest ↔ describe
- * bidirectional invariant.
+ * this Set to validate the manifest ↔ describe bidirectional invariant.
+ *
+ * Registration happens at two points:
+ *   1. COLLECTION time: `preRegisterTest(adapterName, entryName, kind)` is
+ *      called from within `describe()` bodies (outside `it()`) in the
+ *      conformance suite functions. This ensures registeredTests is fully
+ *      populated when meta-coverage's `it()` callbacks run, regardless of
+ *      which test FILE vitest schedules first.
+ *   2. RUN time: `assertFromManifest(...)` also calls `registeredTests.add`
+ *      inside the `it()` callback as a safety guard.
  *
  * This is test-code-owned state (no vitest-internal coupling) — portable
  * across vitest major-version bumps (RESEARCH Pattern 3).
@@ -28,6 +36,39 @@ export function manifestKey(
   entryName: string,
 ): string {
   return `${adapterName}:${kind}:${entryName}`;
+}
+
+/**
+ * Pre-register a manifest entry at COLLECTION time (inside a `describe()` body,
+ * outside any `it()`). This ensures registeredTests is populated before
+ * meta-coverage.test.ts reads it, regardless of file execution order.
+ *
+ * Call this once per (adapterName, entryName, kind) pair in the same
+ * `describe()` that contains the matching `it()` + `assertFromManifest`.
+ */
+export function preRegisterTest(
+  adapterName: AdapterName,
+  entryName: string,
+  kind: ManifestEntry['kind'],
+): void {
+  const key = manifestKey(adapterName, kind, entryName);
+  registeredTests.add(key);
+  // Validate the entry exists in the manifest at collection time.
+  const entry = CONFORMANCE_MANIFEST.find(
+    (e) => e.kind === kind && e.name === entryName,
+  );
+  if (!entry) {
+    throw new Error(
+      `preRegisterTest: no manifest entry for ${key} ` +
+      `(expected in tests/conformance/manifest.ts)`,
+    );
+  }
+  if (entry.expected[adapterName] === undefined) {
+    throw new Error(
+      `preRegisterTest: manifest entry ${entry.name} missing ` +
+      `expected.${adapterName} (D-07 requires every adapter row)`,
+    );
+  }
 }
 
 export function assertFromManifest(
