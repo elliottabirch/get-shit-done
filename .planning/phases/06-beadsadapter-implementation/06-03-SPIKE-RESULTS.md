@@ -424,26 +424,39 @@ exit=0; stdout=✓ Deleted 1 issue(s)
 - `recordStateSignal` → label delete OR memory-key delete.
 - 16-case `StateWriteOutcome` matrix: `created_section` variant MAY be emitted (previously Pitfall 7 predicted Outcome B would never emit it; Outcome A restores the ability to distinguish first-append vs subsequent).
 
-### D-TXN: **C** (file-snapshot restore)
+### D-TXN: **A** (in-memory write-buffer) — LOCKED via user override
 
-**Evidence:**
-- §3.3 FAIL (Outcome B infeasible): bd v1.0.4 `bd dolt` namespace does NOT expose `clone`, `branch`, or `bookmark` subcommands. `bd branch` (top-level) exists but is not a cheap content-address clone.
-- §4.1 PASS: `bd export --json -o <path>` writes a JSONL snapshot in 424ms, within the Pitfall 6 400-700ms budget.
-- §4.2 PASS (with v1.0.4 invocation adjustment): `bd init --from-jsonl .beads/issues.jsonl` (pre-placed at target's `.beads/issues.jsonl`, NOT arbitrary absolute path) restores the exported state in ~440ms. Restored store's `bd list --json --all` returns both original issues intact.
+**Status:** Task-4 human-verify checkpoint resolved with user OVERRIDE of the Task-3 Outcome-C proposal. Outcome A is shipped. See "Outcomes not chosen" below for Outcomes B and C evidence preserved for Phase 6.1 revisit.
 
-**Rationale:** Outcome B primitives absent from bd v1.0.4 CLI surface. Outcome C proven viable with the v1.0.4 pre-seed workaround. Outcome A (in-memory buffer) rejected in favor of C because C is proven reliable (sibling's Phase 7 shipping code) and gives `capabilities.snapshot: true` (closes SYNTHESIS §9 HIGH-severity dry-run gate). The 400-700ms rollback cost is acceptable given the reliability guarantee.
+**Shipped design:** `withTransaction` buffers all mutations (per-issue `update` + `create` + `delete` + comment/label/memory side effects) in an in-memory list inside the transaction scope. On commit, the buffer is replayed as a sequence of real `bd` invocations; on rollback, the buffer is discarded (no bd invocations issued — store is untouched by the txn). `capabilities.snapshot: false`; `capabilities.transaction: true`.
+
+**Evidence (why Outcome C was rejected despite being technically viable):**
+- §3.3 FAIL: Outcome B primitives absent (bd v1.0.4 `bd dolt` exposes only `start/stop/status/show/set/test/commit/push/pull/remote` — no `clone/branch/bookmark`).
+- §4.1 PASS: `bd export --json -o <path>` writes JSONL snapshot in 424ms.
+- §4.2 PASS (with v1.0.4 invocation adjustment): `bd init --from-jsonl .beads/issues.jsonl` restores state in ~440ms BUT carries side effects per the §4.2 "Additional finding" block: `bd init` in v1.0.4 unconditionally installs Claude Code hooks, creates/updates `CLAUDE.md`, and writes `.claude/settings.json`. Even when the init runs in a throwaway tmpdir, the side-effect channel is a risk surface (Claude Code hooks + CLAUDE.md pollution if the tmpdir discipline ever leaks to the project root).
+
+**Rationale (user decision — 2026-05-12 Task-4 override):**
+1. **Scope simplicity.** Outcome A ships as a ~150 LOC in-memory buffer inside `src/txn/buffer.ts`. Outcome C would add `src/txn/snapshot.ts` with file-snapshot + `bd init` spawn + POSIX `.beads/` atomic rename + Landmine-12 prefix derivation + tmpdir cleanup discipline — strictly more code and more moving parts.
+2. **Accepts mid-txn multi-commit gap.** Outcome A's known weakness: if the commit phase fails partway through replaying the buffer, bd is left with a partial commit that Outcome A cannot roll back (no snapshot to restore to). **This is documented as a Phase 6.1 follow-up gap**, NOT a regression — acceptable for v1.0 ship given Phase 6 scope.
+3. **Bypasses v1.0.4 `bd init` side-effect surface entirely.** Outcome A never calls `bd init` during a transaction. The side-effect channel (Claude Code hooks + CLAUDE.md pollution in tmpdirs) becomes non-existent rather than contained.
+4. **Phase 7 CONFORM-04 failure-injection test will FAIL on BeadsAdapter under Outcome A.** CONFORM-04 exercises mid-txn crash + snapshot rollback; BeadsAdapter under Outcome A cannot pass by design. **Flagged as a known gap, NOT a regression** — CONFORM-04 becomes an Outcome-A-skip-with-known-limitation rather than a green test. Phase 6.1 (or later) revisits by flipping to Outcome C if/when the `bd init` side-effect surface is mitigated upstream.
 
 **Capabilities impact (D-TXN-CAPS):**
-- `capabilities.transaction: true` (Outcome C — pipeline.ts dry-run needs it)
-- `capabilities.snapshot: true` (Outcome C provides snapshot semantics via file-snapshot; closes dry-run gate by construction)
+- `capabilities.transaction: true` (Outcome A — pipeline.ts dry-run needs it; satisfied by the buffer itself, which can execute in "dry-run" mode by discarding at the end).
+- `capabilities.snapshot: false` (Outcome A does NOT provide snapshot semantics; it provides write-buffering. SYNTHESIS §9 HIGH-severity dry-run gate is partially closed via dry-run-via-buffer-discard; full snapshot-rollback semantics deferred to Phase 6.1.)
 
 **Implications for Plan 06-06 (withTransaction impl path):**
-- Ship `src/txn/snapshot.ts` (Outcome C) — port sibling's `primitives.mjs:435-494` snapshot/restore pattern with:
-  - **v1.0.4 invocation fix:** snapshot writes to `<stagingDir>/.beads/issues.jsonl` (NOT arbitrary path); restore uses `bd init --from-jsonl .beads/issues.jsonl` from inside target.
-  - **Landmine 12 (WR-04) fix:** derive `--prefix` from snapshot metadata (first issue's id-format) rather than sibling's hardcoded `'sd'`.
-  - **v1.0.4 side-effect handling:** `bd init` unconditionally installs Claude hooks + writes CLAUDE.md in v1.0.4. Run snapshot/restore in throwaway tmpdirs (never project root); ignore hook-installation noise in stderr.
-- `capabilities.snapshot: true` declared; BeadsAdapter README documents Outcome C variant shipped.
-- No Phase 6.1 follow-up needed (Outcome A's mid-txn-gap is avoided).
+- Ship `src/txn/buffer.ts` (Outcome A) as the sole txn implementation: ~150 LOC in-memory ordered list of pending ops; `commit()` replays the list as real bd invocations; `rollback()` discards without replay.
+- Per-op buffering schema: each entry tags the event family (`recordStateMutation` / `recordStateAppend` / `recordStateSignal` / section-level `update` / record-level `putRecord` / binary asset no-op) + the bd primitive + args. Plan 06-06 author decides whether to buffer as "structured events" or "raw bd argv" — both work for Outcome A.
+- `capabilities.snapshot: false` declared in `src/capabilities.ts`. README documents Outcome A variant shipped + the mid-txn-commit-gap caveat + the Phase 6.1 follow-up plan.
+- **Phase 6.1 follow-up required** for mid-txn commit atomicity. Tracked via `deferred-items.md` entry (appended in Task 4 of this plan).
+- **Phase 7 CONFORM-04 known-gap** flag: conformance suite should either skip CONFORM-04 on BeadsAdapter (if the suite honors capability-gated test selection) or expect an Outcome-A-specific known-failure disposition. Exact test integration decided by Plan 06-07.
+
+### Outcomes not chosen (preserved for Phase 6.1 revisit)
+
+**Outcome B (staging store + bead-hash bookmark) — INFEASIBLE in bd v1.0.4.** Evidence: §3.3 canonical `bd dolt --help` output shows no `clone`, `branch`, or `bookmark` subcommand in the `bd dolt` namespace. Top-level `bd branch` exists but is git-branch-like (named branches), not a cheap content-address clone with atomic bookmark swap. Would require upstream bd feature-add (rejected for v1.0 timeline) or direct Dolt-level invocation bypassing bd (rejected per "bd CLI shell-out everywhere" discipline).
+
+**Outcome C (file-snapshot restore via `bd export` + `bd init --from-jsonl`) — FEASIBLE, REJECTED by user override.** Evidence: §4.1 PASS (424ms snapshot) + §4.2 PASS with v1.0.4 invocation adjustment (~440ms restore). Rejected because: (a) scope larger than Outcome A's ~150 LOC buffer; (b) carries the `bd init` side-effect surface (Claude Code hooks + CLAUDE.md pollution even in tmpdirs); (c) Outcome A's simpler design was judged acceptable given the mid-txn-commit-gap is bounded and documented. **Phase 6.1 revisit trigger:** if CONFORM-04 adoption becomes mandatory, or if the `bd init` side-effect surface is mitigated upstream (e.g., a `bd init --no-install-hooks` flag), Outcome C becomes attractive again and the Phase 6.1 migration is ~300 LOC swap of `src/txn/buffer.ts` → `src/txn/snapshot.ts` with the Landmine-12 prefix-derivation fix already captured here.
 
 ## §9. Shipped bd CLI commands for chosen outcomes
 
@@ -460,11 +473,26 @@ exit=0; stdout=✓ Deleted 1 issue(s)
 - `bd comments <bead> --json` — read comments as JSON array (unchanged).
 - `bd delete <id> --cascade --force` — **NEW resolution for Open Q #2** — `removeCollection` can invoke cascade delete instead of listCollection + per-issue remove loop (§8.4 PASS).
 
-### D-TXN Outcome C — withTransaction primitives (bd v1.0.4):
-- `mkdir -p <stagingDir>/.beads && bd -C <projectDir> export --json -o <stagingDir>/.beads/issues.jsonl` — snapshot at txn entry (JSONL; ~400ms).
-- `cd <stagingDir> && bd init --from-jsonl .beads/issues.jsonl --non-interactive --quiet` — restore on rollback (~440ms; **v1.0.4 requires jsonl at exact path `.beads/issues.jsonl`**, NOT arbitrary absolute path).
-- `mv <projectDir>/.beads <projectDir>/.beads.pre-rollback && mv <stagingDir>/.beads <projectDir>/.beads` — fs-level POSIX atomic cutover (rollback commit).
-- `rm -rf <stagingDir>` — cleanup on commit (no rollback needed, staging is disposable).
+### D-TXN Outcome A — withTransaction primitives (bd v1.0.4):
+
+Outcome A does NOT issue any dedicated snapshot/restore bd commands. `withTransaction` is purely an in-process buffer + replay layer. The bd commands it invokes are the SAME commands the event-family dispatch (D-MAPPING Outcome A above) would invoke directly — they are just deferred until commit.
+
+**Commit-path replay (buffered-op → bd invocation mapping):**
+- `bd update <id> --metadata '<json>'` — replays a buffered `recordStateMutation` sub-record overwrite.
+- `bd update <id> --set-metadata <key>=<value>` — replays a buffered single-key sub-record update.
+- `bd update <id> --description <body>` (or `--body-file -`) — replays a buffered section-level update when the section is `description`.
+- `bd update <id> --add-label <label>` / `bd update <id> --remove-label <label>` — replays a buffered frontmatter label mutation.
+- `bd create <title> ...` — replays a buffered `putRecord` create.
+- `bd delete <id> --cascade --force` — replays a buffered `removeCollection` / `remove` delete.
+- `bd comments add <bead> --author 'gsd:event:<type>' '<body>'` — replays a buffered high-frequency `recordStateAppend`.
+- `bd remember '<json>' --key '<milestone>:<type>:<id>'` — replays a buffered low-frequency `recordStateAppend` or `recordStateSignal` set.
+- `bd forget <key>` (or equivalent per §6) — replays a buffered `recordStateSignal` delete.
+
+**Rollback-path:** NO bd commands issued. The buffer is discarded in-process; bd store is untouched.
+
+**Dry-run / pipeline.ts support:** `transaction.dryRun === true` enters the same buffer, then rollback-path discards — no bd invocations issued. Satisfies pipeline.ts's dry-run requirement without needing snapshot semantics.
+
+**Mid-txn commit failure (known gap — Phase 6.1 follow-up):** If a buffered op fails mid-replay (e.g., bd crashes on op #N of K), bd is left with ops 1..(N-1) committed and ops (N+1)..K unapplied. Outcome A cannot roll back ops 1..(N-1) because no snapshot was taken. Plan 06-06 implementation should: (a) document this in the `withTransaction` JSDoc, (b) surface the partial-commit state to the caller via a structured error (e.g., `BeadsPartialCommitError` with `{committedOps, failedOp, remainingOps}`), (c) let Phase 6.1 decide whether to ship Outcome C as a migration path.
 
 ### Dep-graph synthesizer (BEADS-03, unchanged from Spike 014):
 - `bd export --json` — single spawn surfaces all edges (fits ≤2-spawn budget).
