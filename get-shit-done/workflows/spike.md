@@ -83,15 +83,11 @@ Present all integration and frontier candidates, then ask which to run. When the
 </step>
 
 <step name="setup_directory">
-Create `.planning/spikes/` if it doesn't exist:
-
-```bash
-mkdir -p .planning/spikes
-```
+The SDK handles spike directory creation internally when writing spike artifacts.
 
 Check for existing spikes to determine numbering:
 ```bash
-ls -d .planning/spikes/[0-9][0-9][0-9]-* 2>/dev/null | sort | tail -1
+gsd-sdk query spike.get-manifest --list-numbers 2>/dev/null
 ```
 
 Check `commit_docs` config:
@@ -122,13 +118,13 @@ Avoid unless the spike specifically requires it:
 <step name="load_prior_context">
 If `.planning/spikes/` has existing content, load context in this priority order:
 
-**a. Conventions:** Read `.planning/spikes/CONVENTIONS.md` if it exists.
+**a. Conventions:** `gsd-sdk query spike.get-conventions` — load established stack and patterns.
 
 **b. Findings skills:** Glob for `./.claude/skills/spike-findings-*/SKILL.md` and read any that exist, plus their `references/*.md` files.
 
-**c. Manifest:** Read `.planning/spikes/MANIFEST.md` for the index of all spikes.
+**c. Manifest:** `gsd-sdk query spike.get-manifest` — load the index of all spikes.
 
-**d. Related READMEs:** Based on the new idea, identify which prior spikes are related by matching tags, names, technologies, or domain overlap. Read only those `.planning/spikes/*/README.md` files. Skip unrelated ones.
+**d. Related READMEs:** Based on the new idea, identify which prior spikes are related by matching tags, names, technologies, or domain overlap. Load related spike data via `gsd-sdk query spike.get-readme "{NNN}"` for each related spike. Skip unrelated ones.
 
 Cross-reference against this full body of prior work:
 - **Skip already-validated questions.** Note the prior spike number and move on.

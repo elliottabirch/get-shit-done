@@ -2,6 +2,7 @@ node_modules/
 .DS_Store
 TO-DOS.md
 CLAUDE.md
+!/CLAUDE.md
 /research.claude/
 commands.html
 
@@ -21,10 +22,17 @@ coverage/
 animation/
 *.gif
 
-# Internal planning documents
+# Internal planning documents (upstream convention — but our fork tracks
+# .planning/ as part of the adapter-interface seam; see fork PROJECT.md)
 reports/
 RAILROAD_ARCHITECTURE.md
 .planning/
+!/.planning/
+
+# Phase 5: shadow-dir transaction scratch (MarkdownAdapter)
+.planning/.tmp-txn-*
+.planning/.tmp-snap-*
+
 analysis/
 docs/GSD-MASTER-ARCHITECTURE.md
 docs/GSD-RUST-IMPLEMENTATION-GUIDE.md
@@ -56,6 +64,7 @@ Thumbs.db
 .next/
 dist/
 build/
+*.tsbuildinfo
 __pycache__/
 *.pyc
 .venv/
@@ -67,3 +76,4 @@ vendor/
 tmp/
 .worktrees
 .envrc
+adapters/package-lock.json

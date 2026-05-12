@@ -64,7 +64,7 @@ Context files are resolved inside the workflow (`init quick`) and delegated via 
 When SUBCMD=list:
 
 ```bash
-ls -d .planning/quick/*/  2>/dev/null
+gsd-sdk query workspace.list-dir "quick" 2>/dev/null
 ```
 
 For each directory found:
@@ -104,7 +104,7 @@ When SUBCMD=status and SLUG is set (already sanitized):
 
 Find directory matching `*-{SLUG}` pattern:
 ```bash
-dir=$(ls -d .planning/quick/*-{SLUG}/ 2>/dev/null | head -1)
+dir=$(gsd-sdk query workspace.find-dir "quick/*-{SLUG}" 2>/dev/null | head -1)
 ```
 
 If no directory found, print `No quick task found with slug: {SLUG}` and stop.
@@ -129,7 +129,7 @@ When SUBCMD=resume and SLUG is set (already sanitized):
 
 1. Find the directory matching `*-{SLUG}` pattern:
    ```bash
-   dir=$(ls -d .planning/quick/*-{SLUG}/ 2>/dev/null | head -1)
+   dir=$(gsd-sdk query workspace.find-dir "quick/*-{SLUG}" 2>/dev/null | head -1)
    ```
 2. If no directory found, print `No quick task found with slug: {SLUG}` and stop.
 

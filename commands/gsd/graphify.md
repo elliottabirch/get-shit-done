@@ -24,15 +24,12 @@ Then proceed to Step 1.
 
 ## Step 1 -- Config Gate
 
-Check if graphify is enabled by reading `.planning/config.json` directly using the Read tool.
+Check if graphify is enabled via SDK config:
 
-**DO NOT use the gsd-tools config get-value command** -- it hard-exits on missing keys.
-
-1. Read `.planning/config.json` using the Read tool
-2. If the file does not exist: display the disabled message below and **STOP**
-3. Parse the JSON content. Check if `config.graphify && config.graphify.enabled === true`
-4. If `graphify.enabled` is NOT explicitly `true`: display the disabled message below and **STOP**
-5. If `graphify.enabled` is `true`: proceed to Step 2
+1. Run `gsd-sdk query config-get "graphify.enabled"` to check the setting
+2. If the query returns empty or errors: display the disabled message below and **STOP**
+3. If `graphify.enabled` is NOT explicitly `true`: display the disabled message below and **STOP**
+4. If `graphify.enabled` is `true`: proceed to Step 2
 
 **Disabled message:**
 
@@ -164,11 +161,11 @@ gsd-tools path: $HOME/.claude/get-shit-done/bin/gsd-tools.cjs
    ## GRAPHIFY BUILD FAILED
    Include the stderr output for debugging. Do NOT delete .planning/graphs/ -- prior valid graph remains available.
 
-3. **Copy artifacts to .planning/graphs/:**
+3. **Store artifacts via SDK:**
    ```
-   cp graphify-out/graph.json .planning/graphs/graph.json
-   cp graphify-out/graph.html .planning/graphs/graph.html
-   cp graphify-out/GRAPH_REPORT.md .planning/graphs/GRAPH_REPORT.md
+   gsd-sdk query graphify.store "graph.json" --file graphify-out/graph.json
+   gsd-sdk query graphify.store "graph.html" --file graphify-out/graph.html
+   gsd-sdk query graphify.store "GRAPH_REPORT.md" --file graphify-out/GRAPH_REPORT.md
    ```
    These three files are the build output consumed by query, status, and diff commands.
 

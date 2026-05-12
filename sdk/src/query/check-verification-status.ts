@@ -4,15 +4,16 @@
  * Replaces VERIFICATION.md grep/parse branches in `execute-phase.md`,
  * `autonomous.md`, `progress.md` with a structured query.
  * See `.planning/research/decision-routing-audit.md` §3.8.
+ *
+ * Phase 2 Plan 02-02 Task 1 (D-12, D-10): adapter-as-first-arg signature;
+ * fs reads (readFile, existsSync, readdirSync) routed through adapter.
  */
 
-import { readFile } from 'node:fs/promises';
-import { existsSync, readdirSync } from 'node:fs';
-import { join } from 'node:path';
 import { GSDError, ErrorClassification } from '../errors.js';
 import { normalizePhaseName } from './helpers.js';
 import { findPhase } from './phase.js';
-import type { QueryHandler } from './utils.js';
+import type { QueryResult } from './utils.js';
+import type { StorageAdapter } from '../../../adapters/types.js';
 
 const NOT_FOUND_RESULT = {
   status: 'missing' as const,
@@ -52,7 +53,23 @@ function findColIndex(headerRow: TableRow, predicate: (cell: string) => boolean)
   return headerRow.cells.findIndex(c => predicate(c));
 }
 
-export const checkVerificationStatus: QueryHandler = async (args, projectDir) => {
+/**
+ * Strip leading `.planning/` segment from a directory string returned by findPhase
+ * to produce an adapter-resolvable path. Adapter is rooted at `.planning/`.
+ */
+function toAdapterDir(planningRelDir: string): string {
+  if (planningRelDir.startsWith('.planning/')) {
+    return planningRelDir.slice('.planning/'.length);
+  }
+  return planningRelDir;
+}
+
+export const checkVerificationStatus = async (
+  adapter: StorageAdapter,
+  args: string[],
+  projectDir: string,
+  workstream?: string,
+): Promise<QueryResult> => {
   const raw = args[0];
   if (!raw) {
     throw new GSDError('phase number required for check verification-status', ErrorClassification.Validation);
@@ -60,35 +77,24 @@ export const checkVerificationStatus: QueryHandler = async (args, projectDir) =>
 
   normalizePhaseName(raw); // validate format
 
-  const phaseRes = await findPhase([raw], projectDir);
+  const phaseRes = await findPhase(adapter, [raw], projectDir, workstream);
   const pdata = phaseRes.data as Record<string, unknown>;
 
   if (!pdata.found || !pdata.directory) {
     return { data: NOT_FOUND_RESULT };
   }
 
-  const phaseDirFull = join(projectDir, pdata.directory as string);
+  const phaseAdapterRel = toAdapterDir(pdata.directory as string);
 
-  // Locate VERIFICATION.md — may be prefixed
-  let verPath: string | null = null;
-  if (existsSync(phaseDirFull)) {
-    try {
-      const files = readdirSync(phaseDirFull) as string[];
-      const verFile = files.find(f => f.endsWith('-VERIFICATION.md') || f === 'VERIFICATION.md');
-      if (verFile) verPath = join(phaseDirFull, verFile);
-    } catch {
-      return { data: NOT_FOUND_RESULT };
-    }
-  }
+  // Locate VERIFICATION.md — may be prefixed.
+  // Pitfall 3: listCollection returns [] on ENOENT, no need for redundant exists check
+  const refs = await adapter.listCollection(phaseAdapterRel);
+  if (refs.length === 0) return { data: NOT_FOUND_RESULT };
+  const verRef = refs.find(r => r.name.endsWith('-VERIFICATION.md') || r.name === 'VERIFICATION.md');
+  if (!verRef) return { data: NOT_FOUND_RESULT };
 
-  if (!verPath) return { data: NOT_FOUND_RESULT };
-
-  let content: string;
-  try {
-    content = await readFile(verPath, 'utf-8');
-  } catch {
-    return { data: NOT_FOUND_RESULT };
-  }
+  const content = await adapter.getRecord(verRef.path);
+  if (content === null) return { data: NOT_FOUND_RESULT };
 
   const rows = parseTableRows(content);
   if (rows.length === 0) {
@@ -108,8 +114,8 @@ export const checkVerificationStatus: QueryHandler = async (args, projectDir) =>
 
   // Determine column indices
   let statusCol = headerRow ? findColIndex(headerRow, c => /^status$/i.test(c)) : -1;
-  let typeCol = headerRow ? findColIndex(headerRow, c => /^type$/i.test(c)) : -1;
-  let notesCol = headerRow ? findColIndex(headerRow, c => /^notes$/i.test(c)) : -1;
+  const typeCol = headerRow ? findColIndex(headerRow, c => /^type$/i.test(c)) : -1;
+  const notesCol = headerRow ? findColIndex(headerRow, c => /^notes$/i.test(c)) : -1;
   let descCol = headerRow ? findColIndex(headerRow, c => /^description$/i.test(c)) : -1;
 
   // Fallbacks for tables without headers or unusual column orders

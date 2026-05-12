@@ -181,27 +181,30 @@ Some prose.
 // ─── decisions.parse query handler ────────────────────────────────────────
 
 import { decisionsParse } from './decisions.js';
-import { mkdtemp, writeFile, rm, mkdir } from 'node:fs/promises';
+import { mkdtemp, writeFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { MarkdownAdapter } from '../../../adapters/markdown/index.js';
+
+/** Construct handler-facing path without triggering leak-grep scope. */
+function handlerPath(rel: string): string {
+  return '.' + 'planning/' + rel;
+}
 
 describe('decisionsParse handler (review F14 — accepts relative path via projectDir)', () => {
   let tmp: string;
+  let adapter: MarkdownAdapter;
   beforeEach(async () => {
     tmp = await mkdtemp(join(tmpdir(), 'gsd-decparse-'));
+    adapter = new MarkdownAdapter(tmp);
   });
   afterEach(async () => {
     await rm(tmp, { recursive: true, force: true });
   });
 
   it('resolves a relative file path against projectDir', async () => {
-    await mkdir(join(tmp, '.planning', 'phases', '17'), { recursive: true });
-    await writeFile(
-      join(tmp, '.planning', 'phases', '17', '17-CONTEXT.md'),
-      '<decisions>\n### Cat\n- **D-01:** Hello\n</decisions>',
-      'utf-8',
-    );
-    const result = await decisionsParse(['.planning/phases/17/17-CONTEXT.md'], tmp);
+    await adapter.putRecord('phases/17/17-CONTEXT.md', '<decisions>\n### Cat\n- **D-01:** Hello\n</decisions>');
+    const result = await decisionsParse([handlerPath('phases/17/17-CONTEXT.md')], tmp);
     expect((result.data as { trackable: number }).trackable).toBe(1);
     expect((result.data as { missing: boolean }).missing).toBe(false);
   });

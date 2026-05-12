@@ -20,7 +20,7 @@ Extract from init JSON: `commit_docs`, `date`, `timestamp`, `todo_count`, `todos
 
 Ensure directories exist:
 ```bash
-mkdir -p .planning/todos/pending .planning/todos/completed
+gsd-sdk query todo.ensure-dirs
 ```
 
 Note existing areas from the todos array for consistency in infer_area step.
@@ -89,7 +89,12 @@ Generate slug for the title:
 slug=$(gsd-sdk query generate-slug "$title" --raw)
 ```
 
-Write to `.planning/todos/pending/${date}-${slug}.md`:
+Write the todo via SDK:
+```bash
+gsd-sdk query todo.add "${date}-${slug}" --stdin
+```
+
+Content to pass:
 
 ```markdown
 ---

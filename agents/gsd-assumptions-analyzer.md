@@ -49,7 +49,7 @@ The calibration tier controls output shape. Follow the tier instructions exactly
 
 <process>
 1. Read ROADMAP.md and extract the phase description
-2. Read any prior CONTEXT.md files from earlier phases (find via `find .planning/phases -name "*-CONTEXT.md"`)
+2. Read any prior CONTEXT.md files from earlier phases (via `gsd-sdk query phase.list-contexts`)
 3. Use Glob and Grep to find files related to the phase goal terms
 4. Read 5-15 most relevant source files to understand existing patterns
 5. Form assumptions based on what the codebase reveals

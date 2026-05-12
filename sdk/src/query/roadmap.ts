@@ -17,17 +17,17 @@
  * ```
  */
 
-import { existsSync } from 'node:fs';
-import { readFile, writeFile, readdir } from 'node:fs/promises';
-import { join } from 'node:path';
 import { GSDError, ErrorClassification } from '../errors.js';
 import {
+  adapterFor,
   escapeRegex,
   normalizePhaseName,
   phaseTokenMatches,
   planningPaths,
+  planningRelativePath,
 } from './helpers.js';
 import type { QueryHandler, QueryResult } from './utils.js';
+import type { StorageAdapter } from '../../../adapters/types.js';
 
 // ─── Internal types ───────────────────────────────────────────────────────
 
@@ -61,19 +61,18 @@ export function stripShippedMilestones(content: string): string {
 
 /**
  * Read milestone + name from STATE.md frontmatter when ROADMAP does not encode them.
+ *
+ * Phase 2 Plan 02-02 (D-12): adapter-routed read of STATE.md.
  */
-async function parseMilestoneFromState(projectDir: string, workstream?: string): Promise<{ version: string; name: string } | null> {
-  try {
-    const stateRaw = await readFile(planningPaths(projectDir, workstream).state, 'utf-8');
-    const vm = stateRaw.match(/^milestone:\s*(.+)$/m);
-    if (!vm) return null;
-    const version = vm[1].trim().replace(/^["']|["']$/g, '');
-    const nm = stateRaw.match(/^milestone_name:\s*(.+)$/m);
-    const name = nm ? nm[1].trim().replace(/^["']|["']$/g, '') : 'milestone';
-    return { version, name };
-  } catch {
-    return null;
-  }
+async function parseMilestoneFromState(adapter: StorageAdapter, workstream?: string): Promise<{ version: string; name: string } | null> {
+  const stateRaw = await adapter.getRecord(planningRelativePath(workstream, 'STATE.md'));
+  if (stateRaw === null) return null;
+  const vm = stateRaw.match(/^milestone:\s*(.+)$/m);
+  if (!vm) return null;
+  const version = vm[1].trim().replace(/^["']|["']$/g, '');
+  const nm = stateRaw.match(/^milestone_name:\s*(.+)$/m);
+  const name = nm ? nm[1].trim().replace(/^["']|["']$/g, '') : 'milestone';
+  return { version, name };
 }
 
 /**
@@ -82,25 +81,33 @@ async function parseMilestoneFromState(projectDir: string, workstream?: string):
  * Port of getMilestoneInfo from core.cjs lines 1367-1402, extended for:
  * - 🟡 in-flight marker (same list shape as 🚧)
  * - milestone bullets `**vX.Y Title**` before `## Phases` (last = current when listed in semver order)
- * - STATE.md frontmatter when ROADMAP has no parseable milestone
  * - **last** bare `vX.Y` fallback (first match was often v1.0 from the shipped list)
+ *
+ * CJS parity note (fork-side patch, upstream bug):
+ * The original SDK used STATE.md `milestone_name` as Priority 1 (returning it directly
+ * when present). CJS (`core.cjs:1580-1626`) uses STATE.md only for the *version*, then
+ * always derives the name from ROADMAP heading/list patterns; returns `'milestone'` when
+ * no pattern matches. This function now matches CJS exactly:
+ *   1. Read STATE.md for version only.
+ *   2. Derive name exclusively from ROADMAP patterns.
+ *   3. Fall back to name='milestone' when ROADMAP has no parseable format.
+ * The `milestone_name` frontmatter field in STATE.md is intentionally ignored for the
+ * name result. File upstream issue so this divergence is resolved at the source.
  *
  * @param projectDir - Project root directory
  * @returns Object with version and name
  */
-export async function getMilestoneInfo(projectDir: string, workstream?: string): Promise<{ version: string; name: string }> {
+export async function getMilestoneInfo(adapter: StorageAdapter, workstream?: string): Promise<{ version: string; name: string }> {
   try {
-    // Priority 1: STATE.md frontmatter (authoritative for version; name only when real)
-    const fromState = await parseMilestoneFromState(projectDir, workstream);
+    // STATE.md is authoritative for version only (CJS parity). Name is always derived
+    // from ROADMAP patterns — STATE.md `milestone_name` is intentionally ignored.
+    const fromState = await parseMilestoneFromState(adapter, workstream);
     const stateVersion = fromState?.version ?? null;
-    const stateName = fromState && fromState.name !== 'milestone' ? fromState.name : null;
-    if (stateVersion && stateName) {
-      return { version: stateVersion, name: stateName };
-    }
-    // STATE.md has a version but no real name — fall through to ROADMAP for the name,
-    // then override the version with the authoritative STATE.md value.
 
-    const roadmap = await readFile(planningPaths(projectDir, workstream).roadmap, 'utf-8');
+    const roadmap = await adapter.getRecord(planningRelativePath(workstream, 'ROADMAP.md'));
+    if (roadmap === null) {
+      return { version: stateVersion ?? 'v1.0', name: 'milestone' };
+    }
 
     // List-format: construction / blocked (legacy emoji)
     const barricadeMatch = roadmap.match(/🚧\s*\*\*v(\d+(?:\.\d+)+)\s+([^*]+)\*\*/);
@@ -137,9 +144,9 @@ export async function getMilestoneInfo(projectDir: string, workstream?: string):
 
     return { version: stateVersion ?? 'v1.0', name: 'milestone' };
   } catch {
-    const fromState = await parseMilestoneFromState(projectDir, workstream);
-    if (fromState) return fromState;
-    return { version: 'v1.0', name: 'milestone' };
+    // On error, use STATE.md version but always return name='milestone' for CJS parity.
+    const fromState = await parseMilestoneFromState(adapter, workstream);
+    return { version: fromState?.version ?? 'v1.0', name: 'milestone' };
   }
 }
 
@@ -152,16 +159,16 @@ export async function getMilestoneInfo(projectDir: string, workstream?: string):
  * @param projectDir - Working directory for reading STATE.md
  * @returns Content scoped to current milestone
  */
-export async function extractCurrentMilestone(content: string, projectDir: string, workstream?: string): Promise<string> {
+export async function extractCurrentMilestone(adapter: StorageAdapter, content: string, workstream?: string): Promise<string> {
   // Get version from STATE.md frontmatter
   let version: string | null = null;
-  try {
-    const stateRaw = await readFile(planningPaths(projectDir, workstream).state, 'utf-8');
+  const stateRaw = await adapter.getRecord(planningRelativePath(workstream, 'STATE.md'));
+  if (stateRaw !== null) {
     const milestoneMatch = stateRaw.match(/^milestone:\s*(.+)/m);
     if (milestoneMatch) {
       version = milestoneMatch[1].trim();
     }
-  } catch { /* intentionally empty */ }
+  }
 
   // Fallback: derive from ROADMAP in-progress marker
   if (!version) {
@@ -279,14 +286,15 @@ export function extractPhasesFromSection(section: string): QueuedPhase[] {
  * "next" one.
  */
 export async function extractNextMilestoneSection(
+  adapter: StorageAdapter,
   content: string,
-  projectDir: string,
+  workstream?: string,
 ): Promise<{ version: string; name: string; section: string } | null> {
   const cleaned = stripShippedMilestones(content);
 
   // Resolve current version via STATE.md (priority) then in-flight markers.
   let currentVersion: string | null = null;
-  const fromState = await parseMilestoneFromState(projectDir);
+  const fromState = await parseMilestoneFromState(adapter, workstream);
   if (fromState?.version) {
     const raw = fromState.version.trim();
     currentVersion = /^v\d/i.test(raw) ? raw : `v${raw}`;
@@ -404,28 +412,6 @@ function searchPhaseInContent(content: string, escapedPhase: string, phaseNum: s
   };
 }
 
-async function countPhasePlansAndSummaries(phaseDir: string): Promise<{ planCount: number; summaryCount: number; hasContext: boolean; hasResearch: boolean; }> {
-  const phaseFiles = await readdir(phaseDir);
-  const rootPlans = phaseFiles.filter(f => f.endsWith('-PLAN.md') || f === 'PLAN.md');
-  const rootSummaries = phaseFiles.filter(f => f.endsWith('-SUMMARY.md') || f === 'SUMMARY.md');
-
-  let nestedPlans: string[] = [];
-  let nestedSummaries: string[] = [];
-  const plansDir = join(phaseDir, 'plans');
-  if (existsSync(plansDir)) {
-    const files = await readdir(plansDir);
-    nestedPlans = files.filter(f => /^PLAN-\d+.*\.md$/i.test(f));
-    nestedSummaries = files.filter(f => /^SUMMARY-\d+.*\.md$/i.test(f));
-  }
-
-  return {
-    planCount: rootPlans.length + nestedPlans.length,
-    summaryCount: rootSummaries.length + nestedSummaries.length,
-    hasContext: phaseFiles.some(f => f.endsWith('-CONTEXT.md') || f === 'CONTEXT.md'),
-    hasResearch: phaseFiles.some(f => f.endsWith('-RESEARCH.md') || f === 'RESEARCH.md'),
-  };
-}
-
 // ─── Exported handlers ────────────────────────────────────────────────────
 
 /**
@@ -437,7 +423,12 @@ async function countPhasePlansAndSummaries(phaseDir: string): Promise<{ planCoun
  * @param projectDir - Project root directory
  * @returns QueryResult with phase section info or { found: false }
  */
-export const roadmapGetPhase: QueryHandler = async (args, projectDir, workstream) => {
+export const roadmapGetPhase = async (
+  adapter: StorageAdapter,
+  args: string[],
+  _projectDir: string,
+  workstream?: string,
+): Promise<QueryResult> => {
   const phaseNum = args[0];
   if (!phaseNum) {
     throw new GSDError(
@@ -446,16 +437,12 @@ export const roadmapGetPhase: QueryHandler = async (args, projectDir, workstream
     );
   }
 
-  const roadmapPath = planningPaths(projectDir, workstream).roadmap;
-
-  let rawContent: string;
-  try {
-    rawContent = await readFile(roadmapPath, 'utf-8');
-  } catch {
+  const rawContent = await adapter.getRecord(planningRelativePath(workstream, 'ROADMAP.md'));
+  if (rawContent === null) {
     return { data: { found: false, error: 'ROADMAP.md not found' } };
   }
 
-  const milestoneContent = await extractCurrentMilestone(rawContent, projectDir, workstream);
+  const milestoneContent = await extractCurrentMilestone(adapter, rawContent, workstream);
   const escapedPhase = escapeRegex(phaseNum);
 
   // Search the current milestone slice first, then fall back to full roadmap.
@@ -482,18 +469,19 @@ export const roadmapGetPhase: QueryHandler = async (args, projectDir, workstream
  * @param projectDir - Project root directory
  * @returns QueryResult with full roadmap analysis
  */
-export const roadmapAnalyze: QueryHandler = async (_args, projectDir, workstream) => {
-  const roadmapPath = planningPaths(projectDir, workstream).roadmap;
-
-  let rawContent: string;
-  try {
-    rawContent = await readFile(roadmapPath, 'utf-8');
-  } catch {
+export const roadmapAnalyze = async (
+  adapter: StorageAdapter,
+  _args: string[],
+  _projectDir: string,
+  workstream?: string,
+): Promise<QueryResult> => {
+  const rawContent = await adapter.getRecord(planningRelativePath(workstream, 'ROADMAP.md'));
+  if (rawContent === null) {
     return { data: { error: 'ROADMAP.md not found', milestones: [], phases: [], current_phase: null } };
   }
 
-  const content = await extractCurrentMilestone(rawContent, projectDir, workstream);
-  const phasesDir = planningPaths(projectDir, workstream).phases;
+  const content = await extractCurrentMilestone(adapter, rawContent, workstream);
+  const phasesAdapterRel = planningRelativePath(workstream, 'phases');
 
   // IMPORTANT: Create regex INSIDE the function to avoid /g lastIndex persistence
   const phasePattern = /#{2,4}\s*Phase\s+(\d+[A-Z]?(?:\.\d+)*)\s*:\s*([^\n]+)/gi;
@@ -525,26 +513,32 @@ export const roadmapAnalyze: QueryHandler = async (_args, projectDir, workstream
     let hasContext = false;
     let hasResearch = false;
 
-    try {
-      const entries = await readdir(phasesDir, { withFileTypes: true });
-      const dirs = entries.filter(e => e.isDirectory()).map(e => e.name);
-      const dirMatch = dirs.find(d => phaseTokenMatches(d, normalized));
+    // Pitfall 3: listCollection returns [] on ENOENT
+    const refs = await adapter.listCollection(phasesAdapterRel);
+    const dirChecks = await Promise.all(
+      refs.map(async r => ({
+        ref: r,
+        isDir: ((await adapter.stat(r.path))?.kind === 'dir'),
+      })),
+    );
+    const dirs = dirChecks.filter(c => c.isDir).map(c => c.ref.name);
+    const dirMatch = dirs.find(d => phaseTokenMatches(d, normalized));
 
-      if (dirMatch) {
-        const counts = await countPhasePlansAndSummaries(join(phasesDir, dirMatch));
-        planCount = counts.planCount;
-        summaryCount = counts.summaryCount;
-        hasContext = counts.hasContext;
-        hasResearch = counts.hasResearch;
+    if (dirMatch) {
+      const phaseRefs = await adapter.listCollection(`${phasesAdapterRel}/${dirMatch}`);
+      const phaseFiles = phaseRefs.map(r => r.name);
+      planCount = phaseFiles.filter(f => f.endsWith('-PLAN.md') || f === 'PLAN.md').length;
+      summaryCount = phaseFiles.filter(f => f.endsWith('-SUMMARY.md') || f === 'SUMMARY.md').length;
+      hasContext = phaseFiles.some(f => f.endsWith('-CONTEXT.md') || f === 'CONTEXT.md');
+      hasResearch = phaseFiles.some(f => f.endsWith('-RESEARCH.md') || f === 'RESEARCH.md');
 
-        if (summaryCount >= planCount && planCount > 0) diskStatus = 'complete';
-        else if (summaryCount > 0) diskStatus = 'partial';
-        else if (planCount > 0) diskStatus = 'planned';
-        else if (hasResearch) diskStatus = 'researched';
-        else if (hasContext) diskStatus = 'discussed';
-        else diskStatus = 'empty';
-      }
-    } catch { /* intentionally empty */ }
+      if (summaryCount >= planCount && planCount > 0) diskStatus = 'complete';
+      else if (summaryCount > 0) diskStatus = 'partial';
+      else if (planCount > 0) diskStatus = 'planned';
+      else if (hasResearch) diskStatus = 'researched';
+      else if (hasContext) diskStatus = 'discussed';
+      else diskStatus = 'empty';
+    }
 
     // Check ROADMAP checkbox status
     const checkboxPattern = new RegExp(`-\\s*\\[(x| )\\]\\s*.*Phase\\s+${escapeRegex(phaseNum)}[:\\s]`, 'i');
@@ -688,12 +682,15 @@ export const requirementsMarkComplete: QueryHandler = async (args, projectDir, w
     throw new GSDError('no valid requirement IDs found', ErrorClassification.Validation);
   }
 
-  const paths = planningPaths(projectDir, workstream);
-  if (!existsSync(paths.requirements)) {
+  // Phase 4 Plan 02: fully migrated read+write to adapter.
+  const reqAdapter = await adapterFor(projectDir);
+  const reqRelPath = planningRelativePath(workstream, 'REQUIREMENTS.md');
+  const reqRaw = await reqAdapter.getRecord(reqRelPath);
+  if (reqRaw === null) {
     return { data: { updated: false, reason: 'REQUIREMENTS.md not found', ids: reqIds } };
   }
 
-  let reqContent = (await readFile(paths.requirements, 'utf-8')).replace(/\r\n/g, '\n');
+  let reqContent = reqRaw.replace(/\r\n/g, '\n');
   const updated: string[] = [];
   const alreadyComplete: string[] = [];
   const notFound: string[] = [];
@@ -730,7 +727,7 @@ export const requirementsMarkComplete: QueryHandler = async (args, projectDir, w
   }
 
   if (updated.length > 0) {
-    await writeFile(paths.requirements, reqContent, 'utf-8');
+    await reqAdapter.putRecord(reqRelPath, reqContent);
   }
 
   return {

@@ -8,7 +8,6 @@
  * prompts derived from GSD-1 workflow/agent/template files on disk.
  */
 
-import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { homedir } from 'node:os';
@@ -31,6 +30,7 @@ import { GSDEventType, PhaseStepType } from './types.js';
 import type { GSDTools } from './gsd-tools.js';
 import type { GSDEventStream } from './event-stream.js';
 import { loadConfig } from './config.js';
+import { adapterFor, planningRelativePath } from './query/helpers.js';
 import { runPhaseStepSession } from './session-runner.js';
 import { sanitizePrompt } from './prompt-sanitizer.js';
 import { resolveAgentsDir } from './query/helpers.js';
@@ -139,13 +139,9 @@ export class InitRunner {
           await this.execGit(['init']);
         }
 
-        // Ensure .planning/ directory exists
-        const planningDir = join(this.projectDir, '.planning');
-        await mkdir(planningDir, { recursive: true });
-
-        // Write config.json
-        const configPath = join(planningDir, 'config.json');
-        await writeFile(configPath, JSON.stringify(AUTO_MODE_CONFIG, null, 2) + '\n', 'utf-8');
+        // Write config.json via adapter (creates .planning/ if needed)
+        const configAdapter = await adapterFor(this.projectDir);
+        await configAdapter.putRecord('config.json', JSON.stringify(AUTO_MODE_CONFIG, null, 2) + '\n');
         artifacts.push('.planning/config.json');
 
         // Persist auto_advance via gsd-tools (validates & updates state)
@@ -415,12 +411,11 @@ export class InitRunner {
 
     // Read PROJECT.md if it exists (it should by now)
     let projectContent = '';
-    try {
-      projectContent = await readFile(
-        join(this.projectDir, '.planning', 'PROJECT.md'),
-        'utf-8',
-      );
-    } catch {
+    const researchAdapter = await adapterFor(this.projectDir);
+    const projContent = await researchAdapter.getRecord('PROJECT.md');
+    if (projContent) {
+      projectContent = projContent;
+    } else {
       // Fall back to raw input if PROJECT.md not yet written
       projectContent = input;
     }
@@ -457,15 +452,14 @@ export class InitRunner {
   private async buildSynthesisPrompt(): Promise<string> {
     const agentDef = await this.readAgentFile('gsd-research-synthesizer.md');
     const summaryTemplate = await this.readGSDFile('templates/research-project/SUMMARY.md');
-    const researchDir = join(this.projectDir, '.planning', 'research');
-
     // Read whatever research files exist
+    const synthAdapter = await adapterFor(this.projectDir);
     const researchContent: string[] = [];
     for (const rt of RESEARCH_TYPES) {
-      try {
-        const content = await readFile(join(researchDir, `${rt}.md`), 'utf-8');
-        researchContent.push(`<research_${rt.toLowerCase()}>\n${content}\n</research_${rt.toLowerCase()}>`);
-      } catch {
+      const rtContent = await synthAdapter.getRecord(`research/${rt}.md`);
+      if (rtContent) {
+        researchContent.push(`<research_${rt.toLowerCase()}>\n${rtContent}\n</research_${rt.toLowerCase()}>`);
+      } else {
         researchContent.push(`<research_${rt.toLowerCase()}>\n(Not available)\n</research_${rt.toLowerCase()}>`);
       }
     }
@@ -490,8 +484,8 @@ export class InitRunner {
       summaryTemplate,
       '</summary_template>',
       '',
-      'Write .planning/research/SUMMARY.md synthesizing all research findings.',
-      'Also commit all research files: git add .planning/research/ && git commit.',
+      'Write research/SUMMARY.md (via gsd-sdk query named-doc.put) synthesizing all research findings.',
+      'Also commit all research files: gsd-sdk query commit "docs: research synthesis" --files research/',
     ].join('\n'), this.projectDir);
   }
 
@@ -504,22 +498,11 @@ export class InitRunner {
 
     let projectContent = '';
     let featuresContent = '';
-    try {
-      projectContent = await readFile(
-        join(this.projectDir, '.planning', 'PROJECT.md'),
-        'utf-8',
-      );
-    } catch {
-      // Should not happen at this point
-    }
-    try {
-      featuresContent = await readFile(
-        join(this.projectDir, '.planning', 'research', 'FEATURES.md'),
-        'utf-8',
-      );
-    } catch {
-      // Research may have partially failed
-    }
+    const reqAdapter = await adapterFor(this.projectDir);
+    const projMd = await reqAdapter.getRecord('PROJECT.md');
+    if (projMd) projectContent = projMd;
+    const featMd = await reqAdapter.getRecord('research/FEATURES.md');
+    if (featMd) featuresContent = featMd;
 
     return sanitizePrompt([
       'You are generating REQUIREMENTS.md for this project.',
@@ -558,14 +541,17 @@ export class InitRunner {
       '.planning/research/SUMMARY.md',
       '.planning/config.json',
     ];
+    // Adapter-relative paths (strip '.planning/' prefix)
+    const adapterPaths = filesToRead.map(fp => fp.replace(/^\.planning\//, ''));
 
+    const roadmapAdapter = await adapterFor(this.projectDir);
     const fileContents: string[] = [];
-    for (const fp of filesToRead) {
-      try {
-        const content = await readFile(join(this.projectDir, fp), 'utf-8');
-        fileContents.push(`<file path="${fp}">\n${content}\n</file>`);
-      } catch {
-        fileContents.push(`<file path="${fp}">\n(Not available)\n</file>`);
+    for (let i = 0; i < filesToRead.length; i++) {
+      const content = await roadmapAdapter.getRecord(adapterPaths[i]);
+      if (content) {
+        fileContents.push(`<file path="${filesToRead[i]}">\n${content}\n</file>`);
+      } else {
+        fileContents.push(`<file path="${filesToRead[i]}">\n(Not available)\n</file>`);
       }
     }
 
@@ -625,10 +611,12 @@ export class InitRunner {
    * falls back to GSD-1 originals (~/.claude/get-shit-done/).
    */
   private async readGSDFile(relativePath: string): Promise<string> {
+    // C2 scope reads (agent/template files from ~/.claude/ or SDK bundled — NOT .planning/)
+    const { readFile: fsReadFile } = await import('node:fs/promises');
     // Try installed GSD first (complete, up-to-date versions)
     const fullPath = join(GSD_TEMPLATES_DIR, '..', relativePath);
     try {
-      return await readFile(fullPath, 'utf-8');
+      return await fsReadFile(fullPath, 'utf-8');
     } catch {
       // Not installed, fall through to SDK bundled copies
     }
@@ -636,7 +624,7 @@ export class InitRunner {
     // Fall back to SDK bundled copies
     const sdkPath = join(this.sdkPromptsDir, relativePath);
     try {
-      return await readFile(sdkPath, 'utf-8');
+      return await fsReadFile(sdkPath, 'utf-8');
     } catch {
       return `(Template not found: ${relativePath})`;
     }
@@ -648,10 +636,12 @@ export class InitRunner {
    * falls back to SDK bundled copies.
    */
   private async readAgentFile(filename: string): Promise<string> {
+    // C2 scope reads (agent definition files — NOT .planning/)
+    const { readFile: fsReadFile } = await import('node:fs/promises');
     // Try installed agents first (complete, up-to-date versions)
     const fullPath = join(GSD_AGENTS_DIR, filename);
     try {
-      return await readFile(fullPath, 'utf-8');
+      return await fsReadFile(fullPath, 'utf-8');
     } catch {
       // Not installed, fall through to SDK bundled copies
     }
@@ -659,7 +649,7 @@ export class InitRunner {
     // Fall back to SDK bundled copies
     const sdkPath = join(this.sdkPromptsDir, 'agents', filename);
     try {
-      return await readFile(sdkPath, 'utf-8');
+      return await fsReadFile(sdkPath, 'utf-8');
     } catch {
       return `(Agent definition not found: ${filename})`;
     }

@@ -17,12 +17,17 @@
  * ```
  */
 
-import { join, dirname, relative, resolve, isAbsolute, normalize, parse as parsePath, sep as pathSep } from 'node:path';
+import { join, dirname, relative, resolve, isAbsolute, normalize } from 'node:path';
 import { realpath } from 'node:fs/promises';
-import { existsSync, statSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { GSDError, ErrorClassification } from '../errors.js';
 import { relPlanningPath } from '../workstream-utils.js';
+import type { StorageAdapter } from '../../../adapters/types.js';
+
+// findProjectRoot moved to ./bootstrap.ts in Phase 2 Plan 02-01 (HIGH-2 Option 1).
+// Re-exported here for backwards compatibility — all existing callers continue to
+// import { findProjectRoot } from './helpers.js' unchanged.
+export { findProjectRoot } from './bootstrap.js';
 
 // ─── Runtime-aware agents directory resolution ─────────────────────────────
 
@@ -429,132 +434,76 @@ export function planningPaths(projectDir: string, workstream?: string): Planning
   };
 }
 
-// ─── findProjectRoot (multi-repo .planning resolution) ─────────────────────
+// ─── planningRelativePath (workstream-aware adapter path) ──────────────────
 
 /**
- * Maximum number of parent directories to walk when searching for a
- * multi-repo `.planning/` root. Bounded to avoid scanning to the filesystem
- * root in pathological cases.
+ * Compute a .planning/-relative path that the StorageAdapter can resolve.
+ *
+ * Phase 2 D-10 + Pitfall 10: adapters take .planning/-relative paths. When a
+ * workstream is active, the doc lives under `workstreams/<ws>/<doc>` relative
+ * to the .planning/ base. When no workstream, the doc is at the .planning/ root.
+ *
+ * Always returns POSIX-style forward slashes (adapter contract D-04).
  */
-const FIND_PROJECT_ROOT_MAX_DEPTH = 10;
+export function planningRelativePath(
+  workstream: string | null | undefined,
+  doc: string,
+): string {
+  if (workstream === null || workstream === undefined || workstream === '') {
+    return doc;
+  }
+  return `workstreams/${workstream}/${doc}`;
+}
+
+// ─── planningBaseIsDir (adapter-aware probe) ───────────────────────────────
 
 /**
- * Walk up from `startDir` to find the project root that owns `.planning/`.
+ * Adapter-aware sibling of findProjectRoot. Use this from inside handler bodies
+ * (the adapter is already constructed and rooted at the .planning/ base).
  *
- * Ported from `get-shit-done/bin/lib/core.cjs:findProjectRoot` so that
- * `gsd-sdk query` resolves the same parent `.planning/` root as the legacy
- * `gsd-tools.cjs` CLI when invoked inside a `sub_repos`-listed child repo.
- *
- * Detection strategy (checked in order for each ancestor, up to
- * `FIND_PROJECT_ROOT_MAX_DEPTH` levels):
- *   1. `startDir` itself has `.planning/` — return it unchanged (#1362).
- *   2. Parent has `.planning/config.json` with `sub_repos` listing the
- *      immediate child segment of the starting directory.
- *   3. Parent has `.planning/config.json` with `multiRepo: true` (legacy).
- *   4. Parent has `.planning/` AND an ancestor of `startDir` (up to the
- *      candidate parent) contains `.git` — heuristic fallback.
- *
- * Returns `startDir` unchanged when no ancestor `.planning/` is found
- * (first-run or single-repo projects). Never walks above the user's home
- * directory.
- *
- * All filesystem errors are swallowed — a missing or unparseable
- * `config.json` falls back to the `.git` heuristic, and unreadable
- * directories terminate the walk at that level.
+ * Returns true if the adapter's planning base exists and is a directory.
+ * Returns false otherwise. Never walks parent directories.
  */
-export function findProjectRoot(startDir: string): string {
-  let resolvedStart: string;
-  try {
-    resolvedStart = resolve(startDir);
-  } catch {
-    return startDir;
-  }
-  const fsRoot = parsePath(resolvedStart).root;
-  const home = homedir();
+export async function planningBaseIsDir(adapter: StorageAdapter): Promise<boolean> {
+  const st = await adapter.stat('');
+  return st !== null && st.kind === 'dir';
+}
 
-  // If startDir already contains .planning/, it IS the project root.
-  try {
-    const ownPlanning = join(resolvedStart, '.planning');
-    if (existsSync(ownPlanning) && statSync(ownPlanning).isDirectory()) {
-      return startDir;
-    }
-  } catch {
-    // fall through
-  }
+// ─── adapterFor (Phase 2 transitional helper) ─────────────────────────────
 
-  // Walk upward, mirroring isInsideGitRepo from the CJS reference.
-  function isInsideGitRepo(candidateParent: string): boolean {
-    let d = resolvedStart;
-    while (d !== fsRoot) {
-      try {
-        if (existsSync(join(d, '.git'))) return true;
-      } catch {
-        // ignore
-      }
-      if (d === candidateParent) break;
-      const next = dirname(d);
-      if (next === d) break;
-      d = next;
-    }
-    return false;
-  }
+/**
+ * Construct a MarkdownAdapter for a project directory.
+ *
+ * Phase 2 Plan 02-02 transitional helper: adapter-aware helpers
+ * (`getMilestoneInfo`, `extractCurrentMilestone`, `findPhase`, `roadmapAnalyze`,
+ * etc.) take an adapter as their first argument. Callers that have NOT yet
+ * been migrated to thread an adapter from their handler closure can call this
+ * helper to obtain one for the project — this preserves the public
+ * `(args, projectDir)` handler shape while letting the inner reads route
+ * through the adapter. Plans 02-03/04 and Phase 3 fully thread adapters and
+ * remove these inline constructions.
+ *
+ * Lazy import keeps this file free of an `adapters/` static import (which
+ * would create a Phase 1-era dependency cycle on the markdown adapter when
+ * helpers.ts is imported very early in the registry build).
+ *
+ * Phase 5 Plan 05 note: Returns a cached singleton per projectDir so all SDK
+ * operations in the same execution context share transaction state (required
+ * for pipeline dry-run diff computation).
+ */
 
-  let dir = resolvedStart;
-  let depth = 0;
-  while (dir !== fsRoot && depth < FIND_PROJECT_ROOT_MAX_DEPTH) {
-    const parent = dirname(dir);
-    if (parent === dir) break;
-    if (parent === home) break;
+// Adapter instance cache for transaction sharing (Phase 5 Plan 05)
+// Exported for test cleanup
+export const _adapterCache = new Map<string, StorageAdapter>();
 
-    const parentPlanning = join(parent, '.planning');
-    let parentPlanningIsDir = false;
-    try {
-      parentPlanningIsDir = existsSync(parentPlanning) && statSync(parentPlanning).isDirectory();
-    } catch {
-      parentPlanningIsDir = false;
-    }
+export async function adapterFor(projectDir: string): Promise<StorageAdapter> {
+  const cached = _adapterCache.get(projectDir);
+  if (cached) return cached;
 
-    if (parentPlanningIsDir) {
-      const configPath = join(parentPlanning, 'config.json');
-      let matched = false;
-      try {
-        const raw = readFileSync(configPath, 'utf-8');
-        const config = JSON.parse(raw) as {
-          sub_repos?: unknown;
-          planning?: { sub_repos?: unknown };
-          multiRepo?: unknown;
-        };
-        const subReposValue =
-          (config.sub_repos as unknown) ?? (config.planning && config.planning.sub_repos);
-        const subRepos = Array.isArray(subReposValue) ? (subReposValue as unknown[]) : [];
-
-        if (subRepos.length > 0) {
-          const relPath = relative(parent, resolvedStart);
-          const topSegment = relPath.split(pathSep)[0];
-          if (subRepos.includes(topSegment)) {
-            return parent;
-          }
-        }
-
-        if (config.multiRepo === true && isInsideGitRepo(parent)) {
-          matched = true;
-        }
-      } catch {
-        // config.json missing or unparseable — fall through to .git heuristic.
-      }
-
-      if (matched) return parent;
-
-      // Heuristic: parent has .planning/ and we're inside a git repo.
-      if (isInsideGitRepo(parent)) {
-        return parent;
-      }
-    }
-
-    dir = parent;
-    depth += 1;
-  }
-  return startDir;
+  const { MarkdownAdapter } = await import('../../../adapters/markdown/index.js');
+  const instance = new MarkdownAdapter(projectDir);
+  _adapterCache.set(projectDir, instance);
+  return instance;
 }
 
 // ─── resolvePathUnderProject ───────────────────────────────────────────────

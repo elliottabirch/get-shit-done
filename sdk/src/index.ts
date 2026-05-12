@@ -19,7 +19,6 @@
  * ```
  */
 
-import { readFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { homedir } from 'node:os';
 
@@ -34,6 +33,7 @@ import { GSDEventStream } from './event-stream.js';
 import { PhaseRunner } from './phase-runner.js';
 import { ContextEngine } from './context-engine.js';
 import { PromptFactory } from './phase-prompt.js';
+import { MarkdownAdapter } from '../../adapters/markdown/index.js';
 
 export { PlanningJournal } from './planning-journal.js';
 export type { PlanningEvent, PlanningEventActor, PlanningJournalAppendInput } from './planning-journal.js';
@@ -128,20 +128,13 @@ export class GSD {
   createTools(): GSDTools {
     return new GSDTools({
       projectDir: this.projectDir,
+      adapter: new MarkdownAdapter(this.projectDir),
       gsdToolsPath: this.gsdToolsPath,
       workstream: this.workstream,
       eventStream: this.eventStream,
       sessionId: this.sessionId,
       strictSdk: this.strictSdk,
       allowFallbackToSubprocess: this.allowFallbackToSubprocess,
-      onDispatchEvent: (event) => {
-        this.eventStream.emitEvent({
-          type: GSDEventType.StreamEvent,
-          timestamp: new Date().toISOString(),
-          sessionId: this.sessionId ?? '',
-          event,
-        });
-      },
     });
   }
 
@@ -294,9 +287,11 @@ export class GSD {
       join(this.projectDir, 'agents', 'gsd-executor.md'),
     ];
 
+    // C2 scope read (agent definition files — NOT .planning/)
+    const { readFile: fsRead } = await import('node:fs/promises');
     for (const p of paths) {
       try {
-        return await readFile(p, 'utf-8');
+        return await fsRead(p, 'utf-8');
       } catch {
         // Not found at this path, try next
       }

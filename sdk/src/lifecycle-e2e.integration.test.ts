@@ -22,6 +22,7 @@ import { fileURLToPath } from 'node:url';
 import { GSD } from './index.js';
 import { InitRunner } from './init-runner.js';
 import { GSDTools, resolveGsdToolsPath } from './gsd-tools.js';
+import { MarkdownAdapter } from '../../adapters/markdown/index.js';
 import { GSDEventStream } from './event-stream.js';
 import { GSDEventType, PhaseStepType } from './types.js';
 import type { GSDEvent, PhaseRunnerResult, RoadmapAnalysis } from './types.js';
@@ -72,6 +73,7 @@ describe.skipIf(!cliAvailable || !gsdToolsAvailable)('E2E Lifecycle: InitRunner 
 
     tools = new GSDTools({
       projectDir: tmpDir,
+      adapter: new MarkdownAdapter(tmpDir),
       gsdToolsPath: GSD_TOOLS_PATH,
       timeoutMs: 30_000,
     });

@@ -1,0 +1,14 @@
+{
+  "planner_model": "opus",
+  "checker_model": "sonnet",
+  "commit_docs": true,
+  "phase_found": true,
+  "phase_dir": ".planning/phases/02-wire-core-read-methods-to-adapter",
+  "phase_number": "02",
+  "phase_name": "wire-core-read-methods-to-adapter",
+  "has_verification": true,
+  "project_root": "/Volumes/code/get-shit-done",
+  "agents_installed": true,
+  "missing_agents": [],
+  "project_title": "Project: get-shit-done (fork — adapter-interface seam)"
+}

@@ -19,6 +19,8 @@ const COMMAND_ALIASES_FILE = path.join(REPO_ROOT, 'get-shit-done', 'bin', 'lib',
 // Prose tokens that repeatedly appear after `gsd-sdk query` in English
 // documentation but aren't real command names.
 const PROSE_ALLOWLIST = new Set([
+  'at',
+  'calls.',
   'commands',
   'intel',
   'into',
@@ -43,10 +45,19 @@ function collectRegisteredNames() {
   const src = fs.readFileSync(REGISTRY_FILE, 'utf8');
   const names = new Set();
 
-  // Static registrations in index.ts (legacy style, may still exist)
+  // Static registrations in registry-assembly.ts
   const re = /registry\.register\(\s*['"]([^'"]+)['"]/g;
   let m;
   while ((m = re.exec(src)) !== null) names.add(m[1]);
+
+  // Also scan index.ts for registrations (Phase 4 added new query verbs here)
+  const indexFile = path.join(REPO_ROOT, 'sdk', 'src', 'query', 'index.ts');
+  try {
+    const indexSrc = fs.readFileSync(indexFile, 'utf8');
+    const indexRe = /registry\.register\(\s*['"]([^'"]+)['"]/g;
+    let im;
+    while ((im = indexRe.exec(indexSrc)) !== null) names.add(im[1]);
+  } catch { /* index.ts may not exist */ }
 
   // Catalog-based registrations: parse known static catalogs directly.
   const catalogFileByVar = {

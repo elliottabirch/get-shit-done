@@ -22,7 +22,7 @@ Create, list, close, or resume persistent context threads for cross-session work
 **LIST / LIST-OPEN / LIST-RESOLVED mode:**
 
 ```bash
-ls .planning/threads/*.md 2>/dev/null
+gsd-sdk query thread.list
 ```
 
 For each thread file found:
@@ -144,12 +144,12 @@ If $ARGUMENTS is a new description (no matching thread file):
    SLUG=$(gsd-sdk query generate-slug "$ARGUMENTS" --raw)
    ```
 
-2. Create the threads directory if needed:
+2. Create the thread file (Write tool mediated via SDK):
    ```bash
-   mkdir -p .planning/threads
+   gsd-sdk query thread.add "{SLUG}" --stdin
    ```
 
-3. Use the Write tool to create `.planning/threads/{SLUG}.md` with this content:
+3. Pass the following content:
 
 ```
 ---

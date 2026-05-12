@@ -7,13 +7,17 @@ import { mkdir, writeFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { checkVerificationStatus } from './check-verification-status.js';
+import { MarkdownAdapter } from '../../../adapters/markdown/index.js';
+import type { StorageAdapter } from '../../../adapters/types.js';
 
 describe('checkVerificationStatus', () => {
   let projectDir: string;
+  let adapter: StorageAdapter;
 
   beforeEach(async () => {
     projectDir = join(tmpdir(), `gsd-check-ver-${Date.now()}-${Math.random().toString(36).slice(2)}`);
     await mkdir(join(projectDir, '.planning', 'phases'), { recursive: true });
+    adapter = new MarkdownAdapter(projectDir);
   });
 
   afterEach(async () => {
@@ -21,13 +25,13 @@ describe('checkVerificationStatus', () => {
   });
 
   it('throws when phase arg is missing', async () => {
-    await expect(checkVerificationStatus([], projectDir)).rejects.toThrow();
+    await expect(checkVerificationStatus(adapter, [], projectDir)).rejects.toThrow();
   });
 
   it('returns status missing when VERIFICATION.md does not exist', async () => {
     await mkdir(join(projectDir, '.planning', 'phases', '01-foundation'), { recursive: true });
 
-    const { data } = await checkVerificationStatus(['1'], projectDir);
+    const { data } = await checkVerificationStatus(adapter, ['1'], projectDir);
     const d = data as Record<string, unknown>;
     expect(d.status).toBe('missing');
     expect(d.score).toBeNull();
@@ -55,7 +59,7 @@ describe('checkVerificationStatus', () => {
       'utf-8',
     );
 
-    const { data } = await checkVerificationStatus(['2'], projectDir);
+    const { data } = await checkVerificationStatus(adapter, ['2'], projectDir);
     const d = data as Record<string, unknown>;
     expect(d.status).toBe('pass');
     expect(d.gaps).toEqual([]);
@@ -76,7 +80,7 @@ describe('checkVerificationStatus', () => {
       'utf-8',
     );
 
-    const { data } = await checkVerificationStatus(['3'], projectDir);
+    const { data } = await checkVerificationStatus(adapter, ['3'], projectDir);
     const d = data as Record<string, unknown>;
     expect(d.status).toBe('fail');
     expect((d.gaps as string[]).length).toBeGreaterThan(0);
@@ -98,7 +102,7 @@ describe('checkVerificationStatus', () => {
       'utf-8',
     );
 
-    const { data } = await checkVerificationStatus(['4'], projectDir);
+    const { data } = await checkVerificationStatus(adapter, ['4'], projectDir);
     const d = data as Record<string, unknown>;
     expect(d.score).toBe('3/4');
   });
@@ -117,7 +121,7 @@ describe('checkVerificationStatus', () => {
       'utf-8',
     );
 
-    const { data } = await checkVerificationStatus(['5'], projectDir);
+    const { data } = await checkVerificationStatus(adapter, ['5'], projectDir);
     const d = data as Record<string, unknown>;
     expect((d.human_items as string[]).length).toBeGreaterThan(0);
   });
@@ -136,7 +140,7 @@ describe('checkVerificationStatus', () => {
       'utf-8',
     );
 
-    const { data } = await checkVerificationStatus(['6'], projectDir);
+    const { data } = await checkVerificationStatus(adapter, ['6'], projectDir);
     const d = data as Record<string, unknown>;
     expect((d.deferred as string[]).length).toBeGreaterThan(0);
   });

@@ -17,10 +17,9 @@
  */
 
 import { existsSync } from 'node:fs';
-import { readFile } from 'node:fs/promises';
 import { GSDError, ErrorClassification } from '../errors.js';
 import { loadConfig } from '../config.js';
-import { planningPaths } from './helpers.js';
+import { planningPaths, adapterFor, planningRelativePath } from './helpers.js';
 import { maskIfSecret } from './secrets.js';
 import type { QueryHandler } from './utils.js';
 
@@ -101,10 +100,10 @@ export const configGet: QueryHandler = async (args, projectDir, workstream) => {
   }
 
   const paths = planningPaths(projectDir, workstream);
-  let raw: string;
-  try {
-    raw = await readFile(paths.config, 'utf-8');
-  } catch {
+  const adapter = await adapterFor(projectDir);
+  const configRelPath = planningRelativePath(workstream, 'config.json');
+  const raw = await adapter.getRecord(configRelPath);
+  if (!raw) {
     throw new GSDError(`No config.json found at ${paths.config}`, ErrorClassification.Validation);
   }
 
@@ -175,8 +174,6 @@ export const resolveModel: QueryHandler = async (args, projectDir, workstream) =
     throw new GSDError('agent-type required', ErrorClassification.Validation);
   }
 
-  const configFilePath = planningPaths(projectDir, workstream).config;
-  const configExists = existsSync(configFilePath);
   const config = await loadConfig(projectDir, workstream);
   const profile = String(config.model_profile || 'balanced').toLowerCase();
 
@@ -191,9 +188,9 @@ export const resolveModel: QueryHandler = async (args, projectDir, workstream) =
     return { data: result };
   }
 
-  // No project config (or explicit omit policy) -> return empty model id (CJS parity)
+  // Explicit omit policy -> return empty model id so runtime uses its default
   const resolveModelIds = (config as Record<string, unknown>).resolve_model_ids;
-  if (!configExists || resolveModelIds === 'omit') {
+  if (resolveModelIds === 'omit') {
     const agentModels = MODEL_PROFILES[agentType];
     const result = agentModels
       ? { model: '', profile }

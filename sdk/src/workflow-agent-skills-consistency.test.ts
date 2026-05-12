@@ -11,7 +11,7 @@
  * Related: https://github.com/gsd-build/get-shit-done/issues/2615
  */
 import { describe, it, expect } from 'vitest';
-import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { readFileSync, readdirSync, statSync } from 'node:fs'; // leak-grep-ignore (reads repo source files, not .planning/)
 import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 

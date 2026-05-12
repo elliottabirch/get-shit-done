@@ -7,7 +7,7 @@ Triggered when orchestrator provides `<revision_context>` with checker issues. N
 ### Step 1: Load Existing Plans
 
 ```bash
-cat .planning/phases/$PHASE-*/$PHASE-*-PLAN.md
+gsd-sdk query phase.get-plans "${PHASE}"
 ```
 
 Build mental model of current plan structure, existing tasks, must_haves.

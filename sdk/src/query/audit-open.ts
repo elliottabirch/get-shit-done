@@ -2,38 +2,48 @@
  * Open Artifact Audit — full TypeScript port of `get-shit-done/bin/lib/audit.cjs`.
  *
  * Scans `.planning/` artifact categories for unresolved items (same JSON as gsd-tools `audit-open`).
+ *
+ * Phase 2 Plan 02-02 Task 2 (D-12, D-10, Pitfall 2, Pitfall 3): adapter-as-first-arg
+ * signature; all 8 artifact-category scanners route through `adapter.listCollection`
+ * + `adapter.getRecord`. Per-file reads inside each scanner use `Promise.all` to
+ * parallelize (Pitfall 2). Redundant `exists()` checks before `listCollection()`
+ * removed (Pitfall 3 — listCollection returns [] on ENOENT).
  */
 
-import { existsSync, readdirSync, readFileSync } from 'node:fs';
-import { basename, join } from 'node:path';
+import { basename } from 'node:path';
 
-import { extractFrontmatter } from './frontmatter.js';
-import { planningPaths, sanitizeForDisplay } from './helpers.js';
-import type { QueryHandler } from './utils.js';
+import { extractFrontmatterLeading } from './frontmatter.js';
+import { planningRelativePath, sanitizeForDisplay } from './helpers.js';
+import type { QueryResult } from './utils.js';
+import type { StorageAdapter, RecordRef } from '../../../adapters/types.js';
 
-function scanDebugSessions(planDir: string): Array<Record<string, unknown>> {
-  const debugDir = join(planDir, 'debug');
-  if (!existsSync(debugDir)) return [];
-
-  const results: Array<Record<string, unknown>> = [];
-  let files;
+async function scanDebugSessions(
+  adapter: StorageAdapter,
+  workstream: string | undefined,
+): Promise<Array<Record<string, unknown>>> {
+  // Pitfall 3: listCollection returns [] on ENOENT — no redundant exists() check needed
+  const debugRel = planningRelativePath(workstream, 'debug');
+  let entries: RecordRef[];
   try {
-    files = readdirSync(debugDir, { withFileTypes: true });
+    entries = await adapter.listCollection(debugRel);
   } catch {
     return [{ scan_error: true }];
   }
+  const mdRefs = entries.filter(e => e.name.endsWith('.md'));
 
-  for (const entry of files) {
-    if (!entry.isFile()) continue;
-    if (!entry.name.endsWith('.md')) continue;
+  // Pitfall 2: parallelize per-file reads
+  const reads = await Promise.all(
+    mdRefs.map(async ref => ({
+      ref,
+      content: await adapter.getRecord(ref.path),
+    })),
+  );
 
-    const filePath = join(debugDir, entry.name);
-    let content: string;
-    try {
-      content = readFileSync(filePath, 'utf-8');
-    } catch {
+  const results: Array<Record<string, unknown>> = [];
+  for (const { ref, content } of reads) {
+    if (content === null) {
       results.push({
-        slug: sanitizeForDisplay(basename(entry.name, '.md')),
+        slug: sanitizeForDisplay(basename(ref.name, '.md')),
         status: 'unreadable',
         scan_error: true,
         detail: 'file read failed',
@@ -41,7 +51,7 @@ function scanDebugSessions(planDir: string): Array<Record<string, unknown>> {
       continue;
     }
 
-    const fm = extractFrontmatter(content);
+    const fm = extractFrontmatterLeading(content);
     const status = (fm.status || 'unknown').toString().toLowerCase();
     if (status === 'resolved' || status === 'complete') continue;
 
@@ -52,7 +62,7 @@ function scanDebugSessions(planDir: string): Array<Record<string, unknown>> {
       hypothesis = sanitizeForDisplay(focusText.slice(0, 100));
     }
 
-    const slug = basename(entry.name, '.md');
+    const slug = basename(ref.name, '.md');
     results.push({
       slug: sanitizeForDisplay(slug),
       status: sanitizeForDisplay(status),
@@ -64,36 +74,46 @@ function scanDebugSessions(planDir: string): Array<Record<string, unknown>> {
   return results;
 }
 
-function scanQuickTasks(planDir: string): Array<Record<string, unknown>> {
-  const quickDir = join(planDir, 'quick');
-  if (!existsSync(quickDir)) return [];
-
-  let entries;
+async function scanQuickTasks(
+  adapter: StorageAdapter,
+  workstream: string | undefined,
+): Promise<Array<Record<string, unknown>>> {
+  const quickRel = planningRelativePath(workstream, 'quick');
+  // Pitfall 3: listCollection returns [] on ENOENT
+  let entries: RecordRef[];
   try {
-    entries = readdirSync(quickDir, { withFileTypes: true });
+    entries = await adapter.listCollection(quickRel);
   } catch {
     return [{ scan_error: true }];
   }
 
-  const results: Array<Record<string, unknown>> = [];
-  for (const entry of entries) {
-    if (!entry.isDirectory()) continue;
+  // Filter to subdirectories only — probe via stat in parallel (Pitfall 2)
+  const dirChecks = await Promise.all(
+    entries.map(async e => ({
+      ref: e,
+      isDir: ((await adapter.stat(e.path))?.kind === 'dir'),
+    })),
+  );
+  const dirEntries = dirChecks.filter(c => c.isDir).map(c => c.ref);
 
-    const dirName = entry.name;
-    const taskDir = join(quickDir, dirName);
-    const summaryPath = join(taskDir, 'SUMMARY.md');
+  // Read SUMMARY.md for each task dir in parallel
+  const summaries = await Promise.all(
+    dirEntries.map(async ref => ({
+      ref,
+      summary: await adapter.getRecord(`${ref.path}/SUMMARY.md`),
+    })),
+  );
+
+  const results: Array<Record<string, unknown>> = [];
+  for (const { ref, summary } of summaries) {
+    const dirName = ref.name;
 
     let status = 'missing';
     const description = '';
 
-    if (existsSync(summaryPath)) {
-      try {
-        const content = readFileSync(summaryPath, 'utf-8');
-        const fm = extractFrontmatter(content);
-        status = (fm.status || 'unknown').toString().toLowerCase();
-      } catch {
-        status = 'unreadable';
-      }
+    if (summary !== null) {
+      const fm = extractFrontmatterLeading(summary);
+      status = (fm.status || 'unknown').toString().toLowerCase();
     }
 
     if (status === 'complete') continue;
@@ -117,31 +137,34 @@ function scanQuickTasks(planDir: string): Array<Record<string, unknown>> {
   return results;
 }
 
-function scanThreads(planDir: string): Array<Record<string, unknown>> {
-  const threadsDir = join(planDir, 'threads');
-  if (!existsSync(threadsDir)) return [];
-
-  let files;
+async function scanThreads(
+  adapter: StorageAdapter,
+  workstream: string | undefined,
+): Promise<Array<Record<string, unknown>>> {
+  const threadsRel = planningRelativePath(workstream, 'threads');
+  let entries: RecordRef[];
   try {
-    files = readdirSync(threadsDir, { withFileTypes: true });
+    entries = await adapter.listCollection(threadsRel);
   } catch {
     return [{ scan_error: true }];
   }
 
   const openStatuses = new Set(['open', 'in_progress', 'in progress']);
+  const mdRefs = entries.filter(e => e.name.endsWith('.md'));
+
+  // Pitfall 2: parallelize reads
+  const reads = await Promise.all(
+    mdRefs.map(async ref => ({
+      ref,
+      content: await adapter.getRecord(ref.path),
+    })),
+  );
+
   const results: Array<Record<string, unknown>> = [];
-
-  for (const entry of files) {
-    if (!entry.isFile()) continue;
-    if (!entry.name.endsWith('.md')) continue;
-
-    const filePath = join(threadsDir, entry.name);
-    let content: string;
-    try {
-      content = readFileSync(filePath, 'utf-8');
-    } catch {
+  for (const { ref, content } of reads) {
+    if (content === null) {
       results.push({
-        slug: sanitizeForDisplay(basename(entry.name, '.md')),
+        slug: sanitizeForDisplay(basename(ref.name, '.md')),
         status: 'unreadable',
         scan_error: true,
         detail: 'file read failed',
@@ -149,7 +172,7 @@ function scanThreads(planDir: string): Array<Record<string, unknown>> {
       continue;
     }
 
-    const fm = extractFrontmatter(content);
+    const fm = extractFrontmatterLeading(content);
     let status = (fm.status || '').toString().toLowerCase().trim();
 
     if (!status) {
@@ -169,7 +192,7 @@ function scanThreads(planDir: string): Array<Record<string, unknown>> {
       }
     }
 
-    const slug = basename(entry.name, '.md');
+    const slug = basename(ref.name, '.md');
     results.push({
       slug: sanitizeForDisplay(slug),
       status: sanitizeForDisplay(status),
@@ -181,83 +204,87 @@ function scanThreads(planDir: string): Array<Record<string, unknown>> {
   return results;
 }
 
-function scanTodos(planDir: string): Array<Record<string, unknown>> {
-  const pendingDir = join(planDir, 'todos', 'pending');
-  if (!existsSync(pendingDir)) return [];
-
-  let files;
+async function scanTodos(
+  adapter: StorageAdapter,
+  workstream: string | undefined,
+): Promise<Array<Record<string, unknown>>> {
+  const pendingRel = planningRelativePath(workstream, 'todos/pending');
+  let entries: RecordRef[];
   try {
-    files = readdirSync(pendingDir, { withFileTypes: true });
+    entries = await adapter.listCollection(pendingRel);
   } catch {
     return [{ scan_error: true }];
   }
 
-  const mdFiles = files.filter(e => e.isFile() && e.name.endsWith('.md'));
+  const mdRefs = entries.filter(e => e.name.endsWith('.md'));
   const results: Array<Record<string, unknown>> = [];
 
-  const displayFiles = mdFiles.slice(0, 5);
-  for (const entry of displayFiles) {
-    const filePath = join(pendingDir, entry.name);
-    let content: string;
-    try {
-      content = readFileSync(filePath, 'utf-8');
-    } catch {
-      continue;
-    }
+  const displayRefs = mdRefs.slice(0, 5);
+  // Pitfall 2: parallelize reads
+  const reads = await Promise.all(
+    displayRefs.map(async ref => ({
+      ref,
+      content: await adapter.getRecord(ref.path),
+    })),
+  );
 
-    const fm = extractFrontmatter(content);
+  for (const { ref, content } of reads) {
+    if (content === null) continue;
+
+    const fm = extractFrontmatterLeading(content);
     const bodyMatch = content.replace(/^---[\s\S]*?---\n?/, '');
     const firstLine = bodyMatch.trim().split('\n')[0] || '';
     const summary = sanitizeForDisplay(firstLine.slice(0, 100));
 
     results.push({
-      filename: sanitizeForDisplay(entry.name),
+      filename: sanitizeForDisplay(ref.name),
       priority: sanitizeForDisplay(String(fm.priority || '')),
       area: sanitizeForDisplay(String(fm.area || '')),
       summary,
     });
   }
 
-  if (mdFiles.length > 5) {
-    results.push({ _remainder_count: mdFiles.length - 5 });
+  if (mdRefs.length > 5) {
+    results.push({ _remainder_count: mdRefs.length - 5 });
   }
 
   return results;
 }
 
-function scanSeeds(planDir: string): Array<Record<string, unknown>> {
-  const seedsDir = join(planDir, 'seeds');
-  if (!existsSync(seedsDir)) return [];
-
-  let files;
+async function scanSeeds(
+  adapter: StorageAdapter,
+  workstream: string | undefined,
+): Promise<Array<Record<string, unknown>>> {
+  const seedsRel = planningRelativePath(workstream, 'seeds');
+  let entries: RecordRef[];
   try {
-    files = readdirSync(seedsDir, { withFileTypes: true });
+    entries = await adapter.listCollection(seedsRel);
   } catch {
     return [{ scan_error: true }];
   }
 
+  const seedRefs = entries.filter(e => e.name.startsWith('SEED-') && e.name.endsWith('.md'));
   const unimplementedStatuses = new Set(['dormant', 'active', 'triggered']);
+
+  // Pitfall 2: parallelize reads
+  const reads = await Promise.all(
+    seedRefs.map(async ref => ({
+      ref,
+      content: await adapter.getRecord(ref.path),
+    })),
+  );
+
   const results: Array<Record<string, unknown>> = [];
+  for (const { ref, content } of reads) {
+    if (content === null) continue;
 
-  for (const entry of files) {
-    if (!entry.isFile()) continue;
-    if (!entry.name.startsWith('SEED-') || !entry.name.endsWith('.md')) continue;
-
-    const filePath = join(seedsDir, entry.name);
-    let content: string;
-    try {
-      content = readFileSync(filePath, 'utf-8');
-    } catch {
-      continue;
-    }
-
-    const fm = extractFrontmatter(content);
+    const fm = extractFrontmatterLeading(content);
     const status = (fm.status || 'dormant').toString().toLowerCase();
 
     if (!unimplementedStatuses.has(status)) continue;
 
-    const seedIdMatch = entry.name.match(/^(SEED-[\w-]+)\.md$/);
-    const seed_id = seedIdMatch ? seedIdMatch[1] : basename(entry.name, '.md');
+    const seedIdMatch = ref.name.match(/^(SEED-[\w-]+)\.md$/);
+    const seed_id = seedIdMatch ? seedIdMatch[1] : basename(ref.name, '.md');
     const slug = sanitizeForDisplay(seed_id.replace(/^SEED-/, ''));
 
     let title = sanitizeForDisplay(String(fm.title || ''));
@@ -277,154 +304,132 @@ function scanSeeds(planDir: string): Array<Record<string, unknown>> {
   return results;
 }
 
-function scanUatGaps(planDir: string): Array<Record<string, unknown>> {
-  const phasesDir = join(planDir, 'phases');
-  if (!existsSync(phasesDir)) return [];
-
-  let dirs: string[];
+/**
+ * Walk every phase directory and aggregate per-phase scan results in parallel.
+ * Shared by scanUatGaps, scanVerificationGaps, scanContextQuestions.
+ *
+ * @param matchFile - test the file basename for inclusion
+ * @param processFile - returns the result row to append (or null to skip)
+ */
+async function scanPhaseFiles(
+  adapter: StorageAdapter,
+  workstream: string | undefined,
+  matchFile: (name: string) => boolean,
+  processFile: (params: {
+    phaseNum: string;
+    file: string;
+    content: string;
+    fm: Record<string, unknown>;
+  }) => Record<string, unknown> | null,
+): Promise<Array<Record<string, unknown>>> {
+  const phasesRel = planningRelativePath(workstream, 'phases');
+  let phaseRefs: RecordRef[];
   try {
-    dirs = readdirSync(phasesDir, { withFileTypes: true })
-      .filter(e => e.isDirectory())
-      .map(e => e.name)
-      .sort();
+    phaseRefs = await adapter.listCollection(phasesRel);
   } catch {
     return [{ scan_error: true }];
   }
 
-  const results: Array<Record<string, unknown>> = [];
+  // Filter to phase directories — Promise.all stat probes (Pitfall 2)
+  const dirChecks = await Promise.all(
+    phaseRefs.map(async r => ({
+      ref: r,
+      isDir: ((await adapter.stat(r.path))?.kind === 'dir'),
+    })),
+  );
+  const phaseDirRefs = dirChecks
+    .filter(c => c.isDir)
+    .map(c => c.ref)
+    .sort((a, b) => a.name.localeCompare(b.name));
 
-  for (const dir of dirs) {
-    const phaseDir = join(phasesDir, dir);
-    const phaseMatch = dir.match(/^(\d+[A-Z]?(?:\.\d+)*)/i);
-    const phaseNum = phaseMatch ? phaseMatch[1] : dir;
-
-    let phaseFiles: string[];
-    try {
-      phaseFiles = readdirSync(phaseDir);
-    } catch {
-      continue;
-    }
-
-    for (const file of phaseFiles.filter(f => f.includes('-UAT') && f.endsWith('.md'))) {
-      const filePath = join(phaseDir, file);
-      let content: string;
+  // For each phase: list its files, filter by matchFile, read in parallel (Pitfall 2)
+  const perPhase = await Promise.all(
+    phaseDirRefs.map(async phaseRef => {
+      const phaseMatch = phaseRef.name.match(/^(\d+[A-Z]?(?:\.\d+)*)/i);
+      const phaseNum = phaseMatch ? phaseMatch[1] : phaseRef.name;
+      let fileRefs: RecordRef[];
       try {
-        content = readFileSync(filePath, 'utf-8');
+        fileRefs = await adapter.listCollection(phaseRef.path);
       } catch {
-        continue;
+        return [] as Array<Record<string, unknown>>;
       }
+      const matched = fileRefs.filter(r => matchFile(r.name));
+      const reads = await Promise.all(
+        matched.map(async fileRef => ({
+          fileRef,
+          content: await adapter.getRecord(fileRef.path),
+        })),
+      );
+      const phaseResults: Array<Record<string, unknown>> = [];
+      for (const { fileRef, content } of reads) {
+        if (content === null) continue;
+        const fm = extractFrontmatterLeading(content);
+        const row = processFile({
+          phaseNum,
+          file: fileRef.name,
+          content,
+          fm,
+        });
+        if (row) phaseResults.push(row);
+      }
+      return phaseResults;
+    }),
+  );
 
-      const fm = extractFrontmatter(content);
+  return perPhase.flat();
+}
+
+async function scanUatGaps(
+  adapter: StorageAdapter,
+  workstream: string | undefined,
+): Promise<Array<Record<string, unknown>>> {
+  return scanPhaseFiles(
+    adapter,
+    workstream,
+    name => name.includes('-UAT') && name.endsWith('.md'),
+    ({ phaseNum, file, content, fm }) => {
       const status = (fm.status || 'unknown').toString().toLowerCase();
-
-      if (status === 'complete') continue;
-
+      if (status === 'complete') return null;
       const pendingMatches = (content.match(/result:\s*(?:pending|\[pending\])/gi) || []).length;
-
-      results.push({
+      return {
         phase: sanitizeForDisplay(phaseNum),
         file: sanitizeForDisplay(file),
         status: sanitizeForDisplay(status),
         open_scenario_count: pendingMatches,
-      });
-    }
-  }
-
-  return results;
+      };
+    },
+  );
 }
 
-function scanVerificationGaps(planDir: string): Array<Record<string, unknown>> {
-  const phasesDir = join(planDir, 'phases');
-  if (!existsSync(phasesDir)) return [];
-
-  let dirs: string[];
-  try {
-    dirs = readdirSync(phasesDir, { withFileTypes: true })
-      .filter(e => e.isDirectory())
-      .map(e => e.name)
-      .sort();
-  } catch {
-    return [{ scan_error: true }];
-  }
-
-  const results: Array<Record<string, unknown>> = [];
-
-  for (const dir of dirs) {
-    const phaseDir = join(phasesDir, dir);
-    const phaseMatch = dir.match(/^(\d+[A-Z]?(?:\.\d+)*)/i);
-    const phaseNum = phaseMatch ? phaseMatch[1] : dir;
-
-    let phaseFiles: string[];
-    try {
-      phaseFiles = readdirSync(phaseDir);
-    } catch {
-      continue;
-    }
-
-    for (const file of phaseFiles.filter(f => f.includes('-VERIFICATION') && f.endsWith('.md'))) {
-      const filePath = join(phaseDir, file);
-      let content: string;
-      try {
-        content = readFileSync(filePath, 'utf-8');
-      } catch {
-        continue;
-      }
-
-      const fm = extractFrontmatter(content);
+async function scanVerificationGaps(
+  adapter: StorageAdapter,
+  workstream: string | undefined,
+): Promise<Array<Record<string, unknown>>> {
+  return scanPhaseFiles(
+    adapter,
+    workstream,
+    name => name.includes('-VERIFICATION') && name.endsWith('.md'),
+    ({ phaseNum, file, fm }) => {
       const status = (fm.status || 'unknown').toString().toLowerCase();
-
-      if (status !== 'gaps_found' && status !== 'human_needed') continue;
-
-      results.push({
+      if (status !== 'gaps_found' && status !== 'human_needed') return null;
+      return {
         phase: sanitizeForDisplay(phaseNum),
         file: sanitizeForDisplay(file),
         status: sanitizeForDisplay(status),
-      });
-    }
-  }
-
-  return results;
+      };
+    },
+  );
 }
 
-function scanContextQuestions(planDir: string): Array<Record<string, unknown>> {
-  const phasesDir = join(planDir, 'phases');
-  if (!existsSync(phasesDir)) return [];
-
-  let dirs: string[];
-  try {
-    dirs = readdirSync(phasesDir, { withFileTypes: true })
-      .filter(e => e.isDirectory())
-      .map(e => e.name)
-      .sort();
-  } catch {
-    return [{ scan_error: true }];
-  }
-
-  const results: Array<Record<string, unknown>> = [];
-
-  for (const dir of dirs) {
-    const phaseDir = join(phasesDir, dir);
-    const phaseMatch = dir.match(/^(\d+[A-Z]?(?:\.\d+)*)/i);
-    const phaseNum = phaseMatch ? phaseMatch[1] : dir;
-
-    let phaseFiles: string[];
-    try {
-      phaseFiles = readdirSync(phaseDir);
-    } catch {
-      continue;
-    }
-
-    for (const file of phaseFiles.filter(f => f.includes('-CONTEXT') && f.endsWith('.md'))) {
-      const filePath = join(phaseDir, file);
-      let content: string;
-      try {
-        content = readFileSync(filePath, 'utf-8');
-      } catch {
-        continue;
-      }
-
-      const fm = extractFrontmatter(content);
-
+async function scanContextQuestions(
+  adapter: StorageAdapter,
+  workstream: string | undefined,
+): Promise<Array<Record<string, unknown>>> {
+  return scanPhaseFiles(
+    adapter,
+    workstream,
+    name => name.includes('-CONTEXT') && name.endsWith('.md'),
+    ({ phaseNum, file, content, fm }) => {
       let questions: string[] = [];
       if (fm.open_questions) {
         if (Array.isArray(fm.open_questions) && fm.open_questions.length > 0) {
@@ -446,18 +451,16 @@ function scanContextQuestions(planDir: string): Array<Record<string, unknown>> {
         }
       }
 
-      if (questions.length === 0) continue;
+      if (questions.length === 0) return null;
 
-      results.push({
+      return {
         phase: sanitizeForDisplay(phaseNum),
         file: sanitizeForDisplay(file),
         question_count: questions.length,
         questions: questions.slice(0, 3),
-      });
-    }
-  }
-
-  return results;
+      };
+    },
+  );
 }
 
 export interface AuditOpenResult {
@@ -490,41 +493,35 @@ export interface AuditOpenResult {
 
 /**
  * Same structured result as `gsd-tools.cjs audit-open` (JSON).
+ *
+ * Phase 2 Plan 02-02 Task 2: now adapter-aware. Runs all 8 category scanners
+ * in parallel (Promise.all top-level) and each scanner uses Promise.all per
+ * read inside (Pitfall 2).
  */
-export function auditOpenArtifacts(projectDir: string, workstream?: string): AuditOpenResult {
-  const planDir = planningPaths(projectDir, workstream).planning;
-
-  const debugSessions = (() => {
-    try { return scanDebugSessions(planDir); } catch { return [{ scan_error: true }]; }
-  })();
-
-  const quickTasks = (() => {
-    try { return scanQuickTasks(planDir); } catch { return [{ scan_error: true }]; }
-  })();
-
-  const threads = (() => {
-    try { return scanThreads(planDir); } catch { return [{ scan_error: true }]; }
-  })();
-
-  const todos = (() => {
-    try { return scanTodos(planDir); } catch { return [{ scan_error: true }]; }
-  })();
-
-  const seeds = (() => {
-    try { return scanSeeds(planDir); } catch { return [{ scan_error: true }]; }
-  })();
-
-  const uatGaps = (() => {
-    try { return scanUatGaps(planDir); } catch { return [{ scan_error: true }]; }
-  })();
-
-  const verificationGaps = (() => {
-    try { return scanVerificationGaps(planDir); } catch { return [{ scan_error: true }]; }
-  })();
-
-  const contextQuestions = (() => {
-    try { return scanContextQuestions(planDir); } catch { return [{ scan_error: true }]; }
-  })();
+export async function auditOpenArtifacts(
+  adapter: StorageAdapter,
+  _projectDir: string,
+  workstream?: string,
+): Promise<AuditOpenResult> {
+  const [
+    debugSessions,
+    quickTasks,
+    threads,
+    todos,
+    seeds,
+    uatGaps,
+    verificationGaps,
+    contextQuestions,
+  ] = await Promise.all([
+    scanDebugSessions(adapter, workstream).catch(() => [{ scan_error: true }] as Array<Record<string, unknown>>),
+    scanQuickTasks(adapter, workstream).catch(() => [{ scan_error: true }] as Array<Record<string, unknown>>),
+    scanThreads(adapter, workstream).catch(() => [{ scan_error: true }] as Array<Record<string, unknown>>),
+    scanTodos(adapter, workstream).catch(() => [{ scan_error: true }] as Array<Record<string, unknown>>),
+    scanSeeds(adapter, workstream).catch(() => [{ scan_error: true }] as Array<Record<string, unknown>>),
+    scanUatGaps(adapter, workstream).catch(() => [{ scan_error: true }] as Array<Record<string, unknown>>),
+    scanVerificationGaps(adapter, workstream).catch(() => [{ scan_error: true }] as Array<Record<string, unknown>>),
+    scanContextQuestions(adapter, workstream).catch(() => [{ scan_error: true }] as Array<Record<string, unknown>>),
+  ]);
 
   const countReal = (arr: Array<Record<string, unknown>>): number =>
     arr.filter(i => !i.scan_error && !i._remainder_count).length;
@@ -707,9 +704,14 @@ export function formatAuditReport(auditResult: AuditOpenResult): string {
 /**
  * `audit-open` / `audit.open` — optional `--json` for structured JSON only (default adds formatted report string).
  */
-export const auditOpen: QueryHandler = async (args, projectDir, workstream) => {
+export const auditOpen = async (
+  adapter: StorageAdapter,
+  args: string[],
+  projectDir: string,
+  workstream?: string,
+): Promise<QueryResult> => {
   const jsonOnly = args.includes('--json');
-  const result = auditOpenArtifacts(projectDir, workstream);
+  const result = await auditOpenArtifacts(adapter, projectDir, workstream);
   if (jsonOnly) {
     return { data: result };
   }

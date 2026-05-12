@@ -6,11 +6,8 @@
  * See `.planning/research/decision-routing-audit.md` §3.7.
  */
 
-import { existsSync } from 'node:fs';
-import { readFile, readdir } from 'node:fs/promises';
-import { join } from 'node:path';
 import { GSDError, ErrorClassification } from '../errors.js';
-import { normalizePhaseName, planningPaths } from './helpers.js';
+import { adapterFor, normalizePhaseName } from './helpers.js';
 import { findPhase } from './phase.js';
 import { roadmapAnalyze } from './roadmap.js';
 import type { QueryHandler } from './utils.js';
@@ -23,9 +20,11 @@ function countFailLines(content: string): number {
   return (content.match(/\|\s*FAIL\s*\|/gi) || []).length;
 }
 
-async function readFileSafe(filePath: string): Promise<string | null> {
+import type { StorageAdapter } from '../../../adapters/types.js';
+
+async function readRecordSafe(adapter: StorageAdapter, relPath: string): Promise<string | null> {
   try {
-    return await readFile(filePath, 'utf-8');
+    return await adapter.getRecord(relPath);
   } catch {
     return null;
   }
@@ -53,7 +52,9 @@ function deriveUatStatus(content: string | null): string | null {
 // ─── Phase scope ───────────────────────────────────────────────────────────
 
 async function checkPhaseCompletion(phaseArg: string, projectDir: string): Promise<Record<string, unknown>> {
-  const phaseRes = await findPhase([phaseArg], projectDir);
+  // Phase 2 Plan 02-02 transitional: findPhase migrated to adapter signature.
+  const adapter = await adapterFor(projectDir);
+  const phaseRes = await findPhase(adapter, [phaseArg], projectDir);
   const pdata = phaseRes.data as Record<string, unknown>;
   const found = Boolean(pdata.found);
 
@@ -82,19 +83,23 @@ async function checkPhaseCompletion(phaseArg: string, projectDir: string): Promi
   let uatContent: string | null = null;
 
   if (found && pdata.directory) {
-    const phaseDirFull = join(projectDir, pdata.directory as string);
-    if (existsSync(phaseDirFull)) {
-      try {
-        const files = (await readdir(phaseDirFull)).sort((a, b) => a.localeCompare(b));
-        const verFile = files.includes('VERIFICATION.md')
-          ? 'VERIFICATION.md'
-          : files.find(f => f.endsWith('-VERIFICATION.md'));
-        const uatFile = files.includes('UAT.md') ? 'UAT.md' : files.find(f => f.endsWith('-UAT.md'));
-        if (verFile) verificationContent = await readFileSafe(join(phaseDirFull, verFile));
-        if (uatFile) uatContent = await readFileSafe(join(phaseDirFull, uatFile));
-      } catch {
-        // Phase dir unreadable — treat as no files
-      }
+    // findPhase returns a display-relative path (e.g. '.planning/phases/04-ui').
+    // The adapter is rooted at .planning/, so strip the leading prefix.
+    const displayDir = pdata.directory as string;
+    const phaseDirRel = displayDir.startsWith('.planning/')
+      ? displayDir.slice('.planning/'.length)
+      : displayDir;
+    try {
+      const phaseRefs = await adapter.listCollection(phaseDirRel);
+      const fileNames = phaseRefs.map(r => r.name).sort((a, b) => a.localeCompare(b));
+      const verFile = fileNames.includes('VERIFICATION.md')
+        ? 'VERIFICATION.md'
+        : fileNames.find(f => f.endsWith('-VERIFICATION.md'));
+      const uatFile = fileNames.includes('UAT.md') ? 'UAT.md' : fileNames.find(f => f.endsWith('-UAT.md'));
+      if (verFile) verificationContent = await readRecordSafe(adapter, `${phaseDirRel}/${verFile}`);
+      if (uatFile) uatContent = await readRecordSafe(adapter, `${phaseDirRel}/${uatFile}`);
+    } catch {
+      // Phase dir unreadable — treat as no files
     }
   }
 
@@ -127,7 +132,9 @@ async function checkPhaseCompletion(phaseArg: string, projectDir: string): Promi
 // ─── Milestone scope ───────────────────────────────────────────────────────
 
 async function checkMilestoneCompletion(projectDir: string): Promise<Record<string, unknown>> {
-  const analysis = await roadmapAnalyze([], projectDir);
+  // Phase 2 Plan 02-02 transitional: roadmapAnalyze migrated to adapter signature.
+  const adapter = await adapterFor(projectDir);
+  const analysis = await roadmapAnalyze(adapter, [], projectDir);
   const adata = analysis.data as { phases?: Array<Record<string, unknown>> };
   const phases = adata.phases ?? [];
 

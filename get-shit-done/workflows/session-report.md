@@ -24,17 +24,17 @@ git log --oneline --since="24 hours ago" --no-merges 2>/dev/null || echo "No rec
 git diff --stat HEAD~10 HEAD 2>/dev/null | tail -1 || echo "No diff available"
 ```
 
-Read `.planning/STATE.md` to get:
+`gsd-sdk query state.load` to get:
 - Current milestone and phase
 - Progress percentage
 - Active blockers
 - Recent decisions
 
-Read `.planning/ROADMAP.md` to get milestone name and goals.
+`gsd-sdk query roadmap` to get milestone name and goals.
 
 Check for existing reports:
 ```bash
-ls -la .planning/reports/SESSION_REPORT*.md 2>/dev/null || echo "No previous reports"
+gsd-sdk query report.list 2>/dev/null || echo "No previous reports"
 ```
 </step>
 
@@ -52,13 +52,9 @@ Estimation heuristics:
 </step>
 
 <step name="generate_report">
-Create the report directory and file:
+Create the report via the SDK (handles directory creation internally):
 
-```bash
-mkdir -p .planning/reports
-```
-
-Write `.planning/reports/SESSION_REPORT.md` (or `.planning/reports/YYYYMMDD-session-report.md` if previous reports exist):
+`gsd-sdk query report.put "SESSION_REPORT"` (or `gsd-sdk query report.put "YYYYMMDD-session-report"` if previous reports exist):
 
 ```markdown
 # GSD Session Report

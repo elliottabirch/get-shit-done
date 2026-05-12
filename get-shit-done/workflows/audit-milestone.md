@@ -294,7 +294,7 @@ they may close the gap retroactively without a new phase.
 ───────────────────────────────────────────────────────────────
 
 **Also available:**
-- cat .planning/v{version}-MILESTONE-AUDIT.md — see full report
+- gsd-sdk query named-doc.get "v{version}-MILESTONE-AUDIT" — see full report
 - /gsd-complete-milestone {version} — proceed anyway (accept tech debt)
 
 ───────────────────────────────────────────────────────────────

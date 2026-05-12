@@ -394,7 +394,7 @@ describe('GSDTools', () => {
   describe('resolveGsdToolsPath()', () => {
     it('prefers bundled gsd-tools over project .claude when the bundled file exists', async () => {
       const localBinDir = join(tmpDir, '.claude', 'get-shit-done', 'bin');
-      await mkdir(localBinDir, { recursive: true });
+      await mkdir(localBinDir, { recursive: true }); // leak-grep-ignore (creates .claude/bin, not .planning/)
       await writeFile(join(localBinDir, 'gsd-tools.cjs'), '// stub');
 
       const result = resolveGsdToolsPath(tmpDir);

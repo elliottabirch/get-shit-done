@@ -85,7 +85,7 @@ Use this instead of manually reading/parsing ROADMAP.md.
 - Use `current_phase` and `next_phase` from `$ROADMAP`
 - Note `paused_at` if work was paused (from `$STATE`)
 - Count pending todos: use `init todos` or `list-todos`
-- Check for active debug sessions: `(ls .planning/debug/*.md 2>/dev/null || true) | grep -v resolved | wc -l`
+- Check for active debug sessions: `gsd-sdk query debug-session.count-active 2>/dev/null || echo "0"`
   </step>
 
 <step name="report">
@@ -148,9 +148,9 @@ CONTEXT: [✓ if has_context | - if not]
 List files in the current phase directory:
 
 ```bash
-(ls -1 .planning/phases/[current-phase-dir]/*-PLAN.md 2>/dev/null || true) | wc -l
-(ls -1 .planning/phases/[current-phase-dir]/*-SUMMARY.md 2>/dev/null || true) | wc -l
-(ls -1 .planning/phases/[current-phase-dir]/*-UAT.md 2>/dev/null || true) | wc -l
+PLAN_COUNT=$(gsd-sdk query phase.count-plans "${PHASE}" 2>/dev/null || echo "0")
+SUMMARY_COUNT=$(gsd-sdk query phase.count-summaries "${PHASE}" 2>/dev/null || echo "0")
+UAT_COUNT=$(gsd-sdk query phase.count-uats "${PHASE}" 2>/dev/null || echo "0")
 ```
 
 State: "This phase has {X} plans, {Y} summaries."
@@ -524,9 +524,8 @@ Read STATE.md `status` / `stopped_at` fields (from the STATE snapshot already lo
 
 Check for existence of:
 ```bash
-ls .planning/HANDOFF.json .planning/phases/*/.continue-here.md .planning/phases/*/*HANDOFF*.md 2>/dev/null || true
+gsd-sdk query workspace.list-handoffs 2>/dev/null || true
 ```
-Also check `.planning/continue-here.md`.
 
 Emit:
 - ✓ `No orphaned handoff files` — if none found
@@ -547,9 +546,9 @@ Emit:
 
 **Check 4 — Memory-flagged pending work**
 
-Check if `.planning/MEMORY.md` or `.planning/memory/` exists:
+Check if memory docs exist:
 ```bash
-ls .planning/MEMORY.md .planning/memory/*.md 2>/dev/null || true
+gsd-sdk query named-doc.list --prefix "memory" 2>/dev/null || true
 ```
 
 If found, grep for entries containing: `pending`, `status`, `deferred`, `not yet run`, `backfill`, `blocking`.
@@ -562,7 +561,7 @@ Emit:
 
 Check for pending todos:
 ```bash
-ls .planning/todos/pending/*.md 2>/dev/null || true
+gsd-sdk query todo.list-pending 2>/dev/null || true
 ```
 
 For files found, scan for keywords indicating operational blockers: `script`, `credential`, `API key`, `manual`, `verification`, `setup`, `configure`, `run `.

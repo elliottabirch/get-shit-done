@@ -9,8 +9,7 @@
 
 import { findPhase } from './phase.js';
 import { readModifyWriteRoadmapMd, replaceInCurrentMilestone } from './phase-lifecycle.js';
-import { existsSync } from 'node:fs';
-import { escapeRegex, planningPaths } from './helpers.js';
+import { adapterFor, escapeRegex, planningPaths, planningRelativePath } from './helpers.js';
 import { GSDError, ErrorClassification } from '../errors.js';
 import type { QueryHandler } from './utils.js';
 
@@ -36,7 +35,9 @@ export const roadmapUpdatePlanProgress: QueryHandler = async (args, projectDir, 
     throw new GSDError('phase number required for roadmap update-plan-progress', ErrorClassification.Validation);
   }
 
-  const phaseResult = await findPhase([phaseNum], projectDir, workstream);
+  // Phase 2 Plan 02-02 transitional: findPhase migrated to adapter signature.
+  const adapter = await adapterFor(projectDir);
+  const phaseResult = await findPhase(adapter, [phaseNum], projectDir, workstream);
   const info = phaseResult.data as {
     found: boolean;
     plans: string[];
@@ -65,8 +66,8 @@ export const roadmapUpdatePlanProgress: QueryHandler = async (args, projectDir, 
   const status = isComplete ? 'Complete' : summaryCount > 0 ? 'In Progress' : 'Planned';
   const today = new Date().toISOString().split('T')[0]!;
 
-  const roadmapPath = planningPaths(projectDir, workstream).roadmap;
-  if (!existsSync(roadmapPath)) {
+  const roadmapAdapter = await adapterFor(projectDir);
+  if (!(await roadmapAdapter.exists(planningRelativePath(workstream, 'ROADMAP.md')))) {
     return {
       data: {
         updated: false,

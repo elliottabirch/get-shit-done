@@ -13,6 +13,11 @@ import { createRegistry } from './index.js';
 import { GSDEventStream } from '../event-stream.js';
 import { GSDEventType } from '../types.js';
 import type { GSDEvent } from '../types.js';
+import { MarkdownAdapter } from '../../../adapters/markdown/index.js';
+
+function makeRegistry(projectDir: string, opts?: { eventStream?: GSDEventStream; correlationSessionId?: string }) {
+  return createRegistry({ adapter: new MarkdownAdapter(projectDir), ...opts });
+}
 
 let tmpDir: string;
 
@@ -137,7 +142,7 @@ describe('event emission wiring', () => {
     const events: GSDEvent[] = [];
     eventStream.on('event', (e: GSDEvent) => events.push(e));
 
-    const registry = createRegistry(eventStream, 'corr-xyz');
+    const registry = makeRegistry(tmpDir, { eventStream, correlationSessionId: 'corr-xyz' });
     await registry.dispatch('state.update', ['status', 'Executing'], tmpDir);
 
     const mutationEvents = events.filter(e => e.type === GSDEventType.StateMutation);
@@ -155,7 +160,7 @@ describe('event emission wiring', () => {
     const events: GSDEvent[] = [];
     eventStream.on('event', (e: GSDEvent) => events.push(e));
 
-    const registry = createRegistry(eventStream);
+    const registry = makeRegistry(tmpDir, { eventStream });
     await registry.dispatch('config-set', ['model_profile', 'quality'], tmpDir);
 
     const mutationEvents = events.filter(e => e.type === GSDEventType.ConfigMutation);
@@ -171,7 +176,7 @@ describe('event emission wiring', () => {
     const events: GSDEvent[] = [];
     eventStream.on('event', (e: GSDEvent) => events.push(e));
 
-    const registry = createRegistry(eventStream);
+    const registry = makeRegistry(tmpDir, { eventStream });
     await registry.dispatch('template.fill', ['summary', outPath], tmpDir);
 
     const templateEvents = events.filter(e => e.type === GSDEventType.TemplateFill);

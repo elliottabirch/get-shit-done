@@ -5,7 +5,7 @@ Resolve model profile once at the start of orchestration, then use it for all Ta
 ## Resolution Pattern
 
 ```bash
-MODEL_PROFILE=$(cat .planning/config.json 2>/dev/null | grep -o '"model_profile"[[:space:]]*:[[:space:]]*"[^"]*"' | grep -o '"[^"]*"$' | tr -d '"' || echo "balanced")
+MODEL_PROFILE=$(gsd-sdk query config-get model_profile 2>/dev/null || echo "balanced")
 ```
 
 Default: `balanced` if not set or config missing.

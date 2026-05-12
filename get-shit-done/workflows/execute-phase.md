@@ -694,11 +694,11 @@ increases monotonically across waves. `{status}` is `complete` (success),
        # and ROADMAP.md are stale. Main always wins for these files.
        STATE_BACKUP=$(mktemp)
        ROADMAP_BACKUP=$(mktemp)
-       [ -f .planning/STATE.md ] && cp .planning/STATE.md "$STATE_BACKUP" || true
-       [ -f .planning/ROADMAP.md ] && cp .planning/ROADMAP.md "$ROADMAP_BACKUP" || true
+       gsd-sdk query state.load > "$STATE_BACKUP" 2>/dev/null || true
+       gsd-sdk query roadmap > "$ROADMAP_BACKUP" 2>/dev/null || true
 
        # Snapshot list of files on main BEFORE merge to detect resurrections
-       PRE_MERGE_FILES=$(git ls-files .planning/)
+       PRE_MERGE_FILES=$(gsd-sdk query state.list-files 2>/dev/null || git ls-tree --name-only -r HEAD -- .planning/)
 
        # Pre-merge deletion check: warn if the worktree branch deletes tracked files
        DELETIONS=$(git diff --diff-filter=D --name-only HEAD..."$WT_BRANCH" 2>/dev/null || true)
@@ -714,7 +714,7 @@ increases monotonically across waves. `{status}` is `complete` (success),
          echo "⚠ Merge conflict from worktree $WT_BRANCH — resolve manually"
          echo "  STATE.md backup:   $STATE_BACKUP"
          echo "  ROADMAP.md backup: $ROADMAP_BACKUP"
-         echo "  Restore with: cp \$STATE_BACKUP .planning/STATE.md && cp \$ROADMAP_BACKUP .planning/ROADMAP.md"
+         echo "  Restore with: gsd-sdk query state.restore-snapshot \$STATE_BACKUP && gsd-sdk query roadmap.restore-snapshot \$ROADMAP_BACKUP"
          break
        }
 
@@ -735,10 +735,10 @@ increases monotonically across waves. `{status}` is `complete` (success),
 
        # Restore orchestrator-owned files (main always wins)
        if [ -s "$STATE_BACKUP" ]; then
-         cp "$STATE_BACKUP" .planning/STATE.md
+         gsd-sdk query state.restore-snapshot "$STATE_BACKUP" 2>/dev/null || true
        fi
        if [ -s "$ROADMAP_BACKUP" ]; then
-         cp "$ROADMAP_BACKUP" .planning/ROADMAP.md
+         gsd-sdk query roadmap.restore-snapshot "$ROADMAP_BACKUP" 2>/dev/null || true
        fi
        rm -f "$STATE_BACKUP" "$ROADMAP_BACKUP"
 
@@ -763,7 +763,7 @@ increases monotonically across waves. `{status}` is `complete` (success),
          # Only amend the commit with .planning/ files if commit_docs is enabled (#1783)
          COMMIT_DOCS=$(gsd-sdk query config-get commit_docs 2>/dev/null || echo "true")
          if [ "$COMMIT_DOCS" != "false" ]; then
-           git add .planning/STATE.md .planning/ROADMAP.md 2>/dev/null || true
+           gsd-sdk query commit "docs: update tracking" --files state.md roadmap.md 2>/dev/null || true
            git commit --amend --no-edit 2>/dev/null || true
          fi
        fi
@@ -1184,10 +1184,9 @@ For each gap that has a `debug_session:` field:
 - Read the debug session file
 - Update frontmatter `status:` → `resolved`
 - Update frontmatter `updated:` timestamp
-- Move to resolved directory:
+- Archive the debug session:
 ```bash
-mkdir -p .planning/debug/resolved
-mv .planning/debug/{slug}.md .planning/debug/resolved/
+gsd-sdk query debug.archive "{slug}"
 ```
 
 **6. Commit updated artifacts:**
@@ -1204,7 +1203,7 @@ Run prior phases' test suites to catch cross-phase regressions BEFORE verificati
 **Step 1: Discover prior phases' test files**
 ```bash
 # Find all VERIFICATION.md files from prior phases in current milestone
-PRIOR_VERIFICATIONS=$(find .planning/phases/ -name "*-VERIFICATION.md" ! -path "*${PHASE_NUMBER}*" 2>/dev/null)
+PRIOR_VERIFICATIONS=$(gsd-sdk query phase.list-verifications --exclude "${PHASE_NUMBER}" 2>/dev/null)
 ```
 
 **Step 2: Extract test file lists from prior verifications**
@@ -1572,8 +1571,8 @@ fi
 PROJECT.md tracks validated requirements, decisions, and current state. Without this step,
 PROJECT.md falls behind silently over multiple phases.
 
-1. Read `.planning/PROJECT.md`
-2. If the file exists and has a `## Validated Requirements` or `## Requirements` section:
+1. Load project context: `gsd-sdk query project.get`
+2. If the project has a `## Validated Requirements` or `## Requirements` section:
    - Move any requirements validated by this phase from Active → Validated
    - Add a brief note: `Validated in Phase {X}: {Name}`
 3. If the file has a `## Current State` or similar section:
@@ -1645,7 +1644,7 @@ Read and follow `~/.claude/get-shit-done/workflows/transition.md`, passing throu
 Check whether CONTEXT.md already exists for the next phase:
 
 ```bash
-ls .planning/phases/*{next}*/{next}-CONTEXT.md 2>/dev/null || echo "no-context"
+gsd-sdk query phase.has-context "${next}" 2>/dev/null || echo "no-context"
 ```
 
 If CONTEXT.md does **not** exist for the next phase, present:

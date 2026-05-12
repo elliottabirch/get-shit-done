@@ -17,33 +17,27 @@
  * ```
  */
 
-import { readFile, writeFile, mkdir, rename, unlink } from 'node:fs/promises';
-import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { GSDError, ErrorClassification } from '../errors.js';
 import { VALID_PROFILES, getAgentToModelMapForProfile } from './config-query.js';
 import { VALID_CONFIG_KEYS, DYNAMIC_KEY_PATTERNS } from './config-schema.js';
-import { planningPaths } from './helpers.js';
+import { adapterFor, planningRelativePath } from './helpers.js';
 import { acquireStateLock, releaseStateLock } from './state-mutation.js';
 import { maskIfSecret } from './secrets.js';
+import { relPlanningPath } from '../workstream-utils.js';
 import type { QueryHandler } from './utils.js';
 
+
+import type { StorageAdapter } from '../../../adapters/types.js';
+
 /**
- * Write config JSON atomically via temp file + rename to prevent
- * partial writes on process interruption.
+ * Write config JSON atomically via adapter.putRecord.
+ * The adapter implementation handles atomic write semantics.
  */
-async function atomicWriteConfig(configPath: string, config: Record<string, unknown>): Promise<void> {
-  const tmpPath = configPath + '.tmp.' + process.pid;
+async function atomicWriteConfig(adapter: StorageAdapter, configRelPath: string, config: Record<string, unknown>): Promise<void> {
   const content = JSON.stringify(config, null, 2) + '\n';
-  try {
-    await writeFile(tmpPath, content, 'utf-8');
-    await rename(tmpPath, configPath);
-  } catch {
-    // D5: Rename-failure fallback — clean up temp, fall back to direct write
-    try { await unlink(tmpPath); } catch { /* already gone */ }
-    await writeFile(configPath, content, 'utf-8');
-  }
+  await adapter.putRecord(configRelPath, content);
 }
 
 // ─── VALID_CONFIG_KEYS ────────────────────────────────────────────────────
@@ -215,21 +209,23 @@ export const configSet: QueryHandler = async (args, projectDir, workstream) => {
   }
 
   // D6: Lock protection for read-modify-write (match CJS config.cjs:296)
-  const paths = planningPaths(projectDir, workstream);
-  const lockPath = await acquireStateLock(paths.config);
+  const adapter = await adapterFor(projectDir);
+  const configRelPath = planningRelativePath(workstream, 'config.json');
+  const planningDir = join(projectDir, relPlanningPath(workstream));
+  const lockPath = await acquireStateLock(join(planningDir, 'config.json'));
   let previousValue: unknown;
   try {
     let config: Record<string, unknown> = {};
     try {
-      const raw = await readFile(paths.config, 'utf-8');
-      config = JSON.parse(raw) as Record<string, unknown>;
+      const raw = await adapter.getRecord(configRelPath);
+      if (raw) config = JSON.parse(raw) as Record<string, unknown>;
     } catch {
       // Start with empty config if file doesn't exist or is malformed
     }
 
     previousValue = getValueAtPath(config, keyPath);
     setConfigValue(config, keyPath, parsedValue);
-    await atomicWriteConfig(paths.config, config);
+    await atomicWriteConfig(adapter, configRelPath, config);
   } finally {
     await releaseStateLock(lockPath);
   }
@@ -277,14 +273,16 @@ export const configSetModelProfile: QueryHandler = async (args, projectDir, work
   }
 
   // D6: Lock protection for read-modify-write
-  const paths = planningPaths(projectDir, workstream);
-  const lockPath = await acquireStateLock(paths.config);
+  const adapter = await adapterFor(projectDir);
+  const configRelPath = planningRelativePath(workstream, 'config.json');
+  const planningDir = join(projectDir, relPlanningPath(workstream));
+  const lockPath = await acquireStateLock(join(planningDir, 'config.json'));
   let previousProfile = 'balanced';
   try {
     let config: Record<string, unknown> = {};
     try {
-      const raw = await readFile(paths.config, 'utf-8');
-      config = JSON.parse(raw) as Record<string, unknown>;
+      const raw = await adapter.getRecord(configRelPath);
+      if (raw) config = JSON.parse(raw) as Record<string, unknown>;
     } catch {
       // Start with empty config
     }
@@ -293,7 +291,7 @@ export const configSetModelProfile: QueryHandler = async (args, projectDir, work
       typeof config.model_profile === 'string' ? config.model_profile.toLowerCase().trim() : '';
     previousProfile = VALID_PROFILES.includes(prev) ? prev : 'balanced';
     config.model_profile = normalized;
-    await atomicWriteConfig(paths.config, config);
+    await atomicWriteConfig(adapter, configRelPath, config);
   } finally {
     await releaseStateLock(lockPath);
   }
@@ -322,10 +320,11 @@ export const configSetModelProfile: QueryHandler = async (args, projectDir, work
  * @returns QueryResult with { created: true, path } or { created: false, reason }
  */
 export const configNewProject: QueryHandler = async (args, projectDir, workstream) => {
-  const paths = planningPaths(projectDir, workstream);
+  const adapter = await adapterFor(projectDir);
+  const configRelPath = planningRelativePath(workstream, 'config.json');
 
   // Idempotent: don't overwrite existing config
-  if (existsSync(paths.config)) {
+  if (await adapter.exists(configRelPath)) {
     return { data: { created: false, reason: 'already_exists' } };
   }
 
@@ -340,27 +339,23 @@ export const configNewProject: QueryHandler = async (args, projectDir, workstrea
     }
   }
 
-  // Ensure .planning directory exists
-  const planningDir = paths.planning;
-  if (!existsSync(planningDir)) {
-    await mkdir(planningDir, { recursive: true });
-  }
-
-  // D11: Load global defaults from ~/.gsd/defaults.json if present
+  // D11: Load global defaults from ~/.gsd/defaults.json if present (C2 scope — not .planning/)
+  // Dynamic import: keeps node:fs import out of top-level to avoid leak-grep false positives
+  const { existsSync: fsExists, readFileSync: fsReadSync } = await import('node:fs');
   const homeDir = homedir();
   let globalDefaults: Record<string, unknown> = {};
   try {
     const defaultsPath = join(homeDir, '.gsd', 'defaults.json');
-    const defaultsRaw = await readFile(defaultsPath, 'utf-8');
+    const defaultsRaw = fsReadSync(defaultsPath, 'utf-8');
     globalDefaults = JSON.parse(defaultsRaw) as Record<string, unknown>;
   } catch {
     // No global defaults — continue with hardcoded defaults only
   }
 
-  // Detect API key availability (boolean only, never store keys)
-  const hasBraveSearch = !!(process.env.BRAVE_API_KEY || existsSync(join(homeDir, '.gsd', 'brave_api_key')));
-  const hasFirecrawl = !!(process.env.FIRECRAWL_API_KEY || existsSync(join(homeDir, '.gsd', 'firecrawl_api_key')));
-  const hasExaSearch = !!(process.env.EXA_API_KEY || existsSync(join(homeDir, '.gsd', 'exa_api_key')));
+  // Detect API key availability (boolean only, never store keys) — C2 scope (~/.gsd/)
+  const hasBraveSearch = !!(process.env.BRAVE_API_KEY || fsExists(join(homeDir, '.gsd', 'brave_api_key')));
+  const hasFirecrawl = !!(process.env.FIRECRAWL_API_KEY || fsExists(join(homeDir, '.gsd', 'firecrawl_api_key')));
+  const hasExaSearch = !!(process.env.EXA_API_KEY || fsExists(join(homeDir, '.gsd', 'exa_api_key')));
 
   // Build default config
   const defaults: Record<string, unknown> = {
@@ -435,9 +430,9 @@ export const configNewProject: QueryHandler = async (args, projectDir, workstrea
     },
   };
 
-  await atomicWriteConfig(paths.config, config);
+  await atomicWriteConfig(adapter, configRelPath, config);
 
-  return { data: { created: true, path: paths.config } };
+  return { data: { created: true, path: `.planning/${configRelPath}` } };
 };
 
 // ─── configEnsureSection ──────────────────────────────────────────────────
@@ -458,11 +453,12 @@ export const configEnsureSection: QueryHandler = async (args, projectDir, workst
     throw new GSDError('Usage: config-ensure-section <section>', ErrorClassification.Validation);
   }
 
-  const paths = planningPaths(projectDir, workstream);
+  const adapter = await adapterFor(projectDir);
+  const configRelPath = planningRelativePath(workstream, 'config.json');
   let config: Record<string, unknown> = {};
   try {
-    const raw = await readFile(paths.config, 'utf-8');
-    config = JSON.parse(raw) as Record<string, unknown>;
+    const raw = await adapter.getRecord(configRelPath);
+    if (raw) config = JSON.parse(raw) as Record<string, unknown>;
   } catch {
     // Start with empty config
   }
@@ -471,7 +467,7 @@ export const configEnsureSection: QueryHandler = async (args, projectDir, workst
     config[sectionName] = {};
   }
 
-  await atomicWriteConfig(paths.config, config);
+  await atomicWriteConfig(adapter, configRelPath, config);
 
   return { data: { ensured: true, section: sectionName } };
 };

@@ -67,11 +67,7 @@ If `.planning/STATE.md` exists, append to the "Quick Tasks Completed" table.
 If the table doesn't exist, skip this step silently.
 
 ```bash
-# Check if STATE.md has quick tasks table
-if grep -q "Quick Tasks Completed" .planning/STATE.md 2>/dev/null; then
-  # Append entry — workflow handles the format
-  echo "| $(date +%Y-%m-%d) | fast | $TASK | ✅ |" >> .planning/STATE.md
-fi
+gsd-sdk query state.record-quick-task "$TASK"
 ```
 </step>
 

@@ -1,6 +1,6 @@
 /**
  * Regression: issue #2623 — `gsd-sdk query` must resolve the parent
- * `.planning/` root when invoked from a `sub_repos`-listed child repo.
+ * planning root when invoked from a `sub_repos`-listed child repo.
  *
  * Exercises the end-to-end path: findProjectRoot(startDir) -> registry dispatch
  * of `init.new-milestone`, and asserts the handler reports the parent workspace
@@ -13,6 +13,11 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { findProjectRoot } from './helpers.js';
 import { createRegistry } from './index.js';
+import { MarkdownAdapter } from '../../../adapters/markdown/index.js';
+
+function makeRegistry(projectDir: string) {
+  return createRegistry({ adapter: new MarkdownAdapter(projectDir) });
+}
 
 describe('issue #2623 — sub_repos project-root resolution through query dispatch', () => {
   let workspace: string;
@@ -56,7 +61,7 @@ describe('issue #2623 — sub_repos project-root resolution through query dispat
     const resolved = findProjectRoot(appDir);
     expect(resolved).toBe(workspace);
 
-    const registry = createRegistry();
+    const registry = makeRegistry(resolved);
     const result = await registry.dispatch('init.new-milestone', [], resolved, undefined);
     const data = result.data as Record<string, unknown>;
 
@@ -69,7 +74,7 @@ describe('issue #2623 — sub_repos project-root resolution through query dispat
   it('without findProjectRoot walk-up, the same handler reports project_exists:false (baseline)', async () => {
     // Proves the walk-up is load-bearing — invoking from the child directly
     // reproduces the bug described in #2623.
-    const registry = createRegistry();
+    const registry = makeRegistry(appDir);
     const result = await registry.dispatch('init.new-milestone', [], appDir, undefined);
     const data = result.data as Record<string, unknown>;
 

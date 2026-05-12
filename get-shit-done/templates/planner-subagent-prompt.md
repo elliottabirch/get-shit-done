@@ -12,24 +12,12 @@ Template for spawning gsd-planner agent. The agent contains all planning experti
 **Phase:** {phase_number}
 **Mode:** {standard | gap_closure}
 
-**Project State:**
-@.planning/STATE.md
-
-**Roadmap:**
-@.planning/ROADMAP.md
-
-**Requirements (if exists):**
-@.planning/REQUIREMENTS.md
-
-**Phase Context (if exists):**
-@.planning/phases/{phase_dir}/{phase_num}-CONTEXT.md
-
-**Research (if exists):**
-@.planning/phases/{phase_dir}/{phase_num}-RESEARCH.md
-
-**Gap Closure (if --gaps mode):**
-@.planning/phases/{phase_dir}/{phase_num}-VERIFICATION.md
-@.planning/phases/{phase_dir}/{phase_num}-UAT.md
+<project_context>
+<!-- Injected by orchestrator via: gsd-sdk query init.plan-phase "{phase_number}" -->
+<!-- Provides: STATE.md, ROADMAP.md, REQUIREMENTS.md, CONTEXT.md, RESEARCH.md content -->
+<!-- Gap closure (if --gaps): VERIFICATION.md, UAT.md also injected -->
+{planning_context_placeholder}
+</project_context>
 
 </planning_context>
 
@@ -98,8 +86,9 @@ Continue planning for Phase {phase_number}: {phase_name}
 </objective>
 
 <prior_state>
-Phase directory: @.planning/phases/{phase_dir}/
-Existing plans: @.planning/phases/{phase_dir}/*-PLAN.md
+<!-- Injected by orchestrator via: gsd-sdk query init.plan-phase "{phase_number}" -->
+<!-- Provides: phase directory listing, existing PLAN.md content -->
+{prior_plans_content}
 </prior_state>
 
 <checkpoint_response>

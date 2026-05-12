@@ -45,9 +45,9 @@ if [[ "$INIT" == @file:* ]]; then INIT=$(cat "${INIT#@file:}"); fi
 
 Look up which documents would be produced for the selected focus (from the mapping table above).
 
-For each target document, check if it already exists in `.planning/codebase/`:
+For each target document, check if it already exists:
 ```bash
-ls -la .planning/codebase/{DOCUMENT}.md 2>/dev/null
+gsd-sdk query codebase-docs.exists "{DOCUMENT}" 2>/dev/null
 ```
 
 If any exist, show their modification dates and ask:
@@ -64,7 +64,7 @@ If user says no, exit.
 ## Step 3: Create output directory
 
 ```bash
-mkdir -p .planning/codebase
+gsd-sdk query workspace.ensure-dir "codebase"
 ```
 
 ## Step 4: Spawn mapper agent

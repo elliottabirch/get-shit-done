@@ -17,10 +17,9 @@
  * ```
  */
 
-import { readFile } from 'node:fs/promises';
 import { spawnSync } from 'node:child_process';
 import { GSDError } from '../errors.js';
-import { planningPaths, resolvePathUnderProject } from './helpers.js';
+import { planningPaths, resolvePathUnderProject, adapterFor, planningRelativePath } from './helpers.js';
 import type { QueryHandler } from './utils.js';
 
 // ─── execGit ──────────────────────────────────────────────────────────────
@@ -117,12 +116,14 @@ export const commit: QueryHandler = async (args, projectDir, workstream) => {
 
   // Check commit_docs config unless --force
   if (!hasForce) {
-    const paths = planningPaths(projectDir, workstream);
+    const commitAdapter = await adapterFor(projectDir);
     try {
-      const raw = await readFile(paths.config, 'utf-8');
-      const config = JSON.parse(raw) as Record<string, unknown>;
-      if (config.commit_docs === false) {
-        return { data: { committed: false, reason: 'commit_docs disabled' } };
+      const raw = await commitAdapter.getRecord(planningRelativePath(workstream, 'config.json'));
+      if (raw) {
+        const config = JSON.parse(raw) as Record<string, unknown>;
+        if (config.commit_docs === false) {
+          return { data: { committed: false, reason: 'commit_docs disabled' } };
+        }
       }
     } catch {
       // No config or malformed — allow commit
@@ -182,13 +183,16 @@ export const commit: QueryHandler = async (args, projectDir, workstream) => {
  */
 export const checkCommit: QueryHandler = async (_args, projectDir, workstream) => {
   const paths = planningPaths(projectDir, workstream);
+  const checkAdapter = await adapterFor(projectDir);
 
   let commitDocs = true;
   try {
-    const raw = await readFile(paths.config, 'utf-8');
-    const config = JSON.parse(raw) as Record<string, unknown>;
-    if (config.commit_docs === false) {
-      commitDocs = false;
+    const raw = await checkAdapter.getRecord(planningRelativePath(workstream, 'config.json'));
+    if (raw) {
+      const config = JSON.parse(raw) as Record<string, unknown>;
+      if (config.commit_docs === false) {
+        commitDocs = false;
+      }
     }
   } catch {
     // No config — default to allowing commits
@@ -240,10 +244,11 @@ export const commitToSubrepo: QueryHandler = async (args, projectDir, workstream
   }
 
   const paths = planningPaths(projectDir, workstream);
+  const subRepoAdapter = await adapterFor(projectDir);
   let config: Record<string, unknown> = {};
   try {
-    const raw = await readFile(paths.config, 'utf-8');
-    config = JSON.parse(raw) as Record<string, unknown>;
+    const raw = await subRepoAdapter.getRecord(planningRelativePath(workstream, 'config.json'));
+    if (raw) config = JSON.parse(raw) as Record<string, unknown>;
   } catch {
     /* no config */
   }

@@ -19,6 +19,30 @@ export default defineConfig({
           testTimeout: 120_000,
         },
       },
+      {
+        test: {
+          name: 'adapters',
+          root: './adapters',
+          // types.test.ts is primarily compile-time but now also carries
+          // runtime describe blocks (Phase 5 Plan 01 D-13/D-14 assertions;
+          // Phase 6 Plan 01 D-OQ06-CAPS graphEdges assertion). Include it
+          // alongside the markdown suite so those runtime checks execute.
+          include: ['markdown/**/*.test.ts', 'types.test.ts'],
+          exclude: ['dist/**'],
+        },
+      },
+      {
+        // Phase 2 Plan 02-05: register-completeness test for the
+        // <context>-block @.planning/ leak class (READS-03 / OQ-04 partial).
+        // The test runs the audit script and the leak-grep engine, then
+        // cross-references the generated register.
+        test: {
+          name: 'leak-grep',
+          root: './tests/leak-grep',
+          include: ['**/*.test.ts'],
+          exclude: ['fixtures/**'],
+        },
+      },
     ],
   },
 });

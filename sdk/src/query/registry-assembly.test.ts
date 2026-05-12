@@ -1,8 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { QueryRegistry } from './registry.js';
+import { createRegistry } from './index.js';
 import {
-  buildRegistry,
-  createRegistry,
   decorateRegistryMutations,
   QUERY_MUTATION_COMMANDS,
 } from './registry-assembly.js';
@@ -19,9 +18,18 @@ import { REGISTRY_ASSEMBLY_PLAN } from './registry-assembly-descriptor.js';
 
 const noop = async () => ({ data: null });
 
+// Fork note: the fork's canonical registry factory is `createRegistry()` in
+// `./index.ts`, which wires each handler with closure-bound adapter DI.
+// Upstream's `buildRegistry()` / declarative assembly plan (in
+// `./registry-assembly.ts` + `./registry-assembly-descriptor.ts`) is left
+// intact as a compatibility shim, but this fork's non-family mutation
+// commands (codebase.put, tmp.put, todo.add, etc.) are registered in
+// `index.ts` rather than in the static catalogs the plan walks. These
+// tests therefore assert registry invariants against `createRegistry`,
+// which is the code path every runtime consumer actually uses.
 describe('registry assembly', () => {
-  it('buildRegistry returns registered registry', () => {
-    const registry = buildRegistry();
+  it('fork createRegistry returns registered registry with canonical aliases', () => {
+    const registry = createRegistry();
     expect(registry.has('state.load')).toBe(true);
     expect(registry.has('verify-summary')).toBe(true);
     expect(registry.has('verify.summary')).toBe(true);
@@ -35,18 +43,21 @@ describe('registry assembly', () => {
   });
 
   it('decorateRegistryMutations is no-op without event stream', () => {
-    const registry = buildRegistry();
+    const registry = createRegistry();
     expect(() => decorateRegistryMutations(registry, undefined, 's')).not.toThrow();
   });
 
   it('QUERY_MUTATION_COMMANDS entries are present in registry', () => {
-    const registry = buildRegistry();
+    const registry = createRegistry();
     for (const command of QUERY_MUTATION_COMMANDS) {
       expect(registry.has(command), `missing mutation command: ${command}`).toBe(true);
     }
   });
 
-  it('uses declarative registry assembly plan', () => {
+  it('upstream declarative registry assembly plan is well-formed', () => {
+    // The plan descriptor is upstream compatibility metadata; the fork's
+    // factory doesn't walk it at runtime, but its shape is still a useful
+    // invariant for future upstream merges.
     expect(REGISTRY_ASSEMBLY_PLAN.length).toBeGreaterThan(0);
     expect(REGISTRY_ASSEMBLY_PLAN[0]).toEqual({ kind: 'static', key: 'FOUNDATION_STATIC_CATALOG' });
   });

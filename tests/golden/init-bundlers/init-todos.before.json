@@ -1,0 +1,17 @@
+{
+  "commit_docs": true,
+  "date": "2026-05-01",
+  "timestamp": "2026-05-01T09:25:52.397Z",
+  "todo_count": 0,
+  "todos": [],
+  "area_filter": null,
+  "pending_dir": ".planning/todos/pending",
+  "completed_dir": ".planning/todos/completed",
+  "planning_exists": true,
+  "todos_dir_exists": false,
+  "pending_dir_exists": false,
+  "project_root": "/home/ellio/code/get-shit-done/.claude/worktrees/agent-afe48fc6f178f469c",
+  "agents_installed": true,
+  "missing_agents": [],
+  "project_title": "Project: get-shit-done (fork — adapter-interface seam)"
+}

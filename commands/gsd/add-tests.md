@@ -28,11 +28,13 @@ Output: Test files committed with message `test(phase-{N}): add unit and E2E tes
 @~/.claude/get-shit-done/workflows/add-tests.md
 </execution_context>
 
+<project_context>
+<!-- Injected by orchestrator via: gsd-sdk query init.execute-phase -->
+<!-- Provides: STATE.md content, ROADMAP.md content -->
+</project_context>
+
 <context>
 Phase: $ARGUMENTS
-
-@.planning/STATE.md
-@.planning/ROADMAP.md
 </context>
 
 <process>

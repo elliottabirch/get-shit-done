@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it, expect } from 'vitest';
 import { checkPhaseReady } from './phase-ready.js';
+import { MarkdownAdapter } from '../../../adapters/markdown/index.js';
 
 async function writeMinimalRoadmap(root: string): Promise<void> {
   await mkdir(join(root, '.planning'), { recursive: true });
@@ -33,13 +34,15 @@ describe('checkPhaseReady', () => {
   it('throws when phase is missing', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'gsd-pr-'));
     await mkdir(join(dir, '.planning'), { recursive: true });
-    await expect(checkPhaseReady([], dir)).rejects.toThrow(/phase number required/);
+    const adapter = new MarkdownAdapter(dir);
+    await expect(checkPhaseReady(adapter, [], dir)).rejects.toThrow(/phase number required/);
   });
 
   it('returns discuss next_step when phase directory is missing', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'gsd-pr-'));
     await writeMinimalRoadmap(dir);
-    const { data } = await checkPhaseReady(['3'], dir);
+    const adapter = new MarkdownAdapter(dir);
+    const { data } = await checkPhaseReady(adapter, ['3'], dir);
     expect(data).toMatchObject({
       found: false,
       next_step: 'discuss',
@@ -53,7 +56,8 @@ describe('checkPhaseReady', () => {
     const phaseDir = join(dir, '.planning', 'phases', '03-sample-phase');
     await mkdir(phaseDir, { recursive: true });
     await writeFile(join(phaseDir, '03-CONTEXT.md'), '# Ctx\n', 'utf-8');
-    const { data } = await checkPhaseReady(['3'], dir);
+    const adapter = new MarkdownAdapter(dir);
+    const { data } = await checkPhaseReady(adapter, ['3'], dir);
     expect(data).toMatchObject({
       found: true,
       has_context: true,

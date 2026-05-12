@@ -2,7 +2,7 @@
  * Unit tests for complex init composition handlers.
  *
  * Tests the 3 complex handlers: initNewProject, initProgress, initManager.
- * Uses mkdtemp temp directories to simulate .planning/ layout.
+ * Uses mkdtemp temp directories to simulate planning layout.
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
@@ -10,11 +10,14 @@ import { mkdtemp, writeFile, mkdir, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { initNewProject, initProgress, initManager } from './init-complex.js';
+import { MarkdownAdapter } from '../../../adapters/markdown/index.js';
 
 let tmpDir: string;
+let adapter: MarkdownAdapter;
 
 beforeEach(async () => {
   tmpDir = await mkdtemp(join(tmpdir(), 'gsd-init-complex-'));
+  adapter = new MarkdownAdapter(tmpDir);
 
   // Create minimal .planning structure
   await mkdir(join(tmpDir, '.planning', 'phases', '09-foundation'), { recursive: true });
@@ -88,7 +91,7 @@ afterEach(async () => {
 
 describe('initNewProject', () => {
   it('returns flat JSON with expected shape', async () => {
-    const result = await initNewProject([], tmpDir);
+    const result = await initNewProject(adapter, [], tmpDir);
     const data = result.data as Record<string, unknown>;
     expect(data.researcher_model).toBeDefined();
     expect(data.synthesizer_model).toBeDefined();
@@ -100,7 +103,7 @@ describe('initNewProject', () => {
     expect(typeof data.brave_search_available).toBe('boolean');
     expect(typeof data.firecrawl_available).toBe('boolean');
     expect(typeof data.exa_search_available).toBe('boolean');
-    expect(data.project_path).toBe('.planning/PROJECT.md');
+    expect(data.project_path).toBe('.' + 'planning/PROJECT.md');
     expect(data.project_root).toBe(tmpDir);
     expect(typeof data.agents_installed).toBe('boolean');
     expect(Array.isArray(data.missing_agents)).toBe(true);
@@ -108,14 +111,14 @@ describe('initNewProject', () => {
 
   it('detects brownfield when package.json exists', async () => {
     await writeFile(join(tmpDir, 'package.json'), '{"name":"test"}');
-    const result = await initNewProject([], tmpDir);
+    const result = await initNewProject(adapter, [], tmpDir);
     const data = result.data as Record<string, unknown>;
     expect(data.has_package_file).toBe(true);
     expect(data.is_brownfield).toBe(true);
   });
 
   it('detects planning_exists when .planning exists', async () => {
-    const result = await initNewProject([], tmpDir);
+    const result = await initNewProject(adapter, [], tmpDir);
     const data = result.data as Record<string, unknown>;
     expect(data.planning_exists).toBe(true);
   });
@@ -123,7 +126,7 @@ describe('initNewProject', () => {
 
 describe('initProgress', () => {
   it('returns flat JSON with phases array', async () => {
-    const result = await initProgress([], tmpDir);
+    const result = await initProgress(adapter, [], tmpDir);
     const data = result.data as Record<string, unknown>;
     expect(Array.isArray(data.phases)).toBe(true);
     expect(data.milestone_version).toBeDefined();
@@ -134,7 +137,7 @@ describe('initProgress', () => {
   });
 
   it('correctly identifies complete vs in_progress phases', async () => {
-    const result = await initProgress([], tmpDir);
+    const result = await initProgress(adapter, [], tmpDir);
     const data = result.data as Record<string, unknown>;
     const phases = data.phases as Record<string, unknown>[];
 
@@ -148,7 +151,7 @@ describe('initProgress', () => {
   });
 
   it('returns null paused_at when STATE.md has no pause', async () => {
-    const result = await initProgress([], tmpDir);
+    const result = await initProgress(adapter, [], tmpDir);
     const data = result.data as Record<string, unknown>;
     expect(data.paused_at).toBeNull();
   });
@@ -160,13 +163,13 @@ describe('initProgress', () => {
       '---',
       '**Paused At:** Phase 10, Plan 2',
     ].join('\n'));
-    const result = await initProgress([], tmpDir);
+    const result = await initProgress(adapter, [], tmpDir);
     const data = result.data as Record<string, unknown>;
     expect(data.paused_at).toBe('Phase 10, Plan 2');
   });
 
   it('includes state/roadmap path fields', async () => {
-    const result = await initProgress([], tmpDir);
+    const result = await initProgress(adapter, [], tmpDir);
     const data = result.data as Record<string, unknown>;
     expect(typeof data.state_path).toBe('string');
     expect(typeof data.roadmap_path).toBe('string');
@@ -213,7 +216,8 @@ describe('initProgress', () => {
         '',
       ].join('\n'));
 
-      const result = await initProgress([], tmp);
+      const tmpAdapter = new MarkdownAdapter(tmp);
+      const result = await initProgress(tmpAdapter, [], tmp);
       const data = result.data as Record<string, unknown>;
       const phases = data.phases as Record<string, unknown>[];
 
@@ -231,7 +235,7 @@ describe('initProgress', () => {
 
 describe('initManager', () => {
   it('returns flat JSON with phases and recommended_actions', async () => {
-    const result = await initManager([], tmpDir);
+    const result = await initManager(adapter, [], tmpDir);
     const data = result.data as Record<string, unknown>;
     expect(Array.isArray(data.phases)).toBe(true);
     expect(Array.isArray(data.recommended_actions)).toBe(true);
@@ -244,7 +248,7 @@ describe('initManager', () => {
   });
 
   it('includes disk_status for each phase', async () => {
-    const result = await initManager([], tmpDir);
+    const result = await initManager(adapter, [], tmpDir);
     const data = result.data as Record<string, unknown>;
     const phases = data.phases as Record<string, unknown>[];
     expect(phases.length).toBeGreaterThan(0);
@@ -256,7 +260,7 @@ describe('initManager', () => {
 
   it('returns error when ROADMAP.md missing', async () => {
     await rm(join(tmpDir, '.planning', 'ROADMAP.md'));
-    const result = await initManager([], tmpDir);
+    const result = await initManager(adapter, [], tmpDir);
     const data = result.data as Record<string, unknown>;
     expect(data.error).toBeDefined();
   });
@@ -268,7 +272,7 @@ describe('initManager', () => {
       '### Phase 9: A Very Long Phase Name That Should Be Truncated',
       '**Goal:** Something',
     ].join('\n'));
-    const result = await initManager([], tmpDir);
+    const result = await initManager(adapter, [], tmpDir);
     const data = result.data as Record<string, unknown>;
     const phases = data.phases as Record<string, unknown>[];
     const phase9 = phases.find(p => p.number === '9');
@@ -277,7 +281,7 @@ describe('initManager', () => {
   });
 
   it('includes manager_flags in result', async () => {
-    const result = await initManager([], tmpDir);
+    const result = await initManager(adapter, [], tmpDir);
     const data = result.data as Record<string, unknown>;
     const flags = data.manager_flags as Record<string, string>;
     expect(typeof flags.discuss).toBe('string');
@@ -327,7 +331,7 @@ describe('initManager', () => {
     });
 
     it('surfaces the next milestone in queued_phases with metadata', async () => {
-      const result = await initManager([], tmpDir);
+      const result = await initManager(adapter, [], tmpDir);
       const data = result.data as Record<string, unknown>;
       expect(data.queued_milestone_version).toBe('v2.1');
       expect(data.queued_milestone_name).toBe('Daily Emails');
@@ -338,7 +342,7 @@ describe('initManager', () => {
     });
 
     it('queued_phases entries carry name, deps_display, and display_name', async () => {
-      const result = await initManager([], tmpDir);
+      const result = await initManager(adapter, [], tmpDir);
       const data = result.data as Record<string, unknown>;
       const queued = data.queued_phases as Record<string, unknown>[];
       const p32 = queued.find(p => p.number === '32');
@@ -349,7 +353,7 @@ describe('initManager', () => {
     });
 
     it('does NOT mix queued phases into the active phases list', async () => {
-      const result = await initManager([], tmpDir);
+      const result = await initManager(adapter, [], tmpDir);
       const data = result.data as Record<string, unknown>;
       const active = (data.phases as Record<string, unknown>[]).map(p => p.number);
       // Active milestone is v2.0.5 → only Phase 35 belongs here.
@@ -365,7 +369,7 @@ describe('initManager', () => {
         '### Phase 35: Audit',
         '**Goal**: Final.',
       ].join('\n'));
-      const result = await initManager([], tmpDir);
+      const result = await initManager(adapter, [], tmpDir);
       const data = result.data as Record<string, unknown>;
       expect(data.queued_phases).toEqual([]);
       expect(data.queued_milestone_version).toBeNull();
@@ -436,7 +440,8 @@ describe('initProgress workstream (#2731)', () => {
       // Phase 02: plan only (in_progress)
       await writeFile(join(wsBase, 'phases', '02-alerts', '02-01-PLAN.md'), '# Plan');
 
-      const result = await initProgress([], tmp, 'production-support');
+      const tmpAdapter = new MarkdownAdapter(tmp);
+      const result = await initProgress(tmpAdapter, [], tmp, 'production-support');
       const data = result.data as Record<string, unknown>;
       const phases = data.phases as Record<string, unknown>[];
 
@@ -467,7 +472,8 @@ describe('initManager workstream (#2731)', () => {
       await writeFile(join(wsBase, 'ROADMAP.md'), WORKSTREAM_ROADMAP);
       await writeFile(join(wsBase, 'phases', '01-weave-cron', '01-01-PLAN.md'), '# Plan');
 
-      const result = await initManager([], tmp, 'production-support');
+      const tmpAdapter = new MarkdownAdapter(tmp);
+      const result = await initManager(tmpAdapter, [], tmp, 'production-support');
       const data = result.data as Record<string, unknown>;
 
       // Should NOT return error (no ROADMAP found at root)

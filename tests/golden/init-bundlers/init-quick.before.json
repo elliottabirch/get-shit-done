@@ -1,0 +1,21 @@
+{
+  "planner_model": "opus",
+  "executor_model": "sonnet",
+  "checker_model": "sonnet",
+  "verifier_model": "sonnet",
+  "commit_docs": true,
+  "branch_name": null,
+  "quick_id": "260501-3dk",
+  "slug": null,
+  "description": null,
+  "date": "2026-05-01",
+  "timestamp": "2026-05-01T09:25:52.391Z",
+  "quick_dir": ".planning/quick",
+  "task_dir": null,
+  "roadmap_exists": true,
+  "planning_exists": true,
+  "project_root": "/home/ellio/code/get-shit-done/.claude/worktrees/agent-afe48fc6f178f469c",
+  "agents_installed": true,
+  "missing_agents": [],
+  "project_title": "Project: get-shit-done (fork — adapter-interface seam)"
+}

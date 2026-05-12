@@ -18,14 +18,13 @@
  * ```
  */
 
-import { existsSync, readdirSync, statSync, type Dirent } from 'node:fs';
-import { readFile } from 'node:fs/promises';
+import { existsSync, readdirSync, type Dirent } from 'node:fs';
 import { join, relative } from 'node:path';
 import { homedir } from 'node:os';
 
 import { loadConfig } from '../config.js';
 import { resolveModel } from './config-query.js';
-import { planningPaths, normalizePhaseName, phaseTokenMatches, toPosixPath } from './helpers.js';
+import { planningPaths, normalizePhaseName, phaseTokenMatches, toPosixPath, planningRelativePath } from './helpers.js';
 import {
   getMilestoneInfo,
   extractCurrentMilestone,
@@ -33,7 +32,8 @@ import {
   extractPhasesFromSection,
 } from './roadmap.js';
 import { withProjectRoot } from './init.js';
-import type { QueryHandler } from './utils.js';
+import type { QueryResult } from './utils.js';
+import type { StorageAdapter } from '../../../adapters/types.js';
 
 // ─── Internal helpers ──────────────────────────────────────────────────────
 
@@ -83,16 +83,18 @@ function deriveStatusFromCheckbox(
   return 'not_started';
 }
 
-function listPhasePlanAndSummaryCounts(phasePath: string): { plans: string[]; summaries: string[] } {
-  const phaseFiles = readdirSync(phasePath);
+async function listPhasePlanAndSummaryCounts(adapter: StorageAdapter, phaseAdapterRel: string): Promise<{ plans: string[]; summaries: string[] }> {
+  const refs = await adapter.listCollection(phaseAdapterRel);
+  const phaseFiles = refs.map(r => r.name);
   const rootPlans = phaseFiles.filter(f => f.endsWith('-PLAN.md') || f === 'PLAN.md');
   const rootSummaries = phaseFiles.filter(f => f.endsWith('-SUMMARY.md') || f === 'SUMMARY.md');
 
-  const plansDir = join(phasePath, 'plans');
   let nestedPlans: string[] = [];
   let nestedSummaries: string[] = [];
-  if (existsSync(plansDir)) {
-    const files = readdirSync(plansDir);
+  const plansExists = await adapter.exists(`${phaseAdapterRel}/plans`);
+  if (plansExists) {
+    const nestedRefs = await adapter.listCollection(`${phaseAdapterRel}/plans`);
+    const files = nestedRefs.map(r => r.name);
     nestedPlans = files.filter(f => /^PLAN-\d+.*\.md$/i.test(f));
     nestedSummaries = files.filter(f => /^SUMMARY-\d+.*\.md$/i.test(f));
   }
@@ -113,7 +115,12 @@ function listPhasePlanAndSummaryCounts(phasePath: string): { plans: string[]; su
  *
  * Port of cmdInitNewProject from init.cjs lines 296-399.
  */
-export const initNewProject: QueryHandler = async (_args, projectDir, workstream) => {
+export const initNewProject = async (
+  adapter: StorageAdapter,
+  _args: string[],
+  projectDir: string,
+  workstream?: string,
+): Promise<QueryResult> => {
   const config = await loadConfig(projectDir, workstream);
 
   // Detect search API key availability from env vars and ~/.gsd/ files
@@ -217,7 +224,7 @@ export const initNewProject: QueryHandler = async (_args, projectDir, workstream
     project_path: '.planning/PROJECT.md',
   };
 
-  return { data: withProjectRoot(projectDir, result, config as Record<string, unknown>) };
+  return { data: await withProjectRoot(adapter, projectDir, result, config as Record<string, unknown>) };
 };
 
 // ─── initProgress ─────────────────────────────────────────────────────────
@@ -229,9 +236,14 @@ export const initNewProject: QueryHandler = async (_args, projectDir, workstream
  *
  * Port of cmdInitProgress from init.cjs lines 1139-1284.
  */
-export const initProgress: QueryHandler = async (_args, projectDir, workstream) => {
+export const initProgress = async (
+  adapter: StorageAdapter,
+  _args: string[],
+  projectDir: string,
+  workstream?: string,
+): Promise<QueryResult> => {
   const config = await loadConfig(projectDir, workstream);
-  const milestone = await getMilestoneInfo(projectDir, workstream);
+  const milestone = await getMilestoneInfo(adapter, workstream);
   const paths = planningPaths(projectDir, workstream);
 
   const phases: Record<string, unknown>[] = [];
@@ -244,30 +256,35 @@ export const initProgress: QueryHandler = async (_args, projectDir, workstream) 
   let checkboxStates = new Map<string, boolean>();
 
   try {
-    const rawRoadmap = await readFile(paths.roadmap, 'utf-8');
-    const roadmapContent = await extractCurrentMilestone(rawRoadmap, projectDir, workstream);
-    const headingPattern = /#{2,4}\s*Phase\s+(\d+[A-Z]?(?:\.\d+)*)\s*:\s*([^\n]+)/gi;
-    let hm: RegExpExecArray | null;
-    while ((hm = headingPattern.exec(roadmapContent)) !== null) {
-      const pNum = hm[1];
-      const pName = hm[2].replace(/\(INSERTED\)/i, '').trim();
-      roadmapPhaseNames.set(pNum, pName);
+    const rawRoadmap = await adapter.getRecord(planningRelativePath(workstream, 'ROADMAP.md'));
+    if (rawRoadmap) {
+      const roadmapContent = await extractCurrentMilestone(adapter, rawRoadmap, workstream);
+      const headingPattern = /#{2,4}\s*Phase\s+(\d+[A-Z]?(?:\.\d+)*)\s*:\s*([^\n]+)/gi;
+      let hm: RegExpExecArray | null;
+      while ((hm = headingPattern.exec(roadmapContent)) !== null) {
+        const pNum = hm[1];
+        const pName = hm[2].replace(/\(INSERTED\)/i, '').trim();
+        roadmapPhaseNames.set(pNum, pName);
+      }
+      checkboxStates = extractCheckboxStates(roadmapContent);
     }
-    checkboxStates = extractCheckboxStates(roadmapContent);
   } catch { /* intentionally empty */ }
 
-  // Scan phase directories
+  // Scan phase directories via adapter
+  const phasesAdapterRel = planningRelativePath(workstream, 'phases');
   try {
-    const entries = readdirSync(paths.phases, { withFileTypes: true });
-    const dirs = entries
-      .filter(e => e.isDirectory())
-      .map(e => e.name)
-      .sort((a, b) => {
-        const pa = a.match(/^(\d+[A-Z]?(?:\.\d+)*)/i);
-        const pb = b.match(/^(\d+[A-Z]?(?:\.\d+)*)/i);
-        if (!pa || !pb) return a.localeCompare(b);
-        return parseInt(pa[1], 10) - parseInt(pb[1], 10);
-      });
+    const phaseRefs = await adapter.listCollection(phasesAdapterRel);
+    const dirEntries: string[] = [];
+    for (const ref of phaseRefs) {
+      const st = await adapter.stat(ref.path);
+      if (st?.kind === 'dir') dirEntries.push(ref.name);
+    }
+    const dirs = dirEntries.sort((a, b) => {
+      const pa = a.match(/^(\d+[A-Z]?(?:\.\d+)*)/i);
+      const pb = b.match(/^(\d+[A-Z]?(?:\.\d+)*)/i);
+      if (!pa || !pb) return a.localeCompare(b);
+      return parseInt(pa[1], 10) - parseInt(pb[1], 10);
+    });
 
     for (const dir of dirs) {
       const match = dir.match(/^(\d+[A-Z]?(?:\.\d+)*)-?(.*)/i);
@@ -275,10 +292,11 @@ export const initProgress: QueryHandler = async (_args, projectDir, workstream) 
       const phaseName = match && match[2] ? match[2] : null;
       seenPhaseNums.add(phaseNumber.replace(/^0+/, '') || '0');
 
-      const phasePath = join(paths.phases, dir);
-      const phaseFiles = readdirSync(phasePath);
+      const phaseAdapterRel = `${phasesAdapterRel}/${dir}`;
+      const phaseFileRefs = await adapter.listCollection(phaseAdapterRel);
+      const phaseFiles = phaseFileRefs.map(r => r.name);
 
-      const { plans, summaries } = listPhasePlanAndSummaryCounts(phasePath);
+      const { plans, summaries } = await listPhasePlanAndSummaryCounts(adapter, phaseAdapterRel);
       const hasResearch = phaseFiles.some(f => f.endsWith('-RESEARCH.md') || f === 'RESEARCH.md');
 
       let status =
@@ -345,9 +363,11 @@ export const initProgress: QueryHandler = async (_args, projectDir, workstream) 
   // Check paused state in STATE.md
   let pausedAt: string | null = null;
   try {
-    const stateContent = await readFile(paths.state, 'utf-8');
-    const pauseMatch = stateContent.match(/\*\*Paused At:\*\*\s*(.+)/);
-    if (pauseMatch) pausedAt = pauseMatch[1].trim();
+    const stateContent = await adapter.getRecord(planningRelativePath(workstream, 'STATE.md'));
+    if (stateContent) {
+      const pauseMatch = stateContent.match(/\*\*Paused At:\*\*\s*(.+)/);
+      if (pauseMatch) pausedAt = pauseMatch[1].trim();
+    }
   } catch { /* intentionally empty */ }
 
   const result: Record<string, unknown> = {
@@ -369,16 +389,16 @@ export const initProgress: QueryHandler = async (_args, projectDir, workstream) 
     paused_at: pausedAt,
     has_work_in_progress: !!currentPhase,
 
-    project_exists: pathExists(projectDir, '.planning/PROJECT.md'),
-    roadmap_exists: existsSync(paths.roadmap),
-    state_exists: existsSync(paths.state),
+    project_exists: await adapter.exists(planningRelativePath(workstream, 'PROJECT.md')),
+    roadmap_exists: await adapter.exists(planningRelativePath(workstream, 'ROADMAP.md')),
+    state_exists: await adapter.exists(planningRelativePath(workstream, 'STATE.md')),
     state_path: toPosixPath(relative(projectDir, paths.state)),
     roadmap_path: toPosixPath(relative(projectDir, paths.roadmap)),
     project_path: '.planning/PROJECT.md',
     config_path: toPosixPath(relative(projectDir, paths.config)),
   };
 
-  return { data: withProjectRoot(projectDir, result, config as Record<string, unknown>) };
+  return { data: await withProjectRoot(adapter, projectDir, result, config as Record<string, unknown>) };
 };
 
 // ─── initManager ─────────────────────────────────────────────────────────
@@ -391,26 +411,32 @@ export const initProgress: QueryHandler = async (_args, projectDir, workstream) 
  *
  * Port of cmdInitManager from init.cjs lines 854-1137.
  */
-export const initManager: QueryHandler = async (_args, projectDir, workstream) => {
+export const initManager = async (
+  adapter: StorageAdapter,
+  _args: string[],
+  projectDir: string,
+  workstream?: string,
+): Promise<QueryResult> => {
   const config = await loadConfig(projectDir, workstream);
-  const milestone = await getMilestoneInfo(projectDir, workstream);
+  const milestone = await getMilestoneInfo(adapter, workstream);
   const paths = planningPaths(projectDir, workstream);
 
-  let rawContent: string;
-  try {
-    rawContent = await readFile(paths.roadmap, 'utf-8');
-  } catch {
+  const phasesAdapterRel = planningRelativePath(workstream, 'phases');
+  const rawContent = await adapter.getRecord(planningRelativePath(workstream, 'ROADMAP.md'));
+  if (!rawContent) {
     return { data: { error: 'No ROADMAP.md found. Run /gsd-new-milestone first.' } };
   }
 
-  const content = await extractCurrentMilestone(rawContent, projectDir, workstream);
+  const content = await extractCurrentMilestone(adapter, rawContent, workstream);
 
-  // Pre-compute directory listing once
+  // Pre-compute directory listing once via adapter
   let phaseDirEntries: string[] = [];
   try {
-    phaseDirEntries = readdirSync(paths.phases, { withFileTypes: true })
-      .filter(e => e.isDirectory())
-      .map(e => e.name);
+    const phaseRefs = await adapter.listCollection(phasesAdapterRel);
+    for (const ref of phaseRefs) {
+      const st = await adapter.stat(ref.path);
+      if (st?.kind === 'dir') phaseDirEntries.push(ref.name);
+    }
   } catch { /* intentionally empty */ }
 
   // Pre-extract checkbox states in a single pass (shared helper — #2646)
@@ -448,9 +474,10 @@ export const initManager: QueryHandler = async (_args, projectDir, workstream) =
     try {
       const dirMatch = phaseDirEntries.find(d => phaseTokenMatches(d, normalized));
       if (dirMatch) {
-        const fullDir = join(paths.phases, dirMatch);
-        const phaseFiles = readdirSync(fullDir);
-        const counts = listPhasePlanAndSummaryCounts(fullDir);
+        const phaseAdapterRel = `${phasesAdapterRel}/${dirMatch}`;
+        const phaseFileRefs = await adapter.listCollection(phaseAdapterRel);
+        const phaseFiles = phaseFileRefs.map(r => r.name);
+        const counts = await listPhasePlanAndSummaryCounts(adapter, phaseAdapterRel);
         planCount = counts.plans.length;
         summaryCount = counts.summaries.length;
         hasContext = phaseFiles.some(f => f.endsWith('-CONTEXT.md') || f === 'CONTEXT.md');
@@ -465,10 +492,13 @@ export const initManager: QueryHandler = async (_args, projectDir, workstream) =
 
         const now = Date.now();
         let newestMtime = 0;
-        for (const f of phaseFiles) {
+        for (const ref of phaseFileRefs) {
           try {
-            const st = statSync(join(fullDir, f));
-            if (st.mtimeMs > newestMtime) newestMtime = st.mtimeMs;
+            const st = await adapter.stat(ref.path);
+            if (st?.mtime) {
+              const mtimeMs = new Date(st.mtime).getTime();
+              if (mtimeMs > newestMtime) newestMtime = mtimeMs;
+            }
           } catch { /* intentionally empty */ }
         }
         if (newestMtime > 0) {
@@ -538,10 +568,9 @@ export const initManager: QueryHandler = async (_args, projectDir, workstream) =
   // Check WAITING.json signal
   let waitingSignal: unknown = null;
   try {
-    const waitingPath = join(projectDir, '.planning', 'WAITING.json');
-    if (existsSync(waitingPath)) {
-      const { readFileSync } = await import('node:fs');
-      waitingSignal = JSON.parse(readFileSync(waitingPath, 'utf-8'));
+    const waitingRaw = await adapter.getRecord(planningRelativePath(workstream, 'WAITING.json'));
+    if (waitingRaw) {
+      waitingSignal = JSON.parse(waitingRaw);
     }
   } catch { /* intentionally empty */ }
 
@@ -617,7 +646,7 @@ export const initManager: QueryHandler = async (_args, projectDir, workstream) =
   let queuedMilestoneVersion: string | null = null;
   let queuedMilestoneName: string | null = null;
   try {
-    const next = await extractNextMilestoneSection(rawContent, projectDir);
+    const next = await extractNextMilestoneSection(adapter, rawContent, workstream);
     if (next) {
       queuedMilestoneVersion = next.version;
       queuedMilestoneName = next.name;
@@ -676,5 +705,5 @@ export const initManager: QueryHandler = async (_args, projectDir, workstream) =
     manager_flags: managerFlags,
   };
 
-  return { data: withProjectRoot(projectDir, result, config as Record<string, unknown>) };
+  return { data: await withProjectRoot(adapter, projectDir, result, config as Record<string, unknown>) };
 };
