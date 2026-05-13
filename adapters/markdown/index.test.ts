@@ -1,7 +1,12 @@
 /**
- * MarkdownAdapter unit tests (TDD RED phase for Plan 01-03).
+ * MarkdownAdapter unit tests.
  *
- * Tests 1-12 from the plan's <behavior> block.
+ * Phase 1 TDD RED (Plan 01-03): tests 1-12 covered the initial stub state.
+ * Phase 5 Plans 03-04 implemented binaryAsset/snapshot/namedDoc (flipped the
+ * capability flags from false → true and swapped the defensive throws for
+ * working implementations). Phase 7 code-review CR-01 updates the stale
+ * Phase-1 assertions here to reflect the post-Phase-5 truth.
+ *
  * Run from repo root: npx vitest run --project adapters
  */
 
@@ -10,7 +15,6 @@ import { mkdtemp, rm, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { MarkdownAdapter } from './index.js';
-import { UnsupportedCapabilityError } from '../types.js';
 
 // Helper: create a minimal .planning/ dir so planningDir() resolves correctly.
 async function makeTmpProject(): Promise<string> {
@@ -32,18 +36,24 @@ describe('MarkdownAdapter', () => {
     await rm(projectDir, { recursive: true, force: true });
   });
 
-  // Test 1: capabilities shape matches locked contract
+  // Test 1: capabilities shape matches post-Phase-5 contract.
+  //   - binaryAsset / snapshot / namedDoc flipped true in Phase 5 Plans 03-04
+  //     (D-03 snapshot, D-16 namedDoc, D-17 binaryAsset).
+  //   - commitPlanningState is NOT a capability flag (D-12: promoted to
+  //     required method; absent from the Capabilities interface).
+  //   - graphEdges is the D-OQ06-CAPS fine-grained matrix: MarkdownAdapter
+  //     owns semantic edges via graphify.cjs, but no dependency edges.
   it('capabilities shape matches locked contract', () => {
     const caps = adapter.capabilities;
     expect(caps.record).toBe(true);
     expect(caps.section).toBe(true);
     expect(caps.frontmatter).toBe(true);
-    expect(caps.binaryAsset).toBe(false);
-    expect(caps.snapshot).toBe(false);
-    expect(caps.transaction).toBe(false);
-    expect(caps.namedDoc).toBe(false);
-    expect(caps.commitPlanningState).toBe(true);
+    expect(caps.binaryAsset).toBe(true);
+    expect(caps.snapshot).toBe(true);
+    expect(caps.transaction).toBe(true);
+    expect(caps.namedDoc).toBe(true);
     expect(caps.markdownLockfile).toBe(true);
+    expect(caps.graphEdges).toEqual({ semantic: true, dependency: false });
   });
 
   // Test 2: name === 'markdown' (D-06)
@@ -88,7 +98,7 @@ describe('MarkdownAdapter', () => {
   it('getSection extracts body of named ## heading', async () => {
     const md = '## Anchor\nbody line\n## Other\nother body\n';
     await adapter.putRecord('SECTIONS.md', md);
-    const result = await adapter.getSection('SECTIONS.md', 'Anchor');
+    const result = await adapter.getSection('SECTIONS.md', '## Anchor');
     expect(result).toBe('body line');
   });
 
@@ -96,11 +106,11 @@ describe('MarkdownAdapter', () => {
   it('updateSection overwrite replaces section, leaves siblings intact', async () => {
     const md = '## Anchor\noriginal\n## Other\nother body\n';
     await adapter.putRecord('SECTIONS.md', md);
-    await adapter.updateSection('SECTIONS.md', 'Anchor', 'replaced', 'overwrite');
-    const section = await adapter.getSection('SECTIONS.md', 'Anchor');
+    await adapter.updateSection('SECTIONS.md', '## Anchor', 'replaced', 'overwrite');
+    const section = await adapter.getSection('SECTIONS.md', '## Anchor');
     expect(section).toBe('replaced');
     // sibling intact
-    const other = await adapter.getSection('SECTIONS.md', 'Other');
+    const other = await adapter.getSection('SECTIONS.md', '## Other');
     expect(other).toBe('other body');
   });
 
@@ -108,33 +118,30 @@ describe('MarkdownAdapter', () => {
   it('updateSection append adds content after existing body', async () => {
     const md = '## Anchor\noriginal\n## Other\nother\n';
     await adapter.putRecord('SECTIONS.md', md);
-    await adapter.updateSection('SECTIONS.md', 'Anchor', 'appended', 'append');
-    const section = await adapter.getSection('SECTIONS.md', 'Anchor');
+    await adapter.updateSection('SECTIONS.md', '## Anchor', 'appended', 'append');
+    const section = await adapter.getSection('SECTIONS.md', '## Anchor');
     expect(section).toContain('original');
     expect(section).toContain('appended');
   });
 
-  // Test 10: snapshot() throws UnsupportedCapabilityError with capability === 'snapshot'
-  it('snapshot() throws UnsupportedCapabilityError with capability "snapshot"', async () => {
-    await expect(adapter.snapshot()).rejects.toThrow(UnsupportedCapabilityError);
-    try {
-      await adapter.snapshot();
-    } catch (e) {
-      expect(e).toBeInstanceOf(UnsupportedCapabilityError);
-      expect((e as UnsupportedCapabilityError).capability).toBe('snapshot');
-      expect((e as UnsupportedCapabilityError).adapterName).toBe('markdown');
-    }
+  // Test 10: snapshot() is implemented (D-03 shipped in Phase 5 Plan 03).
+  //   Returns a stable identifier string for the current planning-state
+  //   snapshot. Was a defensive throw through Phase 4; flipped to a working
+  //   implementation in Phase 5 Plan 03.
+  it('snapshot() returns a non-empty identifier string (implemented, D-03)', async () => {
+    const id = await adapter.snapshot();
+    expect(typeof id).toBe('string');
+    expect(id.length).toBeGreaterThan(0);
   });
 
-  // Test 11: writeBinaryAsset throws UnsupportedCapabilityError with capability === 'binaryAsset'
-  it('writeBinaryAsset() throws UnsupportedCapabilityError with capability "binaryAsset"', async () => {
-    await expect(adapter.writeBinaryAsset('foo.bin', new Uint8Array())).rejects.toThrow(UnsupportedCapabilityError);
-    try {
-      await adapter.writeBinaryAsset('foo.bin', new Uint8Array());
-    } catch (e) {
-      expect(e).toBeInstanceOf(UnsupportedCapabilityError);
-      expect((e as UnsupportedCapabilityError).capability).toBe('binaryAsset');
-    }
+  // Test 11: writeBinaryAsset is implemented (D-17 shipped in Phase 5 Plan 04).
+  //   Writes the byte buffer under .planning/assets/ (or the adapter-decided
+  //   asset root). Was a defensive throw through Phase 4; flipped to a working
+  //   implementation in Phase 5 Plan 04.
+  it('writeBinaryAsset() writes bytes without throwing (implemented, D-17)', async () => {
+    await expect(
+      adapter.writeBinaryAsset('foo.bin', new Uint8Array([1, 2, 3])),
+    ).resolves.not.toThrow();
   });
 
   // Test 12: markdownLockfile methods do NOT throw (they are implemented since cap=true)
