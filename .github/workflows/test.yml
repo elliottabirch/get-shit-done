@@ -126,17 +126,25 @@ jobs:
           cp -r .gsd-beads-checkout ../gsd-beads
           rm -rf .gsd-beads-checkout
 
+      # Order matters: sibling's TS build imports from `get-shit-done-cc/adapters/types.js`
+      # which resolves (via fork package.json exports) to ./adapters/dist/types.js.
+      # That dist is produced by build:adapters, which needs sdk/node_modules present for
+      # tsc typeRoots, which requires build:sdk to have run. So: fork npm ci → build:sdk
+      # → build:adapters → sibling build.
+      - name: Install fork dependencies
+        run: npm ci
+
+      - name: Build fork SDK dist (required by adapters + tests)
+        run: npm run build:sdk
+
+      - name: Build fork adapters dist (consumed by sibling via package exports)
+        run: npm run build:adapters
+
       - name: Build sibling gsd-beads
         working-directory: ../gsd-beads
         run: |
           npm ci
           npm run build
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Build SDK dist (required by installer)
-        run: npm run build:sdk
 
       # Seam contract gate: keep manifest -> generated aliases -> registry/CJS adapters aligned.
       # Run once per workflow on the primary Linux node to avoid redundant matrix cost.
