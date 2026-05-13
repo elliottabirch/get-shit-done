@@ -69,6 +69,14 @@ export interface GSDConfig {
   project_code?: string | null;
   /** Interactive vs headless; mirrors gsd-tools flat `config.mode`. */
   mode?: string;
+  /**
+   * Storage adapter selection (Phase 8 DIST-01).
+   * Omit or 'markdown' → MarkdownAdapter (byte-identical to upstream).
+   * 'beads' → BeadsAdapter via peer package `gsd-beads`.
+   */
+  storage?: {
+    adapter?: 'markdown' | 'beads';
+  };
   [key: string]: unknown;
 }
 
