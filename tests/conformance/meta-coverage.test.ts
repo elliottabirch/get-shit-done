@@ -28,8 +28,18 @@ import { describe, it, expect } from 'vitest';
 import { CONFORMANCE_MANIFEST } from './manifest.js';
 import { manifestKey, readRegisteredTests } from './test-registry.js';
 import type { AdapterName } from './manifest-types.js';
+import { bdPresent } from './paired-adapters.js';
 
-const ADAPTERS: readonly AdapterName[] = ['markdown', 'beads'] as const;
+// D-03 skip-with-warning: when bd is absent (local dev without bd installed),
+// the 8 paired-*-beads.test.ts files are all guarded by `if (bdPresent())`
+// and skip their preRegisterTest() calls. Including 'beads' in ADAPTERS
+// unconditionally would surface all 56 beads-side entries as registration
+// gaps, breaking the dev experience for contributors without bd. CI runs
+// on a bd-installed runner, so the full paired matrix is still enforced
+// there — this gate only relaxes the LOCAL run when bd is absent.
+const ADAPTERS: readonly AdapterName[] = bdPresent()
+  ? (['markdown', 'beads'] as const)
+  : (['markdown'] as const);
 
 // Read once at module scope — registry is static by the time we run.
 const registered = readRegisteredTests();
