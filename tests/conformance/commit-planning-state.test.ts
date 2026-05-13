@@ -63,7 +63,7 @@ describe('commitPlanningState', () => {
     expect(log).toContain('test checkpoint');
 
     assertFromManifest('markdown', 'commitPlanningState:returns-void', 'binB', (expected) => {
-      expect((expected as { applied: boolean }).applied).toBe(true);
+      expect(expected).toEqual({ kind: 'presence' });
     });
   });
 
@@ -124,7 +124,7 @@ if (bdPresent()) {
       ).resolves.toBeUndefined();
 
       assertFromManifest('beads', 'commitPlanningState:returns-void', 'binB', (expected) => {
-        expect((expected as { applied: boolean }).applied).toBe(true);
+        expect(expected).toEqual({ kind: 'presence' });
       });
     });
   });

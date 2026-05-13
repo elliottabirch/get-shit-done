@@ -29,10 +29,28 @@ export type StateOutcomeExpected =
   | { applied: true; created_section?: string | null }
   | { applied: false; reason: 'duplicate' | 'nothing_to_remove' };
 
+/**
+ * Phase 7 close (code-review CR-03): a registration-only marker for entries
+ * whose methods don't return StateWriteOutcome. Examples:
+ *   - getRecord / putRecord (return string | null)
+ *   - stat (returns { kind, mtime? } | null)
+ *   - commitPlanningState (returns void; NOOP on BeadsAdapter)
+ *   - withTransaction commit/rollback (returns the callback's T)
+ *
+ * The manifest entry still documents per-adapter presence (every shipped
+ * adapter implements the method), but the `expected` shape is purely a
+ * marker — behavioral assertions live inside the matching test body. Prior
+ * to CR-03 these entries used `{ applied: true }` and tests papered over
+ * the mismatch with `(expected as { applied: boolean }).applied`, bypassing
+ * the type system.
+ */
+export type PresenceExpected = { kind: 'presence' };
+
 export type ExpectedOutcome =
   | StateOutcomeExpected
   | RollbackOutcomeExpected
-  | RoundTripOutcomeExpected;
+  | RoundTripOutcomeExpected
+  | PresenceExpected;
 
 export interface ManifestEntry {
   /** Entry category; meta-coverage key is `${adapter}:${kind}:${name}`. */
