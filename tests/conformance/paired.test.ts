@@ -1,79 +1,28 @@
 /**
- * Phase 7 Plan 07-04a: paired conformance harness invocation (D-01 + D-03).
+ * Phase 7 paired harness entry (split into per-adapter/per-suite files).
  *
- * Runs the locked Phase 1 D-15 `runAdapterConformanceSuite` harness once
- * per adapter. Single authoritative CI surface for SC#1 "zero failing
- * assertions across both adapters" (D-01).
+ * HISTORY: This file originally invoked runAdapterConformanceSuite for both
+ * adapters AND invoked the three migrated suites in a for-loop — keeping all
+ * 119+ tests inside a single vitest worker. That blocked parallel forks.
  *
- * bd v1.0.4+ presence probe (D-03):
- *   - LOCAL: skip-with-warning if bd is absent (developer convenience).
- *   - CI:    bd install step in .github/workflows/test.yml guarantees
- *            presence; describe.skip path never triggers on CI.
+ * CURRENT: Split across 8 per-adapter/per-suite files:
+ *   paired-core-{markdown,beads}.test.ts        ← runAdapterConformanceSuite
+ *   paired-outcome-{markdown,beads}.test.ts     ← runStateWriteOutcomeSuite
+ *   paired-events-{markdown,beads}.test.ts      ← runStateEventDispatchSuite
+ *   paired-transaction-{markdown,beads}.test.ts ← runWithTransactionSuite
  *
- * Runtime budget per RESEARCH §Test Infrastructure: ~30-60s including
- * BeadsAdapter cold-start ~400-700ms per test.
+ * Under `pool: 'forks'` (no singleFork), vitest runs each .test.ts in its
+ * own worker, enabling true parallelism. The file-based test-registry
+ * (tests/conformance/test-registry.ts) aggregates per-worker registrations
+ * for meta-coverage to read after all paired workers exit.
  *
- * Plan 07-04b added imports for runStateWriteOutcomeSuite /
- * runStateEventDispatchSuite / runWithTransactionSuite at the bottom
- * of this file plus a per-adapter loop that invokes them.
+ * This file is retained as an entry-point marker + documentation; it
+ * contains no test code so vitest will report an empty file (harmless).
  */
 import { describe, it } from 'vitest';
-import { spawnSync } from 'node:child_process';
-import { runAdapterConformanceSuite } from './adapter.conformance.js';
-import { MarkdownAdapter } from '../../adapters/markdown/index.js';
-import { createBeadsAdapter } from 'gsd-beads/testing';
-import type { StorageAdapter } from '../../adapters/types.js';
-// Plan 07-04b: migrated suite imports (*.conformance-suite.ts files, not
-// auto-collected by vitest's *.test.ts glob — this is the only entry point).
-import { runStateWriteOutcomeSuite } from './write-outcome.conformance-suite.js';
-import { runStateEventDispatchSuite } from './write-events.conformance-suite.js';
-import { runWithTransactionSuite } from './write-transaction.conformance-suite.js';
-import type { AdapterName } from './manifest-types.js';
 
-/** Probe bd CLI. Returns true iff bd >= v1.0.4 is on PATH. */
-export function bdPresent(): boolean {
-  const r = spawnSync('bd', ['--version'], { encoding: 'utf-8' });
-  if (r.status !== 0) return false;
-  // bd v1.0.4 / v1.0.5 / ... prints `bd version 1.0.X (<provenance>)`.
-  // Accept 1.0.4 through 1.0.x; reject 1.0.0-1.0.3 (missing required primitives).
-  return /^bd version 1\.0\.(4|[5-9]|\d{2,})\b/.test(r.stdout ?? '');
-}
-
-/** Adapter tuple used by 07-04b's migrated-suite loop; exported now to keep 07-04b additive. */
-export type AdapterFactory = (projectDir: string) => StorageAdapter;
-export const pairedAdapters: Array<[string, AdapterFactory]> = [
-  ['markdown', (projectDir) => new MarkdownAdapter(projectDir)],
-];
-if (bdPresent()) {
-  pairedAdapters.push(['beads', createBeadsAdapter]);
-}
-
-// MarkdownAdapter — always runs via the locked harness.
-runAdapterConformanceSuite(
-  'markdown',
-  (projectDir) => new MarkdownAdapter(projectDir),
-);
-
-// BeadsAdapter — runs if bd is present locally; skip-with-warning otherwise.
-if (bdPresent()) {
-  runAdapterConformanceSuite('beads', createBeadsAdapter);
-} else {
-  describe.skip('StorageAdapter conformance: beads', () => {
-    it.skip(
-      'bd v1.0.4+ not available — install bd locally to run paired conformance ' +
-        '(CI installs bd; this skip is developer convenience per D-03)',
-      () => {},
-    );
+describe('paired harness (split into paired-*-*.test.ts files)', () => {
+  it('see paired-core/outcome/events/transaction-*.test.ts files', () => {
+    // Intentional no-op. Real tests live in the per-adapter/per-suite splits.
   });
-}
-
-// ============================================================================
-// Plan 07-04b: migrated suites invoked per adapter via the pairedAdapters
-// array exported above. Suite files use `.conformance-suite.ts` extension
-// so vitest's default glob skips them — this is the only entry point.
-// ============================================================================
-for (const [name, factory] of pairedAdapters) {
-  runStateWriteOutcomeSuite(name as AdapterName, factory);
-  runStateEventDispatchSuite(name as AdapterName, factory);
-  runWithTransactionSuite(name as AdapterName, factory);
-}
+});

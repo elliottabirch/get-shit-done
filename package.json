@@ -85,7 +85,10 @@
     "test": "node scripts/run-tests.cjs",
     "test:coverage": "c8 --check-coverage --lines 70 --reporter text --include 'get-shit-done/bin/lib/*.cjs' --exclude 'tests/**' --all node scripts/run-tests.cjs",
     "test:conformance": "NODE_PATH=./sdk/node_modules ./sdk/node_modules/.bin/vitest run --config vitest.conformance.config.ts",
-    "test:conformance:paired": "NODE_PATH=./sdk/node_modules ./sdk/node_modules/.bin/vitest run --config vitest.conformance.config.ts tests/conformance/paired.test.ts tests/conformance/meta-coverage.test.ts tests/conformance/properties.test.ts tests/conformance/failure-injection.test.ts",
+    "pretest:conformance:paired": "node scripts/clear-registry.mjs",
+    "test:conformance:paired": "npm run test:conformance:paired:workers && npm run test:conformance:paired:meta",
+    "test:conformance:paired:workers": "NODE_PATH=./sdk/node_modules ./sdk/node_modules/.bin/vitest run --config vitest.conformance.config.ts",
+    "test:conformance:paired:meta": "NODE_PATH=./sdk/node_modules ./sdk/node_modules/.bin/vitest run --config vitest.meta-coverage.config.ts",
     "prepare": "./scripts/install-hooks.sh"
   },
   "packageManager": "npm@11.3.0+sha512.96eb611483f49c55f7fa74df61b588de9e213f80a256728e6798ddc67176c7b07e4a1cfc7de8922422cbce02543714367037536955221fa451b0c4fefaf20c66"

@@ -27,43 +27,20 @@ export default defineConfig({
   },
   test: {
     name: 'conformance',
+    // All conformance test files EXCEPT meta-coverage. Meta-coverage is invoked
+    // separately (after paired workers exit + flush their registry files) via
+    // vitest.meta-coverage.config.ts. This avoids the "meta starts last but
+    // others haven't flushed yet" race that singleFork was previously solving
+    // at the cost of all-sequential runs.
     include: ['tests/conformance/**/*.test.ts'],
+    exclude: ['tests/conformance/meta-coverage.test.ts', '**/node_modules/**'],
     testTimeout: 30_000,
-    // Required for meta-coverage: registeredTests (test-registry.ts) is a
-    // module-level singleton. Without isolate:false, each test file gets its
-    // own module instance and registeredTests in meta-coverage.test.ts would
-    // be empty. isolate:false shares module instances across test files so
-    // assertFromManifest() calls in paired.test.ts populate the same Set
-    // that meta-coverage.test.ts reads.
-    isolate: false,
-    // Pool: singleFork ensures all test files run in the SAME process sequentially.
-    // Without this, isolate:false still allows concurrent forked workers — each
-    // file gets its own process and registeredTests is reset. singleFork uses a
-    // single child process that processes files one at a time.
+    // Parallel forks for speed. Cross-process state is published via
+    // `.vitest-tmp/registry/` — each worker appends its own JSONL file.
+    // See tests/conformance/test-registry.ts.
     pool: 'forks',
-    poolOptions: {
-      forks: {
-        singleFork: true,
-      },
-    },
-    // Sequence is critical: paired.test.ts must run before meta-coverage.test.ts
-    // reads registeredTests. The sequencer pins meta-coverage last.
-    sequence: {
-      concurrent: false,
-      sequencer: class {
-        ctx: unknown;
-        constructor(ctx: unknown) { this.ctx = ctx; }
-        async sort(files: unknown[]): Promise<unknown[]> {
-          const isMetaCoverage = (f: unknown): boolean =>
-            String((f as Record<string, unknown>)?.moduleId ?? '').includes('meta-coverage');
-          const metaCoverage = files.filter(isMetaCoverage);
-          const rest = files.filter(f => !isMetaCoverage(f));
-          return [...rest, ...metaCoverage];
-        }
-        async shard(files: unknown[]): Promise<unknown[]> {
-          return files;
-        }
-      },
-    },
+    // No singleFork, no isolate:false, no custom sequencer — all three were
+    // workarounds for the in-memory Set limitation. File-based registry
+    // makes them unnecessary.
   },
 });
