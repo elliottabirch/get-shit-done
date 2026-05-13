@@ -1,8 +1,9 @@
 'use strict';
 
 /**
- * GENERATED FILE — state.*, verify.*, init.*, phase.*, phases.*, validate.*, and roadmap.* alias/subcommand metadata for CJS routing.
- * Source: sdk/src/query/command-manifest.{state,verify,init,phase,phases,validate,roadmap}.ts
+ * GENERATED FILE — state.*, verify.*, init.*, phase.*, phases.*, validate.*, roadmap.* alias/subcommand metadata for CJS routing.
+ *
+ * Regenerate: cd sdk && npx tsx scripts/gen-command-aliases.ts
  */
 
 const STATE_COMMAND_ALIASES = [
@@ -28,6 +29,7 @@ const STATE_COMMAND_ALIASES = [
   { canonical: 'state.milestone-switch', aliases: ['state milestone-switch'], subcommand: 'milestone-switch', mutation: true },
   { canonical: 'state.add-roadmap-evolution', aliases: ['state add-roadmap-evolution'], subcommand: 'add-roadmap-evolution', mutation: true },
 ];
+const STATE_SUBCOMMANDS = STATE_COMMAND_ALIASES.map((entry) => entry.subcommand);
 
 const VERIFY_COMMAND_ALIASES = [
   { canonical: 'verify.plan-structure', aliases: ['verify plan-structure'], subcommand: 'plan-structure', mutation: false },
@@ -38,8 +40,8 @@ const VERIFY_COMMAND_ALIASES = [
   { canonical: 'verify.key-links', aliases: ['verify key-links'], subcommand: 'key-links', mutation: false },
   { canonical: 'verify.schema-drift', aliases: ['verify schema-drift'], subcommand: 'schema-drift', mutation: false },
   { canonical: 'verify.codebase-drift', aliases: ['verify codebase-drift'], subcommand: 'codebase-drift', mutation: false },
-  { canonical: 'verify.fat-skills', aliases: ['verify fat-skills'], subcommand: 'fat-skills', mutation: false },
 ];
+const VERIFY_SUBCOMMANDS = VERIFY_COMMAND_ALIASES.map((entry) => entry.subcommand);
 
 const INIT_COMMAND_ALIASES = [
   { canonical: 'init.execute-phase', aliases: ['init execute-phase'], subcommand: 'execute-phase', mutation: false },
@@ -60,6 +62,7 @@ const INIT_COMMAND_ALIASES = [
   { canonical: 'init.list-workspaces', aliases: ['init list-workspaces'], subcommand: 'list-workspaces', mutation: false },
   { canonical: 'init.remove-workspace', aliases: ['init remove-workspace'], subcommand: 'remove-workspace', mutation: false },
 ];
+const INIT_SUBCOMMANDS = INIT_COMMAND_ALIASES.map((entry) => entry.subcommand);
 
 const PHASE_COMMAND_ALIASES = [
   { canonical: 'phase.list-plans', aliases: ['phase list-plans'], subcommand: 'list-plans', mutation: false },
@@ -72,12 +75,14 @@ const PHASE_COMMAND_ALIASES = [
   { canonical: 'phase.complete', aliases: ['phase complete'], subcommand: 'complete', mutation: true },
   { canonical: 'phase.scaffold', aliases: ['phase scaffold'], subcommand: 'scaffold', mutation: true },
 ];
+const PHASE_SUBCOMMANDS = PHASE_COMMAND_ALIASES.map((entry) => entry.subcommand);
 
 const PHASES_COMMAND_ALIASES = [
   { canonical: 'phases.list', aliases: ['phases list'], subcommand: 'list', mutation: false },
   { canonical: 'phases.clear', aliases: ['phases clear'], subcommand: 'clear', mutation: true },
   { canonical: 'phases.archive', aliases: ['phases archive'], subcommand: 'archive', mutation: true },
 ];
+const PHASES_SUBCOMMANDS = PHASES_COMMAND_ALIASES.map((entry) => entry.subcommand);
 
 const VALIDATE_COMMAND_ALIASES = [
   { canonical: 'validate.consistency', aliases: ['validate consistency'], subcommand: 'consistency', mutation: false },
@@ -85,6 +90,7 @@ const VALIDATE_COMMAND_ALIASES = [
   { canonical: 'validate.agents', aliases: ['validate agents'], subcommand: 'agents', mutation: false },
   { canonical: 'validate.context', aliases: ['validate context'], subcommand: 'context', mutation: false },
 ];
+const VALIDATE_SUBCOMMANDS = VALIDATE_COMMAND_ALIASES.map((entry) => entry.subcommand);
 
 const ROADMAP_COMMAND_ALIASES = [
   { canonical: 'roadmap.analyze', aliases: ['roadmap analyze'], subcommand: 'analyze', mutation: false },
@@ -92,28 +98,9 @@ const ROADMAP_COMMAND_ALIASES = [
   { canonical: 'roadmap.update-plan-progress', aliases: ['roadmap update-plan-progress'], subcommand: 'update-plan-progress', mutation: true },
   { canonical: 'roadmap.annotate-dependencies', aliases: ['roadmap annotate-dependencies'], subcommand: 'annotate-dependencies', mutation: true },
 ];
-
-const STATE_SUBCOMMANDS = STATE_COMMAND_ALIASES.map((entry) => entry.subcommand);
-const VERIFY_SUBCOMMANDS = VERIFY_COMMAND_ALIASES.map((entry) => entry.subcommand);
-const INIT_SUBCOMMANDS = INIT_COMMAND_ALIASES.map((entry) => entry.subcommand);
-const PHASE_SUBCOMMANDS = PHASE_COMMAND_ALIASES.map((entry) => entry.subcommand);
-const PHASES_SUBCOMMANDS = PHASES_COMMAND_ALIASES.map((entry) => entry.subcommand);
-const VALIDATE_SUBCOMMANDS = VALIDATE_COMMAND_ALIASES.map((entry) => entry.subcommand);
 const ROADMAP_SUBCOMMANDS = ROADMAP_COMMAND_ALIASES.map((entry) => entry.subcommand);
 
 module.exports = {
-  STATE_COMMAND_ALIASES,
-  VERIFY_COMMAND_ALIASES,
-  INIT_COMMAND_ALIASES,
-  PHASE_COMMAND_ALIASES,
-  PHASES_COMMAND_ALIASES,
-  VALIDATE_COMMAND_ALIASES,
-  ROADMAP_COMMAND_ALIASES,
-  STATE_SUBCOMMANDS,
-  VERIFY_SUBCOMMANDS,
-  INIT_SUBCOMMANDS,
-  PHASE_SUBCOMMANDS,
-  PHASES_SUBCOMMANDS,
-  VALIDATE_SUBCOMMANDS,
-  ROADMAP_SUBCOMMANDS,
+  STATE_COMMAND_ALIASES, VERIFY_COMMAND_ALIASES, INIT_COMMAND_ALIASES, PHASE_COMMAND_ALIASES, PHASES_COMMAND_ALIASES, VALIDATE_COMMAND_ALIASES, ROADMAP_COMMAND_ALIASES,
+  STATE_SUBCOMMANDS, VERIFY_SUBCOMMANDS, INIT_SUBCOMMANDS, PHASE_SUBCOMMANDS, PHASES_SUBCOMMANDS, VALIDATE_SUBCOMMANDS, ROADMAP_SUBCOMMANDS,
 };
