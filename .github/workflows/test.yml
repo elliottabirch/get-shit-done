@@ -129,27 +129,26 @@ jobs:
           cp -r .gsd-beads-checkout ../gsd-beads
           rm -rf .gsd-beads-checkout
 
-      # Build order invariants (validated locally via a CI-simulation tmpdir run):
-      #   1. `npm ci` populates node_modules AND sdk/node_modules (the latter via
-      #      fork's build-sdk pipeline hooks — sdk/node_modules/.bin/tsc ends up
-      #      available for subsequent TS builds).
-      #   2. adapters/ uses a tsc `typeRoots: ["../sdk/node_modules/@types"]`, so
-      #      it depends on step 1.
-      #   3. sdk/ tsc has project references into adapters/dist/*, so the SDK
-      #      build MUST come AFTER the adapters build (TS6305 "output file has
-      #      not been built from source file" otherwise).
-      #   4. Sibling imports `get-shit-done-cc/adapters/types.js` via fork's
-      #      package exports → `./adapters/dist/types.js`; MUST have the adapters
-      #      dist already.
-      # Final order: npm ci → build:adapters → build:sdk → sibling build.
+      # Build order invariants (validated locally via tmpdir CI-simulation run):
+      #   1. adapters/ tsc needs sdk/node_modules/.bin/tsc + @types → install
+      #      sdk deps first (install:sdk-deps, no build).
+      #   2. sdk/ tsc has project references into adapters/dist/*, so the SDK
+      #      build MUST come AFTER the adapters build (TS6305 otherwise).
+      #   3. Sibling imports `get-shit-done-cc/adapters/types.js` via fork's
+      #      package exports → `./adapters/dist/types.js`; needs adapters dist.
+      # Final order: npm ci → install:sdk-deps → build:adapters → build:sdk-only
+      #   → sibling npm ci + build.
       - name: Install fork dependencies
         run: npm ci
+
+      - name: Install SDK dependencies (tsc needed for adapters build)
+        run: npm run install:sdk-deps
 
       - name: Build fork adapters dist (foundation for SDK + sibling)
         run: npm run build:adapters
 
       - name: Build fork SDK dist
-        run: npm run build:sdk
+        run: npm run build:sdk-only
 
       - name: Build sibling gsd-beads
         working-directory: ../gsd-beads
