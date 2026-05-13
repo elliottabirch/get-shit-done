@@ -32,8 +32,8 @@ export const CONFORMANCE_MANIFEST: readonly ManifestEntry[] = [
     name: 'getRecord-putRecord:round-trip',
     description: 'putRecord then getRecord returns same body (identity check)',
     expected: {
-      markdown: { applied: true },
-      beads:    { applied: true },
+      markdown: { kind: 'presence' },
+      beads:    { kind: 'presence' },
     },
   },
   {
@@ -41,8 +41,8 @@ export const CONFORMANCE_MANIFEST: readonly ManifestEntry[] = [
     name: 'getRecord:missing-path-returns-null',
     description: 'getRecord returns null for non-existent path',
     expected: {
-      markdown: { applied: true },
-      beads:    { applied: true },
+      markdown: { kind: 'presence' },
+      beads:    { kind: 'presence' },
     },
   },
   {
@@ -50,8 +50,8 @@ export const CONFORMANCE_MANIFEST: readonly ManifestEntry[] = [
     name: 'stat:file-kind',
     description: 'stat returns kind=file for putRecord-written file',
     expected: {
-      markdown: { applied: true },
-      beads:    { applied: true },
+      markdown: { kind: 'presence' },
+      beads:    { kind: 'presence' },
     },
   },
   {
@@ -59,8 +59,8 @@ export const CONFORMANCE_MANIFEST: readonly ManifestEntry[] = [
     name: 'stat:dir-kind',
     description: 'stat returns kind=dir for directory created via putRecord',
     expected: {
-      markdown: { applied: true },
-      beads:    { applied: true },
+      markdown: { kind: 'presence' },
+      beads:    { kind: 'presence' },
     },
   },
   {
@@ -68,8 +68,8 @@ export const CONFORMANCE_MANIFEST: readonly ManifestEntry[] = [
     name: 'stat:missing-returns-null',
     description: 'stat returns null for non-existent path',
     expected: {
-      markdown: { applied: true },
-      beads:    { applied: true },
+      markdown: { kind: 'presence' },
+      beads:    { kind: 'presence' },
     },
   },
 
@@ -360,8 +360,8 @@ export const CONFORMANCE_MANIFEST: readonly ManifestEntry[] = [
     name: 'withTransaction:commit-persists',
     description: 'withTransaction executes function and mutations persist',
     expected: {
-      markdown: { applied: true },
-      beads:    { applied: true },
+      markdown: { kind: 'presence' },
+      beads:    { kind: 'presence' },
     },
   },
   {
@@ -369,8 +369,8 @@ export const CONFORMANCE_MANIFEST: readonly ManifestEntry[] = [
     name: 'withTransaction:rollback-on-throw',
     description: 'withTransaction releases lock on error (throw path)',
     expected: {
-      markdown: { applied: true },
-      beads:    { applied: true },
+      markdown: { kind: 'presence' },
+      beads:    { kind: 'presence' },
     },
   },
 
@@ -386,8 +386,8 @@ export const CONFORMANCE_MANIFEST: readonly ManifestEntry[] = [
     name: 'commitPlanningState:returns-void',
     description: 'commitPlanningState resolves with no observable adapter difference (markdown: git commit; beads: NOOP per D-OQ01-BEADS)',
     expected: {
-      markdown: { applied: true },
-      beads:    { applied: true },
+      markdown: { kind: 'presence' },
+      beads:    { kind: 'presence' },
     },
     adr: 'D-2026-05-12-OQ01-BEADS',
   },
