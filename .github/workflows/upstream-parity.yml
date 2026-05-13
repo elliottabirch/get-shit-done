@@ -30,6 +30,12 @@ jobs:
       - name: Install fork dependencies
         run: npm ci
 
+      # build:adapters compiles via sdk/node_modules/.bin/tsc, so SDK deps must
+      # be installed before adapters can build. Mirrors the ordering in
+      # test.yml established in Phase 7 (commit 69423c4d).
+      - name: Install SDK dependencies (tsc needed for adapters build)
+        run: npm run install:sdk-deps
+
       - name: Build fork adapters + SDK
         run: npm run build:adapters && npm run build:sdk-only
 
