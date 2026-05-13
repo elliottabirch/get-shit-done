@@ -43,7 +43,7 @@ only durable solution. This fork adds that seam.
 
 ## Current Milestone: v1.0 — StorageAdapter interface + MarkdownAdapter
 
-**Status:** in-flight (Phases 1–5 complete on `feat/storage-adapter` branch; Phase 6 BeadsAdapter next in sibling `gsd-beads` repo). Phase 3 gap-closure `StateWriteOutcome` three-state contract landed 2026-05-11 (ADR D-2026-05-10-08) — unblocks BeadsAdapter with clean contract target.
+**Status:** in-flight (Phases 1–7 complete on `feat/storage-adapter` branch; Phase 8 migration + distribution is the final phase). Phase 7 conformance-test-suite shipped 2026-05-12 with 56-entry manifest (32 binB + 12 noun-roundtrip + 9 section-tuple + 2 rollback + 1 commitPlanningState), paired harness covering both adapters, property-based round-trips gated behind `CONFORMANCE_DEEP=1`, and CONFORM-01..04 all validated against the live codebase (see `.planning/phases/07-conformance-test-suite/07-VERIFICATION.md` + `07-REVIEW.md`).
 
 **Goal:** Ship a fork of upstream GSD that adds a `StorageAdapter`
 interface (10 Bin A primitives + 6 foundational primitives + ~58 Bin B
@@ -67,17 +67,21 @@ Verify zero behavior change against upstream's test suite.
 
 | # | Phase | Status | Repo |
 |---|-------|--------|------|
-| 1 | Fork bootstrap + StorageAdapter interface skeleton + MarkdownAdapter scaffold | next | this |
-| 2 | Wire core read methods to adapter | pending | this |
-| 3 | Wire core write methods + `recordStateEvent` | pending | this |
-| 4 | Plug workflow leaks (top 10 + `<context>`-block class) | pending | this |
-| 5 | Foundational primitive lift (`updateSection`, `snapshot/restore`, `putNamedDoc`, `writeBinaryAsset`) | pending | this |
-| 6 | BeadsAdapter implementation | pending | gsd-beads |
-| 7 | Conformance test suite (run against both adapters) | pending | both |
-| 8 | Migration + distribution | pending | both |
+| 1 | Fork bootstrap + StorageAdapter interface skeleton + MarkdownAdapter scaffold | complete (2026-05-01) | this |
+| 2 | Wire core read methods to adapter | complete (2026-05-01) | this |
+| 3 | Wire core write methods + `recordStateEvent` | complete (2026-05-10) | this |
+| 4 | Plug workflow leaks (top 10 + `<context>`-block class) | complete | this |
+| 5 | Foundational primitive lift (`updateSection`, `snapshot/restore`, `putNamedDoc`, `writeBinaryAsset`) | complete | this |
+| 6 | BeadsAdapter implementation | complete | gsd-beads |
+| 7 | Conformance test suite (run against both adapters) | complete (2026-05-12) | both |
+| 8 | Migration + distribution | next | both |
 
-Phases 1–5 land here on `feat/storage-adapter`. Phase 6 begins in
-gsd-beads. Phases 7–8 span both repos.
+Phases 1–5 landed on `feat/storage-adapter`. Phase 6 shipped in
+gsd-beads (on `feat/phase-6-reset`; graduation to `main` deferred per
+PHASE-7-REMAINING.md §D). Phases 7–8 span both repos; Phase 7 is
+complete; Phase 8 opens with a mandatory Pre-0 (SDK alias-generator
+rewrite carried forward from Phase 7 §C.1 — see ROADMAP.md Phase 8
+plans list).
 
 ## Recent upstream signal (2026-04-30 review)
 
@@ -174,5 +178,5 @@ this fork archives.
 
 ---
 
-*Last updated: 2026-05-11 — Phase 3 complete (6/6 plans including 03-06 gap closure); Phases 1–5 done; Phase 6 BeadsAdapter pending in sibling repo.*
+*Last updated: 2026-05-13 — Phase 7 (conformance-test-suite) complete. 56-entry manifest + paired-harness + property round-trips (CONFORMANCE_DEEP-gated) + failure-injection rollback. CI end-to-end green on Ubuntu 22 Node 22 paired-conformance as of commit e204d9cb. Phase 8 (migration + distribution) next, opening with Pre-0 SDK alias-generator rewrite.*
 *Decision log: `.planning/DECISIONS.md`. Investigation input: `.planning/research/fork-investigation/SYNTHESIS.md`.*
