@@ -101,17 +101,16 @@ Remaining levers (not yet applied):
 2. **Gate property tests behind `CONFORMANCE_DEEP=1`.** Run all non-property tests on every PR (fast); run properties only nightly. Pairs well with Lever 1 — Lever 1 first, this if still too slow.
 3. **Review bd cold-start cost.** Each paired test creates a fresh bd store (400–700ms init). A fixture-pool pattern (reuse a small number of pre-initialized bd stores across test cases) could cut a lot of that. Complex; low ROI until other levers exhausted.
 
-### A.1 Parallel-forks orphan tests (regression from Lever 3)
+### A.1 ~~Parallel-forks orphan tests~~ ✅ RESOLVED
 
-Two test files now fail silently under parallel forks:
-- `stat.test.ts` — uses `'markdown-stat-only'` adapter label which isn't in `AdapterName` union. Previously benign under singleFork; now hits `assertFromManifest` D-07 guard in parallel mode.
-- `properties.test.ts` — likely bd cold-start + fast-check interaction under isolated workers.
+Fixed in follow-up commit (post-Lever-3):
+- `stat.test.ts` DELETED (duplicate of paired-core-markdown + used bogus adapter label).
+- `markdown.conformance.test.ts` DELETED (pure duplicate of paired-core-markdown).
+- `paired.test.ts` stub DELETED (served no purpose after split).
+- `properties.test.ts` updated to import `pairedAdapters` + `bdPresent` from new shared helper `tests/conformance/paired-adapters.ts` (not a `*.test.ts`, so vitest glob skips it).
+- 4 paired-*-beads entry files refactored to also import `bdPresent` from the shared helper.
 
-Fix candidates:
-- **stat.test.ts:** Change label to `'markdown'` OR move the stat-specific describe block into paired-core-markdown.test.ts and delete stat.test.ts.
-- **properties.test.ts:** Diagnose via isolated run + vitest reporter verbose mode. May need dedicated vitest config (own pool settings).
-
-Non-blocking for Phase 7 close — the 2 test failures are in files not part of SC#1..SC#4 coverage (stat is Phase 2 coverage; properties is D-14 quality-of-coverage, not required for phase completion).
+Verified: parallel paired run (excluding properties) reports 16 files with 1 pre-existing init-bundlers baseline failure (Deferred-02, unrelated). Properties registers its 24 `noun-roundtrip` keys within the first 8s of collection, and meta-coverage passes 3/3 when the full registry is populated.
 
 ### B. Full local property-suite run (never completed)
 
