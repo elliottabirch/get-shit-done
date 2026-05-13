@@ -238,8 +238,8 @@ Plans:
 **Plans:** 6 plans
 Plans:
 **Wave 1** *(no dependencies — Pre-0 must ship before DIST-04; DIST-01 is foundation for DIST-02 docs)*
-- [ ] 08-01-PLAN.md — Pre-0: SDK alias-generator rewrite (two-file writer + regenerate TS + CJS artifacts + remove `if: false` bypass in test.yml)
-- [ ] 08-02-PLAN.md — DIST-01: storage.adapter factory (createStorageAdapter + BeadsAdapterUnavailable + config-schema extension + 8 call-site migration)
+- [x] 08-01-PLAN.md — Pre-0: SDK alias-generator rewrite (two-file writer + regenerate TS + CJS artifacts + remove `if: false` bypass in test.yml)
+- [x] 08-02-PLAN.md — DIST-01: storage.adapter factory (createStorageAdapter + BeadsAdapterUnavailable + config-schema extension + 8 call-site migration)
 
 **Wave 2** *(blocked on DIST-01 for docs references; DIST-03 is independent infra)*
 - [ ] 08-03-PLAN.md — DIST-02: fork-side migration docs (docs/MIGRATION.md + README Storage backends section; sibling owns gsd-beads migrate implementation)
