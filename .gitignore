@@ -78,3 +78,6 @@ tmp/
 .envrc
 adapters/package-lock.json
 sdk/node_modules
+
+# Vitest conformance test-registry (Phase 7 D-06 file-based registry)
+.vitest-tmp/
