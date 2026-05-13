@@ -242,8 +242,8 @@ Plans:
 - [x] 08-02-PLAN.md — DIST-01: storage.adapter factory (createStorageAdapter + BeadsAdapterUnavailable + config-schema extension + 8 call-site migration)
 
 **Wave 2** *(blocked on DIST-01 for docs references; DIST-03 is independent infra)*
-- [ ] 08-03-PLAN.md — DIST-02: fork-side migration docs (docs/MIGRATION.md + README Storage backends section; sibling owns gsd-beads migrate implementation)
-- [ ] 08-04-PLAN.md — DIST-03: rebase playbook + helper script (docs/UPSTREAM-REBASE.md + scripts/sync-upstream.sh with advisory leak-grep on post-rebase diff)
+- [x] 08-03-PLAN.md — DIST-02: fork-side migration docs (docs/MIGRATION.md + README Storage backends section; sibling owns gsd-beads migrate implementation)
+- [x] 08-04-PLAN.md — DIST-03: rebase playbook + helper script (docs/UPSTREAM-REBASE.md + scripts/sync-upstream.sh with advisory leak-grep on post-rebase diff)
 
 **Wave 3** *(DIST-04 blocked on Pre-0 for test.yml; DIST-05 is phase-close ADR)*
 - [ ] 08-05-PLAN.md — DIST-04: strict-superset parity CI (tests/shared/sanitize.ts extraction + .github/workflows/upstream-parity.yml with npm pack + pinned upstream tag; human-verify first green PR run)
