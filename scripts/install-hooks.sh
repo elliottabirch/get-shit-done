@@ -16,4 +16,4 @@ mkdir -p "$HOOK_DIR"
 
 # Pre-commit: leak gate
 ln -sf "$SCRIPT_DIR/pre-commit-leak-gate.sh" "$HOOK_DIR/pre-commit"
-echo "Installed pre-commit hook: leak-grep gate"
+echo "Installed pre-commit hook: leak-grep gate" >&2
