@@ -1591,3 +1591,43 @@ Phase 8 migration tool (DIST-02) consumes the `noun-roundtrip` entries
 for pre-seed normalize pass.
 
 ---
+
+
+## D-2026-05-13-DIST-05
+
+**Date:** 2026-05-13
+**Phase:** 8 (migration-distribution)
+**Status:** Accepted
+
+### Context
+
+By Phase 8 close, the fork has shipped the `StorageAdapter` seam (Phases 1–5), `BeadsAdapter` implementation (Phase 6, sibling repo `gsd-beads@feat/phase-6-reset`), conformance test suite (Phase 7, 56-entry manifest with paired harness across both adapters), migration docs (DIST-02, fork-side prose pointing at sibling-owned `gsd-beads migrate`), rebase playbook + helper script (DIST-03, `docs/UPSTREAM-REBASE.md` + `scripts/sync-upstream.sh`), and strict-superset parity CI workflow (DIST-04, `.github/workflows/upstream-parity.yml`). The v1.0 milestone's DIST-05 requirement is to record whether this work is proposed upstream as a PR or maintained as a long-lived fork.
+
+Inputs available at decision time:
+
+- **Upstream PRs #2898 / #2901 / #2908 status as of 2026-05-13:** all three MERGED on 2026-04-30 (`durable planning runtime`, `planning-workspace seam from core.cjs`, `manifest-backed routing seam + family adapters`). Upstream is actively shipping seam-abstraction work.
+- **Fork's own Phase 8 rebase cost:** one real 228-commit rebase has occurred (commit `6d5889a9`), resolved cleanly with 13 mechanical test fixes. `scripts/sync-upstream.sh` (DIST-03) has had zero real runs since landing — the playbook is shipped but unexercised.
+- **First `upstream-parity` CI run:** triggered by draft PR #2 (this branch) on 2026-05-13; failed with two design findings about `.planning/` fixture expectations in the upstream-checkout — workflow plumbing works, but the parity check's data-shape assumptions need follow-up. Tracked in `08-05-SUMMARY.md` deviations.
+- **External adopter signal:** zero today — `elliottabirch/get-shit-done` shows 0 stars / 0 forks / 0 open issues. No third-party pressure forcing an upstream merge.
+- **Sibling `gsd-beads` state:** still on `feat/phase-6-reset`; graduation to `main` tracked as a post-v1.0 deferred item.
+
+### Decision
+
+**Maintain long-lived fork.** The v1.0 milestone ships from `feat/storage-adapter` on the fork repo; periodic upstream rebase via `scripts/sync-upstream.sh` (DIST-03) keeps the fork in sync with `upstream/main`; the strict-superset invariant (validated by `upstream-parity.yml`, DIST-04) guarantees fork-installed-with-no-config behavior is byte-identical to upstream.
+
+### Rationale
+
+Upstream's reception of #2898/#2901/#2908 (all merged 2026-04-30) demonstrates active willingness to accept seam abstractions, which is encouraging signal — but the fork's specific design (`StorageAdapter` interface as a first-class top-level seam, capabilities flag for adapter feature negotiation, paired conformance harness across two repos) is materially larger in scope than any of the three accepted PRs and would arrive as a 491-file / 371-commit proposal that upstream did not initiate. The fork's own retrospective is consistent: the one real 228-commit rebase (commit 6d5889a9) resolved cleanly with 13 mechanical test fixes, validating that DIST-03's playbook captures the rebase shape; with `sync-upstream.sh` (DIST-03) and `upstream-parity.yml` (DIST-04) now in place, ongoing rebase cost is bounded and observable. External-adopter signal is 0 today (no stars / forks / issues), which means there is no third-party pressure forcing an upstream merge — we can decide on our own timeline. Carry-forward: sibling `gsd-beads` stays on `feat/phase-6-reset` until v1.0 cut; the two-repo model (D-2026-04-30-02) remains canonical. Reopens annually as a review item.
+
+### Consequences
+
+- The fork remains the canonical distribution channel for the `StorageAdapter` seam; users install via `npm install <fork>` (or git+ssh against `feat/storage-adapter`), not from upstream's npm artifact.
+- `scripts/sync-upstream.sh` (DIST-03) becomes the operational lifeline: each upstream-feature consumption requires a rebase + leak-grep audit + adapter-seam reconciliation. The DIST-03 cadence (on-demand, per D-15) holds.
+- `upstream-parity.yml` (DIST-04) is the single mechanism preventing strict-superset regression. The two open findings from the 2026-05-13 first-run (verify.commits git-history fixture, STATE.md fixture in upstream-checkout) need resolution as Phase 8.x or post-v1.0 follow-ups before the parity gate can claim "first green."
+- Sibling repo `gsd-beads` graduation to `main` and v1.0 release is unblocked but explicitly post-v1.0 work; the two-repo model (D-2026-04-30-02) is the long-term shape, not a transient state.
+- A "submit upstream" proposal remains a future option — this decision is reopened annually as a review item, gated on (a) external-adopter pressure (`REQ NPM-01`), (b) rebase-cost curve becoming materially burdensome, or (c) upstream maintainers explicitly soliciting the work.
+- `docs/MIGRATION.md` (DIST-02) language stays fork-rooted: the `gsd-beads migrate` flow assumes users install the fork, not upstream-merged-release.
+
+### Status
+
+Locked. v1.0 milestone close. Reopens annually for review against the three reopen-criteria above.
