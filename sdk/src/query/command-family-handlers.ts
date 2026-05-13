@@ -18,6 +18,7 @@ import {
   verifyCommits, verifyArtifacts, verifySchemaDrift,
   verifyCodebaseDrift,
 } from './verify.js';
+import { verifyFatSkills } from './verify-fat-skills.js';
 import { verifyKeyLinks, validateConsistency, validateHealth, validateAgents, validateContext } from './validate.js';
 import {
   phaseListPlans, phaseListArtifacts,
@@ -73,6 +74,7 @@ export const FAMILY_HANDLERS: Record<string, Readonly<Record<string, QueryHandle
     'verify.key-links': verifyKeyLinks,
     'verify.schema-drift': verifySchemaDrift,
     'verify.codebase-drift': verifyCodebaseDrift,
+    'verify.fat-skills': verifyFatSkills,
   },
   validate: {
     'validate.consistency': validateConsistency,
