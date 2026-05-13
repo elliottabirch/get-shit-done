@@ -207,6 +207,31 @@ For the full configuration reference — all settings, git branching strategies,
 
 ---
 
+## Storage backends
+
+This fork adds a `StorageAdapter` seam so the same planning workflows
+can run against different backends. Two adapters ship with v1.0:
+
+- **MarkdownAdapter** (default) — byte-identical to upstream
+  `gsd-build/get-shit-done`. No configuration required.
+- **BeadsAdapter** — stores planning state in a `bd` issue store.
+  Requires the `gsd-beads` peer package.
+
+To opt in to BeadsAdapter, add the following to `.planning/config.json`:
+
+```json
+{ "storage": { "adapter": "beads" } }
+```
+
+Migrating an existing markdown-backed project to the bd backend uses
+the `gsd-beads migrate` subcommand from the sibling package.
+
+See [`docs/MIGRATION.md`](docs/MIGRATION.md) for the complete
+migration guide, including prerequisites, dry-run output,
+backup/rollback procedure, and behavior deviations.
+
+---
+
 ## Documentation
 
 | Doc | What's in it |
