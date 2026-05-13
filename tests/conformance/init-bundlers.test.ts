@@ -82,7 +82,16 @@ function sanitize(json: string): string {
     .replace(/"source_project_path":\s*"[^"]+"/g, '"source_project_path": "<HOME_PATH>"')
     .replace(/"workspace_path":\s*"[^"]+"/g, '"workspace_path": "<HOME_PATH>"')
     .replace(/"path":\s*"\/[^"]+"/g, '"path": "<HOME_PATH>"')
-    .replace(/"error":\s*"Workspace not found: \/[^"]+"/g, '"error": "Workspace not found: <HOME_PATH>"');
+    .replace(/"error":\s*"Workspace not found: \/[^"]+"/g, '"error": "Workspace not found: <HOME_PATH>"')
+    // agents_installed + missing_agents reflect the host's .claude/agents/
+    // directory state at capture time. Baselines were captured on a host
+    // with the full agent set installed; CI runners start without any
+    // agents installed. The fields exist for the sessionStart bundler's
+    // "GSD setup ready?" signal, but byte-identity is a host-environment
+    // property, not a bundler-correctness property. Fold both to stable
+    // placeholders so the assertion checks SHAPE, not environment.
+    .replace(/"agents_installed":\s*(true|false)/g, '"agents_installed": "<AGENTS_INSTALLED>"')
+    .replace(/"missing_agents":\s*\[[^\]]*\]/g, '"missing_agents": "<MISSING_AGENTS>"');
 }
 
 /**
@@ -108,6 +117,11 @@ const SKIP_BASELINES = new Set<string>([
   'init-progress.before.json',
   // phases[].last_activity is mtime-derived → drifts every commit.
   'init-manager.before.json',
+  // phase_dir_count drifts as new phases land in .planning/phases/
+  // (baseline: 5; current: 7 after Phase 6 + Phase 7 added).
+  'init-new-milestone.before.json',
+  // todos list drifts as .planning/todos/pending/ gains/loses files.
+  'init-todos.before.json',
 ]);
 
 describe.each(baselineFiles)('init bundler: %s', (baselineFile) => {
