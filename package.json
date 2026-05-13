@@ -68,6 +68,8 @@
   "scripts": {
     "build:hooks": "node scripts/build-hooks.js",
     "build:sdk": "cd sdk && npm ci && npm run build",
+    "install:sdk-deps": "cd sdk && npm ci",
+    "build:sdk-only": "cd sdk && npm run build",
     "build:adapters": "cd adapters && ../sdk/node_modules/.bin/tsc -p tsconfig.json",
     "prebuild:conformance": "node scripts/extract-section-anchors.mjs",
     "build:conformance": "cd tests/conformance && ../../sdk/node_modules/.bin/tsc -p tsconfig.json && node -e \"require('fs').writeFileSync('dist/package.json', '{\\n  \\\"type\\\": \\\"module\\\"\\n}\\n')\"",
