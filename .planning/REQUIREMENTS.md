@@ -77,11 +77,11 @@
 
 ### DIST — Migration + distribution (both repos)
 
-- [ ] **DIST-01**: User opts in to alternate adapter via `storage.adapter: beads` in `.planning/config.json`; default behavior (no setting) is identical to upstream
-- [ ] **DIST-02**: Migration tool reads existing `.planning/` markdown and seeds bd issues for users adopting the bd backend
-- [ ] **DIST-03**: Fork divergence / upstream-patch-reapply workflow documented: how to rebase against `upstream/main`, how leak-grep CI behaves on rebase, conflict resolution playbook
-- [ ] **DIST-04**: Strict-superset invariant validated end-to-end — `npm install <fork>` with no adapter config produces identical results to upstream's golden test suite (#2909 parity matrix)
-- [ ] **DIST-05**: Distribution decision recorded — submit upstream as PR vs maintain long-lived fork (informed by upstream's reception of #2898/#2901/#2908)
+- [x] **DIST-01**: User opts in to alternate adapter via `storage.adapter: beads` in `.planning/config.json`; default behavior (no setting) is identical to upstream
+- [x] **DIST-02**: Migration tool reads existing `.planning/` markdown and seeds bd issues for users adopting the bd backend
+- [x] **DIST-03**: Fork divergence / upstream-patch-reapply workflow documented: how to rebase against `upstream/main`, how leak-grep CI behaves on rebase, conflict resolution playbook
+- [x] **DIST-04**: Strict-superset invariant validated end-to-end — `npm install <fork>` with no adapter config produces identical results to upstream's golden test suite (#2909 parity matrix)
+- [x] **DIST-05**: Distribution decision recorded — submit upstream as PR vs maintain long-lived fork (informed by upstream's reception of #2898/#2901/#2908)
 
 ---
 
@@ -181,11 +181,11 @@ Source phase scope: SYNTHESIS.md §7 (canonical, locked).
 | CONFORM-02 | Phase 7 — Conformance test suite | both | Complete (Phase 7) |
 | CONFORM-03 | Phase 7 — Conformance test suite | both | Complete (Phase 7) |
 | CONFORM-04 | Phase 7 — Conformance test suite | both | Complete (Phase 7) |
-| DIST-01 | Phase 8 — Migration + distribution | both | Pending |
-| DIST-02 | Phase 8 — Migration + distribution | both | Pending |
-| DIST-03 | Phase 8 — Migration + distribution | both | Pending |
-| DIST-04 | Phase 8 — Migration + distribution | both | Pending |
-| DIST-05 | Phase 8 — Migration + distribution | both | Pending |
+| DIST-01 | Phase 8 — Migration + distribution | both | Complete (Phase 8) |
+| DIST-02 | Phase 8 — Migration + distribution | both | Complete (Phase 8) |
+| DIST-03 | Phase 8 — Migration + distribution | both | Complete (Phase 8) |
+| DIST-04 | Phase 8 — Migration + distribution | both | Complete (Phase 8) |
+| DIST-05 | Phase 8 — Migration + distribution | both | Complete (Phase 8) |
 
 **Coverage by phase:**
 
