@@ -123,6 +123,16 @@ Verified: parallel paired run (excluding properties) reports 16 files with 1 pre
 - The stale-dist bug that caused the markdown property regression was rooted in committing `adapters/dist/` or not cleaning it between contract edits. A `prebuild:adapters` hook that does `rm -rf dist/` would prevent recurrence.
 - Low-risk addition; pair with a `.gitignore` entry for `adapters/dist/` if it isn't already ignored.
 
+### C.1 SDK alias-drift check disabled (CI bypass)
+
+- `.github/workflows/test.yml` has the `SDK generated alias artifact drift check` step guarded by `if: false` — a temporary bypass because the committed `sdk/src/query/command-aliases.generated.ts` is in a different format than `sdk/scripts/gen-command-aliases.ts` would emit (interface-typed vs `as const`), and there is NO automated writer for the CJS mirror `get-shit-done/bin/lib/command-aliases.generated.cjs`.
+- **Pre-existing SDK generator rot**, unrelated to Phase 7 work. Surfaced during Phase 7 CI validation.
+- **Required fix (Phase 8 side-plan):**
+  1. Rewrite `sdk/scripts/gen-command-aliases.ts` so its output matches the committed TS format (typed `readonly FamilyCommandAlias[]` + inline single-line entries + `FamilyCommandAlias` interface export).
+  2. Add a CJS writer to the same script (or a new parallel script) that emits `get-shit-done/bin/lib/command-aliases.generated.cjs` from the same manifest source of truth.
+  3. Regenerate both artifacts, commit, then re-enable the CI step by removing the `if: false` guard.
+- **Marker to find:** grep for `TODO(phase-8)` in `.github/workflows/test.yml`.
+
 ### D. Graduate `feat/phase-6-reset` → `main` on sibling
 
 - Sibling's `main` is frozen at v0.2 (commit `5082d45`). All Phase 6+7 work is on `feat/phase-6-reset`. CI workflow currently pins sibling ref to `feat/phase-6-reset` as a workaround.
