@@ -1,0 +1,59 @@
+name: upstream-parity
+
+on:
+  pull_request:
+    branches: [feat/storage-adapter, main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  parity:
+    name: Upstream golden suite vs fork tarball
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout fork
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f  # v6.3.0
+        with:
+          node-version: 22
+
+      - name: Install fork dependencies
+        run: npm ci
+
+      - name: Build fork adapters + SDK
+        run: npm run build:adapters && npm run build:sdk-only
+
+      - name: Pack fork tarball
+        id: pack
+        run: |
+          tarball=$(npm pack --silent)
+          echo "tarball=$tarball" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout upstream at pinned tag
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          repository: gsd-build/get-shit-done
+          ref: v1.42.0
+          path: upstream-checkout
+
+      - name: Install fork tarball into upstream checkout
+        working-directory: upstream-checkout
+        run: npm install "../${{ steps.pack.outputs.tarball }}"
+
+      - name: Install + build upstream SDK dist
+        working-directory: upstream-checkout/sdk
+        run: npm ci && npm run build
+
+      - name: Run upstream golden suite against fork
+        working-directory: upstream-checkout/sdk
+        run: npx vitest run src/golden/
