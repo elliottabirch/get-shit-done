@@ -40,6 +40,7 @@ const VERIFY_COMMAND_ALIASES = [
   { canonical: 'verify.key-links', aliases: ['verify key-links'], subcommand: 'key-links', mutation: false },
   { canonical: 'verify.schema-drift', aliases: ['verify schema-drift'], subcommand: 'schema-drift', mutation: false },
   { canonical: 'verify.codebase-drift', aliases: ['verify codebase-drift'], subcommand: 'codebase-drift', mutation: false },
+  { canonical: 'verify.fat-skills', aliases: ['verify fat-skills'], subcommand: 'fat-skills', mutation: false },
 ];
 const VERIFY_SUBCOMMANDS = VERIFY_COMMAND_ALIASES.map((entry) => entry.subcommand);
 
