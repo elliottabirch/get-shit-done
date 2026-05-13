@@ -11,11 +11,10 @@
  *   - 25 StateWriteOutcome binB entries from write-outcome.conformance-suite.ts
  *   - 2 withTransaction binB entries from write-transaction.conformance-suite.ts
  *   - 9 section-tuple entries from RESEARCH Tier 1 STATE.md literals
- *   Total: 41 entries (≥ 30 floor per plan must_haves)
- *
- * Future plans append:
- *   - Plan 07-05: 12 noun-roundtrip entries × 2 adapters.
- *   - Plan 07-06: rollback entries (CONFORM-04 + known-gap per D-09).
+ *   Plan 07-05b: 12 noun-roundtrip entries × 2 adapters.
+ *   Plan 07-06:  2 rollback entries (CONFORM-04 + known-gap per D-09).
+ *   Phase-close: 1 commitPlanningState binB (CONFORM-01 fill; D-OQ01-BEADS).
+ *   Total: 56 entries.
  *
  * D-2026-05-12-OQ06-CREATED-SECTION: BeadsAdapter Outcome A never emits
  * created_section. Every markdown entry with created_section has a paired
@@ -373,6 +372,24 @@ export const CONFORMANCE_MANIFEST: readonly ManifestEntry[] = [
       markdown: { applied: true },
       beads:    { applied: true },
     },
+  },
+
+  // ========================================================================
+  // commitPlanningState — paired entry closing CONFORM-01 coverage.
+  // MarkdownAdapter: git add + git commit. BeadsAdapter: NOOP per
+  // D-2026-05-12-OQ01-BEADS (bd owns per-write atomicity; no git analog).
+  // Both resolve without throwing; the NOOP asymmetry is a deviation, not
+  // a divergence — both return `void`, which is the only observable.
+  // ========================================================================
+  {
+    kind: 'binB',
+    name: 'commitPlanningState:returns-void',
+    description: 'commitPlanningState resolves with no observable adapter difference (markdown: git commit; beads: NOOP per D-OQ01-BEADS)',
+    expected: {
+      markdown: { applied: true },
+      beads:    { applied: true },
+    },
+    adr: 'D-2026-05-12-OQ01-BEADS',
   },
 
   // ========================================================================
