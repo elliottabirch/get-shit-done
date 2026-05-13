@@ -769,19 +769,22 @@ This is a code-and-config-only phase (no rename/refactor). No runtime state migr
 
 ---
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Is `sdk/` compiled to CJS or ESM?**
+   - **RESOLVED:** `sdk/tsconfig.json` targets `"module": "NodeNext"`. Plan 08-02 specifies `createRequire(import.meta.url)` from `node:module` as the require shim for `gsd-beads`, matching the precedent at `sdk/scripts/check-command-aliases-fresh.mjs` lines 2-6.
    - What we know: `sdk/` uses tsc; `sdk/dist/` files exist; npm pack includes `sdk/dist/`.
    - What's unclear: Whether `sdk/tsconfig.json` targets `"module": "CommonJS"` or `"NodeNext"`. This determines whether `require()` is available in `adapter-factory.ts`.
    - Recommendation: `cat sdk/tsconfig.json | grep -i module` before writing the factory. If `NodeNext`, use `createRequire(import.meta.url)` from `node:module` as the require shim (already used in `sdk/scripts/check-command-aliases-fresh.mjs` line 6).
 
 2. **Does `config-schema.cjs` exist and where?**
+   - **RESOLVED:** Confirmed to exist at `get-shit-done/bin/lib/config-schema.cjs`; Plan 08-02 Task 2 modifies it directly (treating it as an existing artifact) and the parity test `tests/config-schema-sdk-parity.test.cjs` enforces set-equality with the TS allowlist.
    - What we know: `config-schema.ts` has a JSDoc comment referencing `get-shit-done/bin/lib/config-schema.cjs` and `tests/config-schema-sdk-parity.test.cjs`.
    - What's unclear: Whether `get-shit-done/bin/lib/config-schema.cjs` was already created as a fork artifact or still needs to be created.
    - Recommendation: `ls get-shit-done/bin/lib/config-schema.cjs` to confirm existence before DIST-01 planning.
 
 3. **Should `adapterFor()` be updated or left as MarkdownAdapter-only?**
+   - **RESOLVED:** Plan 08-02 Task 3 retains `adapterFor()` as MarkdownAdapter-only per CONTEXT.md intentional retention (pipeline.ts dry-run depends on `_txnContextForPipeline` / `_realReadForPipeline` MarkdownAdapter internals). An `@deprecated` JSDoc note is added pointing new callers to `createStorageAdapter()`.
    - What we know: `adapterFor()` is used by pipeline.ts dry-run which accesses MarkdownAdapter-internal underscore methods. Updating it to `createStorageAdapter()` could cause it to return a BeadsAdapter when config says beads, but pipeline.ts's MarkdownAdapter-specific methods would then silently no-op (the `?.()` guard already handles this).
    - What's unclear: Whether the pipeline.ts dry-run is expected to work with BeadsAdapter in v1.0 or is explicitly MarkdownAdapter-only.
    - Recommendation: Keep `adapterFor()` as MarkdownAdapter-only (it already has the comment "Lazy import keeps this file free of an adapters/ static import"). Add a JSDoc note: "Returns MarkdownAdapter regardless of config. Pipeline dry-run diffs rely on MarkdownAdapter internals. Use createStorageAdapter() for config-driven dispatch in other contexts."
