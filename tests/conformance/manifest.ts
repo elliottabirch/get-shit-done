@@ -590,6 +590,39 @@ export const CONFORMANCE_MANIFEST: readonly ManifestEntry[] = [
       beads:    { kind: 'normalize-modulo-equal' },
     },
   },
+
+  // ========================================================================
+  // CONFORM-04 rollback entries (Plan 07-06; D-09 + D-10 + D-11)
+  // ========================================================================
+
+  // Standard throw-before-commit rollback: both adapters must rollback
+  // cleanly. Buffered-op discard on BeadsAdapter (Outcome A path).
+  {
+    kind: 'rollback',
+    name: 'withTransaction:throw-before-commit',
+    description: 'throw inside withTransaction fn before commit; rollback to pre-txn state',
+    expected: {
+      markdown: { kind: 'byte-identical' },
+      beads:    { kind: 'record-identical' },
+    },
+  },
+
+  // KNOWN GAP per D-09: Outcome A mid-commit-replay failure leaves
+  // bd partially committed on the Nth issue. Phase 6 Deferred-04 +
+  // Deferred-05. Documented; not tested via adapter-internal hooks
+  // (D-10). Phase 6.1 candidate.
+  {
+    kind: 'rollback',
+    name: 'withTransaction:mid-commit-replay',
+    description:
+      'mid-commit-replay failure after N-of-M buffered writes replayed ' +
+      '(Phase 6 Outcome A gap; Deferred-04 / Deferred-05)',
+    expected: {
+      markdown: { kind: 'byte-identical' },
+      beads:    { kind: 'incomplete-per-Deferred-04', adr: 'D-2026-05-12-OQ06-TXN' },
+    },
+    adr: 'D-2026-05-12-OQ06-TXN',
+  },
 ] as const;
 
 export type { ManifestEntry, AdapterName, ExpectedOutcome,
