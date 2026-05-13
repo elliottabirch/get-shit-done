@@ -106,12 +106,22 @@ jobs:
           bd --version
 
       # Checkout sibling gsd-beads BEFORE npm ci so file:../gsd-beads resolves.
-      - name: Checkout sibling gsd-beads
+      # actions/checkout refuses paths outside $GITHUB_WORKSPACE, so check out to a
+      # workspace-nested path then copy to ../gsd-beads to match the local-dev layout
+      # that file:../gsd-beads in fork's package.json expects.
+      - name: Checkout sibling gsd-beads (workspace-nested)
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
         with:
-          repository: gsd-build/gsd-beads
-          path: ../gsd-beads
+          repository: elliottabirch/gsd-beads
+          path: .gsd-beads-checkout
           ref: main
+
+      - name: Relocate sibling to ../gsd-beads (match file:../gsd-beads devDep)
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp -r .gsd-beads-checkout ../gsd-beads
+          rm -rf .gsd-beads-checkout
 
       - name: Build sibling gsd-beads
         working-directory: ../gsd-beads

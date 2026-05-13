@@ -3,25 +3,25 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Phase 7 context gathered
+stopped_at: "Phase 7 complete"
 last_updated: "2026-05-12T18:18:53.396Z"
-last_activity: 2026-05-12 -- Phase 07 execution started
+last_activity: 2026-05-12 -- Phase 7 complete; CONFORM-01..04 shipped
 progress:
   total_phases: 8
-  completed_phases: 5
-  total_plans: 45
-  completed_plans: 37
-  percent: 82
+  completed_phases: 6
+  total_plans: 51
+  completed_plans: 43
+  percent: 75
 ---
 
 # Project State
 
 ## Current Position
 
-Phase: 07 (conformance-test-suite) — EXECUTING
-Plan: 1 of 8
-Status: Executing Phase 07
-Last activity: 2026-05-12 -- Phase 07 execution started
+Phase: 07 (conformance-test-suite) — COMPLETE
+Plan: 6 of 6 (COMPLETE)
+Status: Phase 7 complete; Phase 8 unblocked
+Last activity: 2026-05-12 -- Phase 7 complete; CONFORM-01..04 shipped
 
 ## Reference
 
@@ -86,6 +86,10 @@ See `.planning/DECISIONS.md` for full record + rationale.
 - [Phase ?]: [Phase 6 Plan 06-06]: D-2026-05-12-OQ01-BEADS — commitPlanningState NOOP on BeadsAdapter (OQ-01 resolved)
 - [Phase ?]: [Phase 6 Plan 06-06]: withTransaction ships D-TXN Outcome A in-memory buffer (275 LOC); capabilities.snapshot=false; mid-txn commit gap tracked as Deferred-04 Phase 6.1 follow-up
 - [Phase ?]: [Phase 6 Plan 06-06]: BeadsAdapter feature-complete — zero NotYetImplementedError throw-stubs in src/index.ts; 71/71 smoke tests green
+- [Phase 7]: D-2026-05-12-NORMALIZE — StorageAdapter.normalize() additive contract (Plan 07-01)
+- [Phase 7]: D-2026-05-12-CONFORM-MANIFEST — 55-entry conformance manifest + enforcement rules (Plan 07-06); manifest ↔ registeredTests bidirectional invariant via meta-coverage.test.ts
+- [Phase 7]: Paired CI green on both adapters; 119/119 non-property tests pass; BEADS_ACTOR=seed + bd export --json rollback diff confirmed (D-11)
+- [Phase 7]: BeadsAdapter known-gap baked as manifest entry (D-09): mid-commit-replay withTransaction:mid-commit-replay / expected.beads.kind=incomplete-per-Deferred-04 / adr D-2026-05-12-OQ06-TXN
 
 ## v1.0 milestone scope
 

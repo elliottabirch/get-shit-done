@@ -30,7 +30,7 @@ and ships migration + distribution (Phase 8).
 - [x] **Phase 4: Plug workflow leaks (top-10 + `<context>`-block class)** — Refactor the 10 heaviest leaking workflows + the new frontmatter `@`-reference leak class; ship the leak-grep CI gate; resolve OQ-03 + OQ-04. *(this repo)* (completed 2026-05-10)
 - [x] **Phase 5: Foundational primitive lift** — Implement `getSection`/`updateSection`/`snapshot`/`restore`/`putNamedDoc`/`writeBinaryAsset`; hoist `pipeline.js` dry-run off filesystem `cp -r`; resolve OQ-02 + OQ-05 + OQ-07 + OQ-10. *(this repo)* (completed 2026-05-11)
 - [x] **Phase 6: BeadsAdapter implementation** — Implement the full StorageAdapter against `bd` in the sibling repo, carrying forward 13 spike findings and the JSONL roundtrip pattern; resolve OQ-06. *(sibling repo `gsd-beads`)* (completed 2026-05-12)
-- [ ] **Phase 7: Conformance test suite** — Paired tests run every Bin B method against both adapters, asserting equivalent outcomes; property-based round-trips; mid-transaction failure injection. *(both repos)*
+- [x] **Phase 7: Conformance test suite** — Paired tests run every Bin B method against both adapters, asserting equivalent outcomes; property-based round-trips; mid-transaction failure injection. *(both repos)* (completed 2026-05-12)
 - [ ] **Phase 8: Migration + distribution** — `storage.adapter: beads` opt-in, markdown→bd migration tool, rebase-conflict playbook, strict-superset golden parity validation, distribution decision (PR upstream vs long-lived fork). *(both repos)*
 
 ## Phase Details
@@ -213,7 +213,7 @@ Plans:
   2. Property-based round-trip tests (`putRecord(x); getRecord(...) === x` modulo adapter-defined normalization) pass for every record type in the noun catalog: Phase, Plan, Summary, Uat, StateEvent, Roadmap, Decision, Blocker, DebugSession, Project, Spec, AiSpec — and any new noun added to the catalog requires a passing round-trip test before merge (CI gate).
   3. The section-semantics matrix is complete: for every (record-type, section-id) tuple in the codebase, the suite asserts `append` / `overwrite` / `prepend` produce defined outcomes on both adapters, and the test harness rejects any future adapter PR that lacks a defined semantic for any tuple (SYNTHESIS §9 high-severity "section semantics differ across adapters" risk mitigated by enforcement, not just convention).
   4. A deliberate failure injection mid-transaction (e.g. throw after the second of three writes) causes both adapters' `restore()` / rollback to leave their respective stores byte-identical (or record-identical, for bd) to the pre-transaction state — verified by snapshot diff on each adapter.
-**Plans:** 8 plans
+**Plans:** 6/6 plans complete
 Plans:
 - [x] 07-01-PLAN.md — Contract extension + manifest scaffold (normalize() + ADR D-NORMALIZE)
 - [x] 07-02-PLAN.md — Section-anchor grep + meta-coverage test (bidirectional invariant)
@@ -222,7 +222,7 @@ Plans:
 - [x] 07-04b-PLAN.md — write-*.ts → *.conformance-suite.ts migration + manifest population (≥30 entries)
 - [x] 07-05a-PLAN.md — fast-check devDeps + 12 noun arbitraries + encode.ts
 - [x] 07-05b-PLAN.md — properties.test.ts + 12 noun-roundtrip manifest entries
-- [ ] 07-06-PLAN.md — Failure-injection + Phase 7 exit (ADR D-CONFORM-MANIFEST)
+- [x] 07-06-PLAN.md — Failure-injection + Phase 7 exit (ADR D-CONFORM-MANIFEST)
 
 ### Phase 8: Migration + distribution
 **Repo:** both
@@ -253,5 +253,5 @@ Phase 6 begins in sibling repo `~/code/gsd-beads` only after Phase 5 ships in th
 | 4. Plug workflow leaks (top-10 + `<context>`-block class) | 0/7 | Planning complete | - |
 | 5. Foundational primitive lift | 0/TBD | Not started | - |
 | 6. BeadsAdapter implementation | 0/7 | Planning complete | - |
-| 7. Conformance test suite | 0/8 | Planning complete | - |
+| 7. Conformance test suite | 6/6 | Complete | 2026-05-12 |
 | 8. Migration + distribution | 0/TBD | Not started | - |
