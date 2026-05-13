@@ -8,9 +8,9 @@
  * @example
  * ```typescript
  * import { createRegistry } from './query/index.js';
- * import { MarkdownAdapter } from '../../adapters/markdown/index.js';
+ * import { createStorageAdapter } from './query/adapter-factory.js';
  *
- * const registry = createRegistry({ adapter: new MarkdownAdapter(projectDir) });
+ * const registry = createRegistry({ adapter: createStorageAdapter(projectDir) });
  * const result = await registry.dispatch('generate-slug', ['My Phase'], projectDir);
  * ```
  */
@@ -123,7 +123,7 @@ import {
 } from './scratch.js';
 import { GSDEventStream } from '../event-stream.js';
 import type { StorageAdapter } from '../../../adapters/types.js';
-import { MarkdownAdapter } from '../../../adapters/markdown/index.js';
+import { createStorageAdapter } from './adapter-factory.js';
 import {
   GSDEventType,
   type GSDEvent,
@@ -277,7 +277,7 @@ export function createRegistry(opts?: {
   eventStream?: GSDEventStream;
   correlationSessionId?: string;
 }): QueryRegistry {
-  const adapter = opts?.adapter ?? new MarkdownAdapter(process.cwd());
+  const adapter = opts?.adapter ?? createStorageAdapter(process.cwd());
   const eventStream = opts?.eventStream;
   const correlationSessionId = opts?.correlationSessionId;
   // Phase 2 D-10 (Plan 02-01 onwards): adapter is consumed by per-handler

@@ -496,6 +496,12 @@ export async function planningBaseIsDir(adapter: StorageAdapter): Promise<boolea
 // Exported for test cleanup
 export const _adapterCache = new Map<string, StorageAdapter>();
 
+/**
+ * @deprecated Returns MarkdownAdapter regardless of config — pipeline dry-run
+ * internals (_txnContextForPipeline, _realReadForPipeline) depend on MarkdownAdapter-
+ * specific methods. Use createStorageAdapter() for config-driven dispatch in
+ * new code. See RESEARCH.md §DIST-01 Open Question 3 for context.
+ */
 export async function adapterFor(projectDir: string): Promise<StorageAdapter> {
   const cached = _adapterCache.get(projectDir);
   if (cached) return cached;
