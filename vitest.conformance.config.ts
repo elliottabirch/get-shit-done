@@ -14,7 +14,14 @@ export default defineConfig({
       // Resolve adapter barrel/dist imports to TypeScript source.
       // Absolute key intercepts both '../../adapters/markdown/index.js' (from test files)
       // AND the resolved absolute path (from any other importer in the module graph).
+      //
+      // Two keys for the markdown adapter: the barrel file and the compiled dist.
+      // The barrel (adapters/markdown/index.js) re-exports from dist/markdown/index.js.
+      // In vitest's forks pool, the barrel's re-export can bypass the first alias when a
+      // stale dist exists on disk — the second alias catches that path and routes it to
+      // the TypeScript source so normalize() (added post-build) is always available.
       [resolve(ROOT, 'adapters/markdown/index.js')]: resolve(ROOT, 'adapters/markdown/index.ts'),
+      [resolve(ROOT, 'adapters/dist/markdown/index.js')]: resolve(ROOT, 'adapters/markdown/index.ts'),
       [resolve(ROOT, 'adapters/types.js')]: resolve(ROOT, 'adapters/types.ts'),
     },
   },
