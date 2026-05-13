@@ -247,7 +247,7 @@ Plans:
 
 **Wave 3** *(DIST-04 blocked on Pre-0 for test.yml; DIST-05 is phase-close ADR)*
 - [x] 08-05-PLAN.md — DIST-04: strict-superset parity CI (tests/shared/sanitize.ts extraction + .github/workflows/upstream-parity.yml with npm pack + pinned upstream tag; human-verify first green PR run)
-- [ ] 08-06-PLAN.md — DIST-05: PR-vs-fork ADR placeholder (phase-close decision appended to DECISIONS.md + REQUIREMENTS.md DIST rows flipped to Complete)
+- [x] 08-06-PLAN.md — DIST-05: PR-vs-fork ADR placeholder (phase-close decision appended to DECISIONS.md + REQUIREMENTS.md DIST rows flipped to Complete)
 
 ## Progress
 
