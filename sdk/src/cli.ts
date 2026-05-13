@@ -19,7 +19,7 @@ import { InitRunner } from './init-runner.js';
 import { validateWorkstreamName } from './workstream-utils.js';
 import { loadConfig } from './config.js';
 import { assertRuntimeSupportsAutoMode } from './runtime-gate.js';
-import { MarkdownAdapter } from '../../adapters/markdown/index.js';
+import { createStorageAdapter } from './query/adapter-factory.js';
 
 // ─── Parsed CLI args ─────────────────────────────────────────────────────────
 
@@ -409,7 +409,8 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<void
         process.exitCode = 10;
         return;
       }
-      const registry = createRegistry({ adapter: new MarkdownAdapter(args.projectDir) });
+      const cliConfig = await loadConfig(args.projectDir, args.ws);
+      const registry = createRegistry({ adapter: createStorageAdapter(args.projectDir, { adapter: cliConfig.storage?.adapter }) });
       const tokens = [normCmd, ...normArgs];
       const matched = resolveQueryArgv(tokens, registry);
       if (!matched) {

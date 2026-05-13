@@ -22,7 +22,7 @@ import type { GSDEventStream } from './event-stream.js';
 import type { StorageAdapter } from '../../adapters/types.js';
 import { GSDError, exitCodeFor } from './errors.js';
 import { createRegistry } from './query/index.js';
-import { MarkdownAdapter } from '../../adapters/markdown/index.js';
+import { createStorageAdapter } from './query/adapter-factory.js';
 import { resolveQueryArgv } from './query/registry.js';
 import { normalizeQueryCommand } from './query/query-command-resolution-strategy.js';
 import { formatStateLoadRawStdout } from './query/state-project-load.js';
@@ -167,7 +167,7 @@ export class GSDTools {
     this.eventStream = opts.eventStream;
     this.sessionId = opts.sessionId;
     this.registry = createRegistry({
-      adapter: opts.adapter ?? new MarkdownAdapter(opts.projectDir),
+      adapter: opts.adapter ?? createStorageAdapter(opts.projectDir),
       eventStream: opts.eventStream,
       correlationSessionId: opts.sessionId,
     });
@@ -627,7 +627,7 @@ export async function runGsdToolsQuery(projectDir: string, queryArgv: string[]):
   }
   const queryCommand = queryArgv[0];
   const [normCmd, normArgs] = normalizeQueryCommand(queryCommand, queryArgv.slice(1));
-  const registry = createRegistry({ adapter: new MarkdownAdapter(projectDir) });
+  const registry = createRegistry({ adapter: createStorageAdapter(projectDir) });
   const tokens = [normCmd, ...normArgs];
   const matched = resolveQueryArgv(tokens, registry);
   if (!matched) {

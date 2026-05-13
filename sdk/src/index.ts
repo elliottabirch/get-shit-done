@@ -33,7 +33,7 @@ import { GSDEventStream } from './event-stream.js';
 import { PhaseRunner } from './phase-runner.js';
 import { ContextEngine } from './context-engine.js';
 import { PromptFactory } from './phase-prompt.js';
-import { MarkdownAdapter } from '../../adapters/markdown/index.js';
+import { createStorageAdapter } from './query/adapter-factory.js';
 
 export { PlanningJournal } from './planning-journal.js';
 export type { PlanningEvent, PlanningEventActor, PlanningJournalAppendInput } from './planning-journal.js';
@@ -128,7 +128,7 @@ export class GSD {
   createTools(): GSDTools {
     return new GSDTools({
       projectDir: this.projectDir,
-      adapter: new MarkdownAdapter(this.projectDir),
+      adapter: createStorageAdapter(this.projectDir),
       gsdToolsPath: this.gsdToolsPath,
       workstream: this.workstream,
       eventStream: this.eventStream,
