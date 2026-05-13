@@ -235,10 +235,19 @@ Plans:
   3. Running `git rebase upstream/main` against a representative recent upstream batch (e.g. the next 10 upstream commits after 2026-04-30) succeeds with conflicts only in the documented adapter-interface seam files, never in pure business-logic files; the rebase script runs leak-grep over the post-rebase diff and surfaces any new direct-I/O introduced upstream as PR-blocking findings (per D-2026-04-30-04 implication).
   4. Upstream's golden-test parity matrix (#2909) runs against the fork with `npm install <fork>` and no adapter config and produces zero diffs — the strict-superset invariant from PROJECT.md is validated by an external test, not just asserted in docs.
   5. DIST-05 is resolved: the distribution decision (submit upstream as PR vs maintain long-lived fork) is recorded in DECISIONS.md with the rationale referencing upstream's reception of #2898 / #2901 / #2908; the recorded decision drives the actual repo state at milestone close (PR opened, or fork-maintenance playbook published).
-**Plans:** 0/TBD
+**Plans:** 6 plans
 Plans:
-- [ ] **Pre-0: SDK alias-generator rewrite** — carry-over from Phase 7. `sdk/scripts/gen-command-aliases.ts` emits a format that doesn't match the committed `sdk/src/query/command-aliases.generated.ts` (typed `readonly FamilyCommandAlias[]` + inline single-line entries vs `as const` + JSON.stringify default formatting), and the CJS mirror at `bin/lib/command-aliases.generated.cjs` has no automated writer. The alias-drift CI step is currently bypassed via `if: false` in `.github/workflows/test.yml` with a `TODO(phase-8)` marker. Rewrite the generator + add a CJS writer + regenerate + re-enable the CI step. (Tracked: PHASE-7-REMAINING.md §C.1.)
-- [ ] TBD
+**Wave 1** *(no dependencies — Pre-0 must ship before DIST-04; DIST-01 is foundation for DIST-02 docs)*
+- [ ] 08-01-PLAN.md — Pre-0: SDK alias-generator rewrite (two-file writer + regenerate TS + CJS artifacts + remove `if: false` bypass in test.yml)
+- [ ] 08-02-PLAN.md — DIST-01: storage.adapter factory (createStorageAdapter + BeadsAdapterUnavailable + config-schema extension + 8 call-site migration)
+
+**Wave 2** *(blocked on DIST-01 for docs references; DIST-03 is independent infra)*
+- [ ] 08-03-PLAN.md — DIST-02: fork-side migration docs (docs/MIGRATION.md + README Storage backends section; sibling owns gsd-beads migrate implementation)
+- [ ] 08-04-PLAN.md — DIST-03: rebase playbook + helper script (docs/UPSTREAM-REBASE.md + scripts/sync-upstream.sh with advisory leak-grep on post-rebase diff)
+
+**Wave 3** *(DIST-04 blocked on Pre-0 for test.yml; DIST-05 is phase-close ADR)*
+- [ ] 08-05-PLAN.md — DIST-04: strict-superset parity CI (tests/shared/sanitize.ts extraction + .github/workflows/upstream-parity.yml with npm pack + pinned upstream tag; human-verify first green PR run)
+- [ ] 08-06-PLAN.md — DIST-05: PR-vs-fork ADR placeholder (phase-close decision appended to DECISIONS.md + REQUIREMENTS.md DIST rows flipped to Complete)
 
 ## Progress
 
