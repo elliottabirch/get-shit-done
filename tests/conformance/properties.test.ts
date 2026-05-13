@@ -26,8 +26,9 @@ import fc from 'fast-check';
 import type { StorageAdapter } from '../../adapters/types.js';
 import { assertFromManifest, preRegisterTest } from './test-registry.js';
 import type { AdapterName } from './manifest-types.js';
-// Reuse the adapter-tuple + bd probe from paired.test.ts (07-04a).
-import { pairedAdapters } from './paired.test.js';
+// Reuse the adapter-tuple + bd probe from the shared helper (extracted from
+// the pre-split paired.test.ts when the suite was split into per-adapter files).
+import { pairedAdapters } from './paired-adapters.js';
 
 // --- arbitraries ---
 import { arbPhase } from './arbitraries/arbPhase.js';
