@@ -70,10 +70,10 @@
 
 ### CONFORM — Conformance test suite (both repos)
 
-- [ ] **CONFORM-01**: Every Bin B method has a paired conformance test that runs against both `MarkdownAdapter` and `BeadsAdapter` and asserts equivalent outcomes
-- [ ] **CONFORM-02**: Property-based round-trip tests for all record types in the noun catalog (Phase, Plan, Summary, Uat, StateEvent, Roadmap, Decision, Blocker, DebugSession, Project, Spec, AiSpec, etc.)
-- [ ] **CONFORM-03**: Section-scoped semantics (`append` / `overwrite` / `prepend`) defined and tested per (record-type, section-id) tuple; reject any adapter that doesn't define a semantic for each tuple
-- [ ] **CONFORM-04**: Dry-run primitive correctness verified on both adapters via deliberate failure injection mid-transaction
+- [x] **CONFORM-01**: Every Bin B method has a paired conformance test that runs against both `MarkdownAdapter` and `BeadsAdapter` and asserts equivalent outcomes
+- [x] **CONFORM-02**: Property-based round-trip tests for all record types in the noun catalog (Phase, Plan, Summary, Uat, StateEvent, Roadmap, Decision, Blocker, DebugSession, Project, Spec, AiSpec, etc.)
+- [x] **CONFORM-03**: Section-scoped semantics (`append` / `overwrite` / `prepend`) defined and tested per (record-type, section-id) tuple; reject any adapter that doesn't define a semantic for each tuple
+- [x] **CONFORM-04**: Dry-run primitive correctness verified on both adapters via deliberate failure injection mid-transaction
 
 ### DIST — Migration + distribution (both repos)
 
@@ -177,10 +177,10 @@ Source phase scope: SYNTHESIS.md §7 (canonical, locked).
 | BEADS-03 | Phase 6 — BeadsAdapter implementation | gsd-beads | Pending |
 | BEADS-04 | Phase 6 — BeadsAdapter implementation | gsd-beads | Pending |
 | BEADS-05 | Phase 6 — BeadsAdapter implementation | gsd-beads | Pending |
-| CONFORM-01 | Phase 7 — Conformance test suite | both | Pending |
-| CONFORM-02 | Phase 7 — Conformance test suite | both | Pending |
-| CONFORM-03 | Phase 7 — Conformance test suite | both | Pending |
-| CONFORM-04 | Phase 7 — Conformance test suite | both | Pending |
+| CONFORM-01 | Phase 7 — Conformance test suite | both | Complete (Phase 7) |
+| CONFORM-02 | Phase 7 — Conformance test suite | both | Complete (Phase 7) |
+| CONFORM-03 | Phase 7 — Conformance test suite | both | Complete (Phase 7) |
+| CONFORM-04 | Phase 7 — Conformance test suite | both | Complete (Phase 7) |
 | DIST-01 | Phase 8 — Migration + distribution | both | Pending |
 | DIST-02 | Phase 8 — Migration + distribution | both | Pending |
 | DIST-03 | Phase 8 — Migration + distribution | both | Pending |
