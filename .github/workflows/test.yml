@@ -184,6 +184,17 @@ jobs:
         shell: bash
         run: npm run test:coverage
 
+      # Phase 7 close (07-REVIEW.md CR-01 follow-up): exercise the adapters
+      # vitest project so capability-flag drift + defensive-throw regressions
+      # in MarkdownAdapter are caught by CI. Without this step, the
+      # adapters/markdown/index.test.ts suite was never run automatically —
+      # it went undetected that Phase 5 implemented snapshot/binaryAsset/
+      # namedDoc while the test file still asserted the Phase-1 stub state.
+      - name: Run adapters vitest project
+        if: matrix.os == 'ubuntu-latest' && matrix.node-version == 22
+        shell: bash
+        run: NODE_PATH=./sdk/node_modules ./sdk/node_modules/.bin/vitest run --project adapters
+
       # Phase 7 / Plan 07-04a — paired conformance (D-01).
       # Runs on one matrix slot to keep CI time bounded (~30-60s extra).
       # bd is installed above; describe.skip path never triggers here.
