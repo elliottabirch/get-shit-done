@@ -1499,3 +1499,95 @@ declare expected rows for every kind they support.
 Locked (Phase 7 CONTEXT D-13, 2026-05-12).
 
 ---
+
+## D-2026-05-12-CONFORM-MANIFEST — Phase 7 authored conformance manifest shape + enforcement rules
+
+**Date:** 2026-05-12
+**Phase:** 7 (conformance test suite)
+**Requirements:** CONFORM-01, CONFORM-03
+**Supersedes:** —
+**Related:** D-2026-05-12-NORMALIZE (Phase 7 additive contract); D-2026-05-12-OQ06-CREATED-SECTION; D-2026-05-12-OQ01-BEADS; D-2026-05-12-OQ06-TXN; D-2026-05-10-08 (StateWriteOutcome).
+
+### Context
+
+CONFORM-01 requires every Bin B method to have a paired test asserting
+equivalent outcomes across MarkdownAdapter and BeadsAdapter. CONFORM-03
+requires the section-semantics matrix to be complete per (record-type,
+section-id, mode) tuple and to reject any adapter lacking a defined
+semantic. Both requirements need an enforcement mechanism that
+
+(a) surfaces drift at PR time (not post-hoc audit), and
+(b) encodes per-adapter deviations as contract data (not test-skip
+    comments), and
+(c) refuses authored tests without manifest entries AND manifest
+    entries without authored tests (bidirectional coverage).
+
+### Decision
+
+Ship an authored typed TypeScript const `CONFORMANCE_MANIFEST` in
+`tests/conformance/manifest.ts` whose entries carry per-adapter
+`expected` records. Ship `assertFromManifest(adapterName, entryName,
+kind, check)` as the SINGLE call site for every paired assertion;
+it registers with `registeredTests` and looks up the manifest entry,
+throwing loudly if one is absent. Ship `meta-coverage.test.ts` as a
+vitest test that asserts `manifest ↔ registeredTests` bidirectionality.
+Ship `scripts/extract-section-anchors.mjs` as a pre-vitest grep pass
+that emits `anchors.json` + fails CI on any dynamic anchor not
+allowlisted in the manifest.
+
+Manifest entry shape:
+```ts
+interface ManifestEntry {
+  kind: 'binB' | 'section-tuple' | 'noun-roundtrip' | 'rollback';
+  name: string;
+  description?: string;
+  expected: Record<'markdown' | 'beads', ExpectedOutcome>;
+  adr?: string;
+}
+```
+
+### Rationale
+
+- **Greppable contract:** hand-authored TS const is discoverable and
+  diff-reviewable; reflection-driven manifests are not.
+- **Per-adapter deviations as data:** third-party adapters can only
+  ship when they add their own `expected` rows, forcing documentation.
+- **Bidirectional invariant:** catches both "authored test without
+  documentation" AND "documented case without test" in one run.
+- **Grep gate > runtime instrumentation:** section-anchor extraction
+  via ripgrep/grep is fast, portable, and easy to reason about;
+  runtime-trace approaches couple meta-coverage to SDK internals.
+
+### Alternatives rejected
+
+- **Reflection / decorator-driven manifest:** loses greppability;
+  forces adding a reflection layer to test registration.
+- **Capability-gated skip only:** deviations become invisible in
+  tests; third-party adapters can silently skip deviations without
+  declaring them.
+- **Runtime trace instrumentation for section-anchor discovery:**
+  couples meta-coverage to SDK loading; grep gate is sufficient.
+- **Per-noun test-only `recordEq` helpers** (for CONFORM-02):
+  rejected in D-2026-05-12-NORMALIZE; `normalize()` as adapter surface
+  is the chosen shape and benefits Phase 8 migration.
+
+### Consequences
+
+- Every new Bin B method, section tuple, noun, or rollback case
+  requires a manifest entry before tests run.
+- Third-party adapter authors MUST add their `expected` rows before
+  their adapter ships; meta-coverage enforces this via the bidirectional
+  invariant.
+- Known gaps (e.g. BeadsAdapter Outcome A mid-commit-replay) are
+  formalized as manifest `expected` deviations with ADR citations,
+  not hidden in skip comments.
+
+### Status
+
+Locked. Manifest entry count at Phase 7 exit: 55 entries
+(5 baseline binB + 25 StateWriteOutcome binB + 2 withTransaction binB +
+9 section-tuple + 12 noun-roundtrip + 2 rollback).
+Phase 8 migration tool (DIST-02) consumes the `noun-roundtrip` entries
+for pre-seed normalize pass.
+
+---
