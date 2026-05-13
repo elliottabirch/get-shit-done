@@ -246,7 +246,7 @@ Plans:
 - [x] 08-04-PLAN.md — DIST-03: rebase playbook + helper script (docs/UPSTREAM-REBASE.md + scripts/sync-upstream.sh with advisory leak-grep on post-rebase diff)
 
 **Wave 3** *(DIST-04 blocked on Pre-0 for test.yml; DIST-05 is phase-close ADR)*
-- [ ] 08-05-PLAN.md — DIST-04: strict-superset parity CI (tests/shared/sanitize.ts extraction + .github/workflows/upstream-parity.yml with npm pack + pinned upstream tag; human-verify first green PR run)
+- [x] 08-05-PLAN.md — DIST-04: strict-superset parity CI (tests/shared/sanitize.ts extraction + .github/workflows/upstream-parity.yml with npm pack + pinned upstream tag; human-verify first green PR run)
 - [ ] 08-06-PLAN.md — DIST-05: PR-vs-fork ADR placeholder (phase-close decision appended to DECISIONS.md + REQUIREMENTS.md DIST rows flipped to Complete)
 
 ## Progress
