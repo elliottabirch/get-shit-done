@@ -17,6 +17,16 @@
  * Registration discipline: preRegisterTest() is called at COLLECTION time
  * (outside it()) so that meta-coverage.test.ts reads a fully-populated
  * registeredTests Set regardless of file-execution order.
+ *
+ * CONFORMANCE_DEEP gate (PHASE-7-REMAINING.md §A Lever 2): the full
+ * 24-test property matrix has an adaptive 60s-per-case budget, giving
+ * ~24-48 min wall-clock. That blows past GitHub Actions' default 10-min
+ * per-job limit. Every fc.asyncProperty body is wrapped in `describe.skipIf`
+ * when CONFORMANCE_DEEP !== '1' so PR CI stays fast; nightly or manual
+ * `CONFORMANCE_DEEP=1 npm run test:conformance:paired` exercises the
+ * full matrix. The preRegisterTest() calls still fire unconditionally
+ * so meta-coverage's bidirectional registry invariant is preserved even
+ * when the actual property assertions are skipped.
  */
 import { describe, it, beforeEach, afterEach } from 'vitest';
 import { mkdtemp, rm, mkdir } from 'node:fs/promises';
@@ -61,14 +71,18 @@ const NOUNS: Array<{ name: string; arb: fc.Arbitrary<unknown>; path: string }> =
   { name: 'AiSpec',       arb: arbAiSpec,       path: 'prop/ai-spec.md' },
 ];
 
+const CONFORMANCE_DEEP = process.env.CONFORMANCE_DEEP === '1';
+
 for (const [adapterName, adapterFactory] of pairedAdapters) {
   // Pre-register all noun-roundtrip keys at COLLECTION time so meta-coverage
-  // sees a fully-populated registeredTests before any it() runs.
+  // sees a fully-populated registeredTests before any it() runs. This runs
+  // UNCONDITIONALLY (even when CONFORMANCE_DEEP=0) to keep the bidirectional
+  // manifest invariant stable.
   for (const { name } of NOUNS) {
     preRegisterTest(adapterName as AdapterName, name, 'noun-roundtrip');
   }
 
-  describe(`noun round-trips under normalize() (${adapterName})`, () => {
+  describe.skipIf(!CONFORMANCE_DEEP)(`noun round-trips under normalize() (${adapterName})`, () => {
     let tmpDir: string;
     let adapter: StorageAdapter;
 

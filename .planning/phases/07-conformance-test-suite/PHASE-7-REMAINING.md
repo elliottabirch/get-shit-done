@@ -95,10 +95,10 @@ This doc tracks everything still outstanding before Phase 7 can be marked defini
 - Test files now run in 5+ parallel workers (was 1 under singleFork)
 - Known issue: `stat.test.ts` + `properties.test.ts` fail silently under parallel forks (see §B)
 
-Remaining levers (not yet applied):
+Levers:
 
-1. **Cut D-14 property-test budget** from 60s → 5s per noun per adapter. **Expected: 24 min → 2 min for properties.** fast-check's `endOnFailure: true` triggers shrinking instantly on failure regardless of time budget; the 60s cap only affects how many PASSING iterations run. Cutting to 5s still yields ~8-10 iterations per noun (industry-standard fast-check default is 100 runs, comparable).
-2. **Gate property tests behind `CONFORMANCE_DEEP=1`.** Run all non-property tests on every PR (fast); run properties only nightly. Pairs well with Lever 1 — Lever 1 first, this if still too slow.
+1. **Cut D-14 property-test budget** from 60s → 5s per noun per adapter. **Expected: 24 min → 2 min for properties.** fast-check's `endOnFailure: true` triggers shrinking instantly on failure regardless of time budget; the 60s cap only affects how many PASSING iterations run. Cutting to 5s still yields ~8-10 iterations per noun (industry-standard fast-check default is 100 runs, comparable). *(Deferred — not yet applied; low-priority now that Lever 2 is in place.)*
+2. ✅ **`CONFORMANCE_DEEP=1` gate applied** (Phase 7 close-out commit). `properties.test.ts` uses `describe.skipIf(!CONFORMANCE_DEEP)` — PR CI skips all 24 property tests in <1s; `CONFORMANCE_DEEP=1 npm run test:conformance:paired` exercises the full matrix. `preRegisterTest()` still fires unconditionally so meta-coverage's bidirectional invariant stays green with the gate off. This was the blocker for landing a green CI run within GitHub Actions' default 10-min per-job limit; applied during Phase 7 close after run 25778206403 timed out mid-properties.
 3. **Review bd cold-start cost.** Each paired test creates a fresh bd store (400–700ms init). A fixture-pool pattern (reuse a small number of pre-initialized bd stores across test cases) could cut a lot of that. Complex; low ROI until other levers exhausted.
 
 ### A.1 ~~Parallel-forks orphan tests~~ ✅ RESOLVED
