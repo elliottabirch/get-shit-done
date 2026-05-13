@@ -237,6 +237,7 @@ Plans:
   5. DIST-05 is resolved: the distribution decision (submit upstream as PR vs maintain long-lived fork) is recorded in DECISIONS.md with the rationale referencing upstream's reception of #2898 / #2901 / #2908; the recorded decision drives the actual repo state at milestone close (PR opened, or fork-maintenance playbook published).
 **Plans:** 0/TBD
 Plans:
+- [ ] **Pre-0: SDK alias-generator rewrite** — carry-over from Phase 7. `sdk/scripts/gen-command-aliases.ts` emits a format that doesn't match the committed `sdk/src/query/command-aliases.generated.ts` (typed `readonly FamilyCommandAlias[]` + inline single-line entries vs `as const` + JSON.stringify default formatting), and the CJS mirror at `bin/lib/command-aliases.generated.cjs` has no automated writer. The alias-drift CI step is currently bypassed via `if: false` in `.github/workflows/test.yml` with a `TODO(phase-8)` marker. Rewrite the generator + add a CJS writer + regenerate + re-enable the CI step. (Tracked: PHASE-7-REMAINING.md §C.1.)
 - [ ] TBD
 
 ## Progress
