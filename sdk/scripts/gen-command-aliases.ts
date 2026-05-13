@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 /**
- * Build-time alias generator skeleton for command-manifest-driven routing.
+ * Build-time alias generator — writes BOTH the committed TS artifact
+ * (sdk/src/query/command-aliases.generated.ts) and the CJS mirror
+ * (get-shit-done/bin/lib/command-aliases.generated.cjs) in a single run.
  *
- * This pilot commits generated artifacts directly; this script documents and
- * preserves the generation seam so future command families can be migrated
- * without hand-maintained alias duplication.
+ * Usage: cd sdk && npx tsx scripts/gen-command-aliases.ts
  */
 
 import { writeFile } from 'node:fs/promises';
@@ -17,84 +17,131 @@ function toSubcommand(canonical: string, family: 'state' | 'verify' | 'init' | '
   return canonical.startsWith(prefix) ? canonical.slice(prefix.length) : canonical;
 }
 
+interface AliasEntry {
+  canonical: string;
+  aliases: string[];
+  subcommand: string;
+  mutation: boolean;
+}
+
+interface FamilySpec {
+  family: 'state' | 'verify' | 'init' | 'phase' | 'phases' | 'validate' | 'roadmap';
+  constName: string;
+  subcommandConst: string;
+  entries: AliasEntry[];
+}
+
+function escapeQuote(s: string): string {
+  return s.replace(/'/g, "\\'");
+}
+
+function formatEntry(entry: AliasEntry): string {
+  const aliases =
+    entry.aliases.length === 0
+      ? '[]'
+      : `[${entry.aliases.map((a) => `'${escapeQuote(a)}'`).join(', ')}]`;
+  return `  { canonical: '${escapeQuote(entry.canonical)}', aliases: ${aliases}, subcommand: '${escapeQuote(entry.subcommand)}', mutation: ${entry.mutation} },`;
+}
+
+function formatTs(families: FamilySpec[]): string {
+  const lines: string[] = [];
+
+  lines.push(
+    `/**`,
+    ` * GENERATED FILE — command alias expansion for state.*, verify.*, init.*, phase.*, phases.*, validate.*, roadmap.*.`,
+    ` *`,
+    ` * Regenerate: cd sdk && npx tsx scripts/gen-command-aliases.ts`,
+    ` */`,
+    ``,
+    `export interface FamilyCommandAlias {`,
+    `  canonical: string;`,
+    `  aliases: string[];`,
+    `  subcommand: string;`,
+    `  mutation: boolean;`,
+    `}`,
+    ``,
+  );
+
+  for (const spec of families) {
+    lines.push(
+      `export const ${spec.constName}: readonly FamilyCommandAlias[] = [`,
+      ...spec.entries.map(formatEntry),
+      `] as const;`,
+      ``,
+      `export const ${spec.subcommandConst} = new Set<string>(`,
+      `  ${spec.constName}.map((entry) => entry.subcommand),`,
+      `);`,
+      ``,
+    );
+  }
+
+  return lines.join('\n');
+}
+
+function formatCjs(families: FamilySpec[]): string {
+  const lines: string[] = [];
+
+  lines.push(
+    `'use strict';`,
+    ``,
+    `/**`,
+    ` * GENERATED FILE — state.*, verify.*, init.*, phase.*, phases.*, validate.*, roadmap.* alias/subcommand metadata for CJS routing.`,
+    ` *`,
+    ` * Regenerate: cd sdk && npx tsx scripts/gen-command-aliases.ts`,
+    ` */`,
+    ``,
+  );
+
+  for (const spec of families) {
+    lines.push(
+      `const ${spec.constName} = [`,
+      ...spec.entries.map(formatEntry),
+      `];`,
+      `const ${spec.subcommandConst} = ${spec.constName}.map((entry) => entry.subcommand);`,
+      ``,
+    );
+  }
+
+  const allConstNames = families.map((f) => f.constName).join(', ');
+  const allSubcommandConsts = families.map((f) => f.subcommandConst).join(', ');
+  lines.push(
+    `module.exports = {`,
+    `  ${allConstNames},`,
+    `  ${allSubcommandConsts},`,
+    `};`,
+  );
+
+  return lines.join('\n');
+}
+
 async function main(): Promise<void> {
-  const stateEntries = COMMAND_DEFINITIONS_BY_FAMILY.state.map((entry) => ({
-    canonical: entry.canonical,
-    aliases: entry.aliases,
-    subcommand: toSubcommand(entry.canonical, 'state'),
-    mutation: entry.mutation,
-  }));
+  const familyNames: Array<'state' | 'verify' | 'init' | 'phase' | 'phases' | 'validate' | 'roadmap'> = [
+    'state', 'verify', 'init', 'phase', 'phases', 'validate', 'roadmap',
+  ];
 
-  const verifyEntries = COMMAND_DEFINITIONS_BY_FAMILY.verify.map((entry) => ({
-    canonical: entry.canonical,
-    aliases: entry.aliases,
-    subcommand: toSubcommand(entry.canonical, 'verify'),
-    mutation: entry.mutation,
-  }));
+  const families: FamilySpec[] = familyNames.map((family) => {
+    const upperFamily = family.toUpperCase();
+    return {
+      family,
+      constName: `${upperFamily}_COMMAND_ALIASES`,
+      subcommandConst: `${upperFamily}_SUBCOMMANDS`,
+      entries: COMMAND_DEFINITIONS_BY_FAMILY[family].map((entry) => ({
+        canonical: entry.canonical,
+        aliases: entry.aliases,
+        subcommand: toSubcommand(entry.canonical, family),
+        mutation: entry.mutation,
+      })),
+    };
+  });
 
-  const initEntries = COMMAND_DEFINITIONS_BY_FAMILY.init.map((entry) => ({
-    canonical: entry.canonical,
-    aliases: entry.aliases,
-    subcommand: toSubcommand(entry.canonical, 'init'),
-    mutation: entry.mutation,
-  }));
+  const tsOutPath = fileURLToPath(new URL('../src/query/command-aliases.generated.ts', import.meta.url));
+  const cjsOutPath = fileURLToPath(new URL('../../get-shit-done/bin/lib/command-aliases.generated.cjs', import.meta.url));
 
-  const phaseEntries = COMMAND_DEFINITIONS_BY_FAMILY.phase.map((entry) => ({
-    canonical: entry.canonical,
-    aliases: entry.aliases,
-    subcommand: toSubcommand(entry.canonical, 'phase'),
-    mutation: entry.mutation,
-  }));
+  await writeFile(tsOutPath, formatTs(families), 'utf-8');
+  await writeFile(cjsOutPath, formatCjs(families), 'utf-8');
 
-  const phasesEntries = COMMAND_DEFINITIONS_BY_FAMILY.phases.map((entry) => ({
-    canonical: entry.canonical,
-    aliases: entry.aliases,
-    subcommand: toSubcommand(entry.canonical, 'phases'),
-    mutation: entry.mutation,
-  }));
-
-  const validateEntries = COMMAND_DEFINITIONS_BY_FAMILY.validate.map((entry) => ({
-    canonical: entry.canonical,
-    aliases: entry.aliases,
-    subcommand: toSubcommand(entry.canonical, 'validate'),
-    mutation: entry.mutation,
-  }));
-
-  const roadmapEntries = COMMAND_DEFINITIONS_BY_FAMILY.roadmap.map((entry) => ({
-    canonical: entry.canonical,
-    aliases: entry.aliases,
-    subcommand: toSubcommand(entry.canonical, 'roadmap'),
-    mutation: entry.mutation,
-  }));
-
-  const outPath = fileURLToPath(new URL('../src/query/command-aliases.generated.ts', import.meta.url));
-  const header = `/**\n * GENERATED FILE — command alias expansion for state.*, verify.*, init.*, phase.*, phases.*, validate.*, and roadmap.* pilots.\n * Source: sdk/src/query/command-manifest.{state,verify,init,phase,phases,validate,roadmap}.ts\n */\n\n`;
-  const body = [
-    `export const STATE_COMMAND_ALIASES = ${JSON.stringify(stateEntries, null, 2)} as const;`,
-    '',
-    `export const VERIFY_COMMAND_ALIASES = ${JSON.stringify(verifyEntries, null, 2)} as const;`,
-    '',
-    `export const INIT_COMMAND_ALIASES = ${JSON.stringify(initEntries, null, 2)} as const;`,
-    '',
-    `export const PHASE_COMMAND_ALIASES = ${JSON.stringify(phaseEntries, null, 2)} as const;`,
-    '',
-    `export const PHASES_COMMAND_ALIASES = ${JSON.stringify(phasesEntries, null, 2)} as const;`,
-    '',
-    `export const VALIDATE_COMMAND_ALIASES = ${JSON.stringify(validateEntries, null, 2)} as const;`,
-    '',
-    `export const ROADMAP_COMMAND_ALIASES = ${JSON.stringify(roadmapEntries, null, 2)} as const;`,
-    '',
-    'export const STATE_SUBCOMMANDS = new Set<string>(STATE_COMMAND_ALIASES.map((entry) => entry.subcommand));',
-    'export const VERIFY_SUBCOMMANDS = new Set<string>(VERIFY_COMMAND_ALIASES.map((entry) => entry.subcommand));',
-    'export const INIT_SUBCOMMANDS = new Set<string>(INIT_COMMAND_ALIASES.map((entry) => entry.subcommand));',
-    'export const PHASE_SUBCOMMANDS = new Set<string>(PHASE_COMMAND_ALIASES.map((entry) => entry.subcommand));',
-    'export const PHASES_SUBCOMMANDS = new Set<string>(PHASES_COMMAND_ALIASES.map((entry) => entry.subcommand));',
-    'export const VALIDATE_SUBCOMMANDS = new Set<string>(VALIDATE_COMMAND_ALIASES.map((entry) => entry.subcommand));',
-    'export const ROADMAP_SUBCOMMANDS = new Set<string>(ROADMAP_COMMAND_ALIASES.map((entry) => entry.subcommand));',
-    '',
-
-  ].join('\n');
-  await writeFile(outPath, header + body, 'utf-8');
+  console.log(`Wrote ${tsOutPath}`);
+  console.log(`Wrote ${cjsOutPath}`);
 }
 
 main().catch((err) => {

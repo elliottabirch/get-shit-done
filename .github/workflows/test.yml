@@ -160,23 +160,8 @@ jobs:
         shell: bash
         run: cd sdk && npx vitest run src/query/command-seam-coverage.test.ts
 
-      # TEMPORARILY DISABLED (Phase 7 close-out): the SDK alias-drift check fails
-      # because sdk/scripts/gen-command-aliases.ts produces output in a different
-      # format than the committed sdk/src/query/command-aliases.generated.ts (the
-      # committed file uses a typed `readonly FamilyCommandAlias[]` + inline
-      # formatting that the checked-in generator doesn't emit). There's also no
-      # automated writer for the CJS mirror at get-shit-done/bin/lib/
-      # command-aliases.generated.cjs — it's hand-kept-in-sync.
-      #
-      # This is pre-existing SDK generator rot, not caused by Phase 7 work. We're
-      # bypassing it to unblock validation of the Phase 7 CI wiring (bd install,
-      # sibling build, paired conformance). Tracked in PHASE-7-REMAINING.md §C
-      # (Deferred — SDK alias generator rewrite) for a follow-up standalone plan.
-      #
-      # TODO(phase-8): rewrite sdk/scripts/gen-command-aliases.ts to match the
-      # committed TS format + add a CJS writer, then re-enable this check.
       - name: SDK generated alias artifact drift check
-        if: false
+        if: matrix.os == 'ubuntu-latest' && matrix.node-version == 24
         shell: bash
         run: node sdk/scripts/check-command-aliases-fresh.mjs
 

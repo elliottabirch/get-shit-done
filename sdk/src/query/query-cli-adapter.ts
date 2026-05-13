@@ -3,7 +3,7 @@ import { runQueryDispatch } from './query-dispatch.js';
 import { resolveGsdToolsPath } from '../gsd-tools.js';
 import { resolveQueryRuntimeContext } from './query-runtime-context.js';
 import { createCommandTopology } from './command-topology.js';
-import { MarkdownAdapter } from '../../../adapters/markdown/index.js';
+import { createStorageAdapter } from './adapter-factory.js';
 import { buildQueryCliOutputFromDispatch, buildQueryCliOutputFromError, type QueryCliAdapterOutput } from './query-cli-output.js';
 
 export interface QueryCliAdapterInput {
@@ -22,7 +22,7 @@ function queryFallbackToCjsEnabled(): boolean {
 export async function runQueryCliCommand(input: QueryCliAdapterInput): Promise<QueryCliAdapterOutput> {
   try {
     const runtime = resolveQueryRuntimeContext({ projectDir: input.projectDir, ws: input.ws });
-    const registry = createRegistry({ adapter: new MarkdownAdapter(runtime.projectDir) });
+    const registry = createRegistry({ adapter: createStorageAdapter(runtime.projectDir) });
     const topology = createCommandTopology(registry);
     const out = await runQueryDispatch({
       registry,

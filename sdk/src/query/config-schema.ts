@@ -71,6 +71,8 @@ export const VALID_CONFIG_KEYS: ReadonlySet<string> = new Set([
   'claude_md_assembly.mode',
   // #2517 — runtime-aware model profiles
   'runtime',
+  // Phase 8 (DIST-01): storage adapter selection
+  'storage.adapter',
 ]);
 
 /**

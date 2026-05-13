@@ -1,6 +1,7 @@
 /**
- * GENERATED FILE — command alias expansion for state.*, verify.*, init.*, phase.*, phases.*, validate.*, and roadmap.* pilots.
- * Source: sdk/src/query/command-manifest.{state,verify,init,phase,phases,validate,roadmap}.ts
+ * GENERATED FILE — command alias expansion for state.*, verify.*, init.*, phase.*, phases.*, validate.*, roadmap.*.
+ *
+ * Regenerate: cd sdk && npx tsx scripts/gen-command-aliases.ts
  */
 
 export interface FamilyCommandAlias {
@@ -34,6 +35,10 @@ export const STATE_COMMAND_ALIASES: readonly FamilyCommandAlias[] = [
   { canonical: 'state.add-roadmap-evolution', aliases: ['state add-roadmap-evolution'], subcommand: 'add-roadmap-evolution', mutation: true },
 ] as const;
 
+export const STATE_SUBCOMMANDS = new Set<string>(
+  STATE_COMMAND_ALIASES.map((entry) => entry.subcommand),
+);
+
 export const VERIFY_COMMAND_ALIASES: readonly FamilyCommandAlias[] = [
   { canonical: 'verify.plan-structure', aliases: ['verify plan-structure'], subcommand: 'plan-structure', mutation: false },
   { canonical: 'verify.phase-completeness', aliases: ['verify phase-completeness'], subcommand: 'phase-completeness', mutation: false },
@@ -43,8 +48,11 @@ export const VERIFY_COMMAND_ALIASES: readonly FamilyCommandAlias[] = [
   { canonical: 'verify.key-links', aliases: ['verify key-links'], subcommand: 'key-links', mutation: false },
   { canonical: 'verify.schema-drift', aliases: ['verify schema-drift'], subcommand: 'schema-drift', mutation: false },
   { canonical: 'verify.codebase-drift', aliases: ['verify codebase-drift'], subcommand: 'codebase-drift', mutation: false },
-  { canonical: 'verify.fat-skills', aliases: ['verify fat-skills'], subcommand: 'fat-skills', mutation: false },
 ] as const;
+
+export const VERIFY_SUBCOMMANDS = new Set<string>(
+  VERIFY_COMMAND_ALIASES.map((entry) => entry.subcommand),
+);
 
 export const INIT_COMMAND_ALIASES: readonly FamilyCommandAlias[] = [
   { canonical: 'init.execute-phase', aliases: ['init execute-phase'], subcommand: 'execute-phase', mutation: false },
@@ -66,6 +74,10 @@ export const INIT_COMMAND_ALIASES: readonly FamilyCommandAlias[] = [
   { canonical: 'init.remove-workspace', aliases: ['init remove-workspace'], subcommand: 'remove-workspace', mutation: false },
 ] as const;
 
+export const INIT_SUBCOMMANDS = new Set<string>(
+  INIT_COMMAND_ALIASES.map((entry) => entry.subcommand),
+);
+
 export const PHASE_COMMAND_ALIASES: readonly FamilyCommandAlias[] = [
   { canonical: 'phase.list-plans', aliases: ['phase list-plans'], subcommand: 'list-plans', mutation: false },
   { canonical: 'phase.list-artifacts', aliases: ['phase list-artifacts'], subcommand: 'list-artifacts', mutation: false },
@@ -78,11 +90,19 @@ export const PHASE_COMMAND_ALIASES: readonly FamilyCommandAlias[] = [
   { canonical: 'phase.scaffold', aliases: ['phase scaffold'], subcommand: 'scaffold', mutation: true },
 ] as const;
 
+export const PHASE_SUBCOMMANDS = new Set<string>(
+  PHASE_COMMAND_ALIASES.map((entry) => entry.subcommand),
+);
+
 export const PHASES_COMMAND_ALIASES: readonly FamilyCommandAlias[] = [
   { canonical: 'phases.list', aliases: ['phases list'], subcommand: 'list', mutation: false },
   { canonical: 'phases.clear', aliases: ['phases clear'], subcommand: 'clear', mutation: true },
   { canonical: 'phases.archive', aliases: ['phases archive'], subcommand: 'archive', mutation: true },
 ] as const;
+
+export const PHASES_SUBCOMMANDS = new Set<string>(
+  PHASES_COMMAND_ALIASES.map((entry) => entry.subcommand),
+);
 
 export const VALIDATE_COMMAND_ALIASES: readonly FamilyCommandAlias[] = [
   { canonical: 'validate.consistency', aliases: ['validate consistency'], subcommand: 'consistency', mutation: false },
@@ -91,6 +111,10 @@ export const VALIDATE_COMMAND_ALIASES: readonly FamilyCommandAlias[] = [
   { canonical: 'validate.context', aliases: ['validate context'], subcommand: 'context', mutation: false },
 ] as const;
 
+export const VALIDATE_SUBCOMMANDS = new Set<string>(
+  VALIDATE_COMMAND_ALIASES.map((entry) => entry.subcommand),
+);
+
 export const ROADMAP_COMMAND_ALIASES: readonly FamilyCommandAlias[] = [
   { canonical: 'roadmap.analyze', aliases: ['roadmap analyze'], subcommand: 'analyze', mutation: false },
   { canonical: 'roadmap.get-phase', aliases: ['roadmap get-phase'], subcommand: 'get-phase', mutation: false },
@@ -98,11 +122,6 @@ export const ROADMAP_COMMAND_ALIASES: readonly FamilyCommandAlias[] = [
   { canonical: 'roadmap.annotate-dependencies', aliases: ['roadmap annotate-dependencies'], subcommand: 'annotate-dependencies', mutation: true },
 ] as const;
 
-export const STATE_SUBCOMMANDS = new Set<string>(STATE_COMMAND_ALIASES.map((entry) => entry.subcommand));
-export const VERIFY_SUBCOMMANDS = new Set<string>(VERIFY_COMMAND_ALIASES.map((entry) => entry.subcommand));
-export const INIT_SUBCOMMANDS = new Set<string>(INIT_COMMAND_ALIASES.map((entry) => entry.subcommand));
-export const PHASE_SUBCOMMANDS = new Set<string>(PHASE_COMMAND_ALIASES.map((entry) => entry.subcommand));
-export const PHASES_SUBCOMMANDS = new Set<string>(PHASES_COMMAND_ALIASES.map((entry) => entry.subcommand));
-export const VALIDATE_SUBCOMMANDS = new Set<string>(VALIDATE_COMMAND_ALIASES.map((entry) => entry.subcommand));
-export const ROADMAP_SUBCOMMANDS = new Set<string>(ROADMAP_COMMAND_ALIASES.map((entry) => entry.subcommand));
-
+export const ROADMAP_SUBCOMMANDS = new Set<string>(
+  ROADMAP_COMMAND_ALIASES.map((entry) => entry.subcommand),
+);
