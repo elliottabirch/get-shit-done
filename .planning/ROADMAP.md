@@ -31,7 +31,7 @@ and ships migration + distribution (Phase 8).
 - [x] **Phase 5: Foundational primitive lift** — Implement `getSection`/`updateSection`/`snapshot`/`restore`/`putNamedDoc`/`writeBinaryAsset`; hoist `pipeline.js` dry-run off filesystem `cp -r`; resolve OQ-02 + OQ-05 + OQ-07 + OQ-10. *(this repo)* (completed 2026-05-11)
 - [x] **Phase 6: BeadsAdapter implementation** — Implement the full StorageAdapter against `bd` in the sibling repo, carrying forward 13 spike findings and the JSONL roundtrip pattern; resolve OQ-06. *(sibling repo `gsd-beads`)* (completed 2026-05-12)
 - [x] **Phase 7: Conformance test suite** — Paired tests run every Bin B method against both adapters, asserting equivalent outcomes; property-based round-trips; mid-transaction failure injection. *(both repos)* (completed 2026-05-12)
-- [ ] **Phase 8: Migration + distribution** — `storage.adapter: beads` opt-in, markdown→bd migration tool, rebase-conflict playbook, strict-superset golden parity validation, distribution decision (PR upstream vs long-lived fork). *(both repos)*
+- [x] **Phase 8: Migration + distribution** — `storage.adapter: beads` opt-in, markdown→bd migration tool, rebase-conflict playbook, strict-superset golden parity validation, distribution decision (PR upstream vs long-lived fork). *(both repos; completed 2026-05-14, ADR D-2026-05-13-DIST-05 records option-b: maintain long-lived fork)*
 
 ## Phase Details
 
@@ -264,4 +264,4 @@ Phase 6 begins in sibling repo `~/code/gsd-beads` only after Phase 5 ships in th
 | 5. Foundational primitive lift | 0/TBD | Not started | - |
 | 6. BeadsAdapter implementation | 0/7 | Planning complete | - |
 | 7. Conformance test suite | 6/6 | Complete | 2026-05-12 |
-| 8. Migration + distribution | 0/TBD | Not started | - |
+| 8. Migration + distribution | 6/6 | Complete | 2026-05-14 |
