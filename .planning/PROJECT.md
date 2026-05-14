@@ -43,7 +43,7 @@ only durable solution. This fork adds that seam.
 
 ## Current Milestone: v1.0 — StorageAdapter interface + MarkdownAdapter
 
-**Status:** in-flight (Phases 1–7 complete on `feat/storage-adapter` branch; Phase 8 migration + distribution is the final phase). Phase 7 conformance-test-suite shipped 2026-05-12 with 56-entry manifest (32 binB + 12 noun-roundtrip + 9 section-tuple + 2 rollback + 1 commitPlanningState), paired harness covering both adapters, property-based round-trips gated behind `CONFORMANCE_DEEP=1`, and CONFORM-01..04 all validated against the live codebase (see `.planning/phases/07-conformance-test-suite/07-VERIFICATION.md` + `07-REVIEW.md`).
+**Status:** ✓ **v1.0 SHIPPED** (2026-05-14). All 8 phases complete on `feat/storage-adapter`; 51/51 plans complete. Distribution decision: maintain long-lived fork (ADR `D-2026-05-13-DIST-05`, option-b — chosen because the fork's StorageAdapter design is materially larger in scope than upstream's accepted seam PRs #2898/#2901/#2908 and there is no external-adopter pressure forcing an upstream merge today). Reopens annually as a review item. Phase 7 conformance-test-suite shipped 2026-05-12 with 56-entry manifest + paired harness; Phase 8 shipped DIST-01 adapter factory + DIST-02 migration docs + DIST-03 rebase playbook + DIST-04 strict-superset parity CI workflow + DIST-05 ADR. One outstanding HUMAN-UAT item: first-green parity-CI run on a real PR (DIST-04 follow-up — workflow file + plumbing shipped; data-shape fixtures need fixing).
 
 **Goal:** Ship a fork of upstream GSD that adds a `StorageAdapter`
 interface (10 Bin A primitives + 6 foundational primitives + ~58 Bin B
@@ -74,7 +74,7 @@ Verify zero behavior change against upstream's test suite.
 | 5 | Foundational primitive lift (`updateSection`, `snapshot/restore`, `putNamedDoc`, `writeBinaryAsset`) | complete | this |
 | 6 | BeadsAdapter implementation | complete | gsd-beads |
 | 7 | Conformance test suite (run against both adapters) | complete (2026-05-12) | both |
-| 8 | Migration + distribution | next | both |
+| 8 | Migration + distribution | complete (2026-05-14) | both |
 
 Phases 1–5 landed on `feat/storage-adapter`. Phase 6 shipped in
 gsd-beads (on `feat/phase-6-reset`; graduation to `main` deferred per
@@ -178,5 +178,5 @@ this fork archives.
 
 ---
 
-*Last updated: 2026-05-13 — Phase 7 (conformance-test-suite) complete. 56-entry manifest + paired-harness + property round-trips (CONFORMANCE_DEEP-gated) + failure-injection rollback. CI end-to-end green on Ubuntu 22 Node 22 paired-conformance as of commit e204d9cb. Phase 8 (migration + distribution) next, opening with Pre-0 SDK alias-generator rewrite.*
+*Last updated: 2026-05-14 — **v1.0 SHIPPED.** All 8 phases complete; 51/51 plans complete. Phase 8 closed with ADR D-2026-05-13-DIST-05 (option-b: maintain long-lived fork). One HUMAN-UAT item outstanding (DIST-04 first-green parity-CI run on a real PR; workflow shipped, fixtures need fixing). Sibling `gsd-beads@feat/phase-6-reset` graduation to `main` is post-v1.0 work.*
 *Decision log: `.planning/DECISIONS.md`. Investigation input: `.planning/research/fork-investigation/SYNTHESIS.md`.*
