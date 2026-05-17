@@ -15,6 +15,7 @@ The rest of v1.1 is necessary but secondary. A 351-commit upstream rebase was co
 ## Phases
 
 **Phase Numbering:**
+
 - Integer phases (1–4): canonical scope for v1.1.
 - Decimal phases (e.g. 2.1) reserved for urgent insertions during execution via `/gsd-insert-phase`.
 
@@ -26,20 +27,32 @@ The rest of v1.1 is necessary but secondary. A 351-commit upstream rebase was co
 ## Phase Details
 
 ### Phase 1: Land the rebase
+
 **Repo:** this repo (`feat/storage-adapter` ← `rebase/onto-upstream-2026-05-16`)
 **Goal:** The 351-commit upstream rebase lives on `feat/storage-adapter`. The diff has been read and accepted — no surprises swept under the rug. TypeScript build is clean. Tests pass at ≥97% under the default markdown adapter. The staging branch and v1.0 tag are preserved for rollback safety.
 **Depends on:** Nothing (first phase; the rebase work already exists on `rebase/onto-upstream-2026-05-16` at 5a063672)
 **Requirements:** REBASE-01, REBASE-02, REBASE-03, REBASE-04, REBASE-05
 **Resolves open questions:** N/A
 **Success Criteria** (what must be TRUE):
+
   1. `git log feat/storage-adapter` includes the full 351-commit upstream window (`4029d103` → `ae63cbe5`). The branch tip is either a direct fast-forward or a merge that preserves all 351 commits without squash. A brief written note confirms the diff was reviewed, not just applied.
   2. `npm run build:sdk-only` exits zero with no TypeScript errors on the landed branch.
   3. The unit test suite reports ≥97% pass rate with `storage.adapter` unconfigured (default markdown path). Every failure is categorized: known PORT-group items (DELTA.md Groups 1–7), known VERIFY/MISC items, or unexplained — no unexplained failures pass silently.
   4. `git rebase main` from the landed `feat/storage-adapter` tip completes with conflicts only in adapter-interface seam files; zero conflicts in pure business-logic files.
   5. Both `fork/v1.0-shipped` tag and `rebase/onto-upstream-2026-05-16` checkpoint branch remain present on `origin` throughout this phase — confirmed via `git ls-remote origin` before closing Phase 1.
-**Plans:** TBD (filled by /gsd-plan-phase)
+
+**Plans:** 2 plans
+Plans:
+**Wave 1**
+
+- [ ] 01-01-PLAN.md — Wave 0/1: setup (staging branch, baseline capture, set-difference gate, cherry-pick audit) + automated verification gates (REBASE-02 test, REBASE-03 build, REBASE-04 dry-run rebase)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [ ] 01-02-PLAN.md — Wave 2/3: human-gated diff review (01-REVIEW-NOTES.md) + force-push cutover + post-cutover REBASE-05 safety-ref confirmation
 
 ### Phase 2: Make the seam real
+
 **Repo:** this repo (`feat/storage-adapter`)
 **Goal:** The adapter configured at `storage.adapter` in `.planning/config.json` is the adapter that ALL handler callsites actually use at runtime. `adapterFor(projectDir)` no longer returns a live adapter. A round-trip write under `adapter: "beads"` reaches bd. A round-trip write under `adapter: "markdown"` (or no config) is byte-identical to upstream. A conformance suite "seam-realness" entry proves both paths across every state-mutation handler, including a large-body (>64KB) singleton round-trip.
 **Depends on:** Phase 1 (the rebase must be landed before seam surgery begins — replacing 101 callsites on top of an unresolved staging diff would produce unresolvable merge chaos)
@@ -47,14 +60,17 @@ The rest of v1.1 is necessary but secondary. A 351-commit upstream rebase was co
 **Resolves open questions:** N/A
 **Cross-references:** bd `get-shit-done-qt2` (P0 — root cause for SEAM-01..03); DEFECT-02 is the large-body conformance case subsumed into the SEAM-06 suite
 **Success Criteria** (what must be TRUE):
+
   1. `grep -rn "adapterFor(projectDir)" sdk/src/query/ | wc -l` returns 0 on the merged branch. Every replaced callsite threads the adapter argument through its handler signature — verifiable by scanning the PR diff for the replacement pattern, not by manual re-count.
   2. Configure `storage.adapter: "beads"` in `.planning/config.json`, run `gsd-sdk query state.milestone-switch --milestone vTest --name "SeamTest"` end-to-end: the bd-tier STATE.md singleton receives the write. Verify via `bd show` that the stored content matches what MarkdownAdapter would have written to disk under the same call.
   3. Configure `storage.adapter: "markdown"` (or remove the config key entirely), run the same `state.milestone-switch` command: `.planning/STATE.md` on disk is byte-identical to what upstream GSD would produce. The default path is a regression-free transition, not a rewrite.
   4. The conformance suite "seam-realness" manifest entry runs ALL migrated state-mutation handlers against MarkdownAdapter AND BeadsAdapter; pass rate ≥ 95% at merge. Any sub-95% handler is enumerated by name in a failure manifest file — not silently skipped or counted as "flaky." The large-body singleton test (DEFECT-02 / SEAM-06) is one of these entries and asserts byte-identical round-trip for bodies > 64KB against both adapters.
   5. `adapterFor` is either deleted from `helpers.ts` or present only as a documented deprecation stub that throws `NotYetMigratedError` at call time — it does not silently return a live adapter under any code path reachable from the SDK query registry.
+
 **Plans:** TBD (filled by /gsd-plan-phase)
 
 ### Phase 3: Port upstream features
+
 **Repo:** this repo (`feat/storage-adapter`)
 **Goal:** The 7 upstream features lost during "take-theirs" rebase resolutions are restored. The test suite passes all formerly-failing PORT-group tests (approximately 25 tests across Groups 1–7 per DELTA.md). The fork is feature-complete relative to the upstream commit window landed in Phase 1.
 **Depends on:** Phase 1 (the rebase must be landed — porting against the pre-rebase branch would immediately conflict). Phase 2 is not a hard prerequisite for PORT; these features are adapter-clean. However, sequencing PORT after SEAM avoids callsite confusion and means any PORT test that happens to exercise adapter routing verifies the real seam, not the shortcut.
@@ -62,14 +78,17 @@ The rest of v1.1 is necessary but secondary. A 351-commit upstream rebase was co
 **Resolves open questions:** N/A
 **Cross-references:** bd `get-shit-done-s93` (PORT-01 — phase_status field, already filed)
 **Success Criteria** (what must be TRUE):
+
   1. All 4 `phase_status` field tests pass: `initPlanPhase` and `initVerifyWork` output includes `phase_status` ∈ `Pending` / `Planned` / `Executed` / `Complete`, derived from the presence/absence of plan files, summary files, and VERIFICATION.md `status:` field. Verified against a fixture directory that contains one example of each state.
   2. All 3 `roadmap.get-phase` mode-field tests pass: `**Mode:** mvp` parses to `"mvp"`, absent mode returns `null`, unrecognized mode value passes through verbatim without coercion.
   3. All 9 strict argv tests pass across phase-lifecycle handlers: `--dry-run` accepted, `--force` accepted, any unknown `--flag` rejected with non-zero exit + descriptive error message, `--help` in `milestoneComplete` does not get interpreted as a version string.
   4. All 3 curated-progress preservation tests pass: a `stateUpdate` call whose payload does not include `Progress` leaves `progress.*` frontmatter values untouched on disk; an explicit `Progress` payload triggers a full `progress.*` recompute; workstream-scoped STATE.md frontmatter syncs correctly.
   5. All remaining PORT-group test regressions reach zero: the 3 validate.health rule fixes (Group 5 — 999.X backlog phase naming, no-aliasing W006 suppression, descriptor-vs-canonical plan matching), the 1 archived-dir fix (Group 6 — same-milestone archived dir preserved not nulled), and the 1 workstream-scoped `initVerifyWork` fix (Group 7). Total PORT-group failure count after this phase: 0.
+
 **Plans:** TBD (filled by /gsd-plan-phase)
 
 ### Phase 4: Close out defects, divergences, integration parity, and misc
+
 **Repo:** this repo (`feat/storage-adapter`)
 **Goal:** The test suite is green, or every remaining failure is a documented intentional skip with a tracking issue. Every VERIFY golden was investigated before any decision to regenerate. Every DIVERGE item is either verified-closed by SEAM's now-real adapter routing, or explicitly resolved as a standalone fix with a written rationale. MISC regressions are fixed. The milestone closes with a clean conformance suite and no unaddressed P0/P1 defects.
 **Depends on:** Phase 2 (most DIVERGE items are SEAM acceptance evidence — they can only be confirmed closed once the seam is real and adapter routing is verified); Phase 3 (PORT must complete before VERIFY goldens are regenerated, so goldens capture the fully-ported output rather than an intermediate partial state)
@@ -77,11 +96,13 @@ The rest of v1.1 is necessary but secondary. A 351-commit upstream rebase was co
 **Resolves open questions:** N/A
 **Cross-references:** bd `get-shit-done-qjk` (DEFECT-01 / DIVERGE-03 — >64KB singleton body limit); DIVERGE-03 is the same physical defect as DEFECT-01 (one fix, two traceability IDs); DIVERGE-04 resolves via Phase 2 SEAM work — this phase verifies the resolution, it does not do new callsite work
 **Success Criteria** (what must be TRUE):
+
   1. All 7 VERIFY goldens are resolved with a recorded investigation verdict before any regeneration. Each verdict names the root cause and the chosen fix or rationale for regeneration. `verify.codebase-drift` golden is updated to reflect the intentional SDK removal per ADR D-2026-05-13-3524 (CJS-only seam). No golden is regenerated with only "output changed" as justification.
   2. All 3 MISC regressions are fixed and their own test cases pass: `loadConfig` returns `false` (not `undefined`) for boolean fields with a `false` default; `MarkdownAdapter.readModifyWriteRoadmapMd` no longer throws `core.atomicWriteFileSync is not a function`; `runtime-bridge-sync` correctly classifies `native_failure` events.
   3. DIVERGE-01 is resolved: stub SDK handlers (`thread-seed.list-seeds`, `workspace.ensure-dir`) are either given a minimal real implementation or removed from the workflow call sites that reach them — no normal workflow execution returns `{"error": "stub"}` at a documented call site.
   4. DIVERGE-04 (disk/bd dual-write divergence trap) is verified closed by evidence: running the SEAM-04..06 acceptance tests configured for `adapter: "beads"` produces no writes to `.planning/` disk files (except explicitly carved-out CJS-only paths per ADR D-2026-05-13-3524). The confirmation is an observable side-effect check in the test output, not a documentation assertion.
   5. The conformance suite passes at ≥ 98% across MarkdownAdapter and BeadsAdapter, with the one known-gap entry (`withTransaction:mid-commit-replay` / incomplete-per-Deferred-04) explicitly listed in the manifest as an acknowledged gap. DEFECT-01 (>64KB singleton body) has a recorded resolution path — either the SEAM-02 disk-tier carve-out for ADR logs (routing decision) or a column-widening fix in BeadsAdapter — and the conformance large-body test result matches that recorded decision.
+
 **Plans:** TBD (filled by /gsd-plan-phase)
 
 ## Traceability
