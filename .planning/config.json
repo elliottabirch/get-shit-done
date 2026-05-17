@@ -3,6 +3,6 @@
     "security_enforcement": false
   },
   "storage": {
-    "adapter": "beads"
+    "adapter": "markdown"
   }
 }
