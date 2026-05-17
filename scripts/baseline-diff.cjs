@@ -42,10 +42,36 @@ function fail(message, err) {
 }
 
 /**
+ * Normalize an absolute test file path from vitest JSON to a repo-relative path.
+ *
+ * vitest emits absolute paths (e.g. /Volumes/code/get-shit-done/sdk/src/foo.test.ts
+ * or /private/tmp/upstream-baseline/sdk/src/foo.test.ts). To compare IDs across
+ * checkouts (main working tree vs worktree), strip the prefix before the first
+ * known repo-root-relative segment.
+ *
+ * Known root-relative segments (ordered by specificity): adapters/, sdk/, tests/
+ *
+ * Falls back to the original string if no known segment is found.
+ *
+ * @param {string} filePath - Absolute path from vitest JSON
+ * @returns {string} Repo-relative path
+ */
+function normalizeTestPath(filePath) {
+  const segments = ['adapters/', 'sdk/', 'tests/'];
+  for (const seg of segments) {
+    const idx = filePath.indexOf('/' + seg);
+    if (idx !== -1) return filePath.slice(idx + 1);
+    if (filePath.startsWith(seg)) return filePath;
+  }
+  return filePath;
+}
+
+/**
  * Extract failing test IDs from a vitest JSON report.
  *
  * Stable ID format: "<file>::<fullName>"
  * where fullName is the describe path + " > " + test name.
+ * File paths are normalized to repo-relative form (strips worktree/checkout prefix).
  *
  * @param {string} jsonPath - Path to the vitest JSON report
  * @returns {Set<string>} Set of failing test IDs
@@ -67,9 +93,10 @@ function extractFailingIds(jsonPath) {
 
   const ids = new Set();
   for (const f of r.testResults || []) {
+    const normalizedName = normalizeTestPath(f.name);
     for (const a of f.assertionResults || []) {
       if (a.status === 'failed') {
-        ids.add(f.name + '::' + a.fullName);
+        ids.add(normalizedName + '::' + a.fullName);
       }
     }
   }
@@ -166,4 +193,4 @@ if (require.main === module) {
   main();
 }
 
-module.exports = { extractFailingIds, parseIdList, evaluateGate, EXIT_PASS, EXIT_FAIL, EXIT_ERROR };
+module.exports = { normalizeTestPath, extractFailingIds, parseIdList, evaluateGate, EXIT_PASS, EXIT_FAIL, EXIT_ERROR };
