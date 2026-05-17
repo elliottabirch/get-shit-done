@@ -1,0 +1,53 @@
+sdk/src/golden/golden-policy.test.ts::golden policy every canonical registry command is integration-covered or excepted
+sdk/src/golden/golden.integration.test.ts::Golden file tests docs-init SDK output matches gsd-tools.cjs (normalized existing_docs order)
+sdk/src/golden/golden.integration.test.ts::Golden file tests init.execute-phase SDK JSON matches gsd-tools.cjs
+sdk/src/golden/golden.integration.test.ts::Golden file tests init.plan-phase SDK JSON matches gsd-tools.cjs
+sdk/src/golden/golden.integration.test.ts::Golden file tests init.quick SDK JSON matches gsd-tools.cjs except clock-derived quick fields
+sdk/src/golden/golden.integration.test.ts::Golden file tests init.resume SDK JSON matches gsd-tools.cjs
+sdk/src/golden/golden.integration.test.ts::Golden file tests init.verify-work SDK JSON matches gsd-tools.cjs
+sdk/src/golden/golden.integration.test.ts::Golden file tests intel.update SDK JSON matches gsd-tools.cjs (`intel update`)
+sdk/src/golden/golden.integration.test.ts::Golden file tests progress SDK JSON matches gsd-tools.cjs (`progress json`)
+sdk/src/golden/golden.integration.test.ts::Golden file tests roadmap.analyze SDK JSON matches gsd-tools.cjs
+sdk/src/golden/golden.integration.test.ts::Golden file tests state.sync --verify SDK dry-run output matches gsd-tools.cjs
+sdk/src/golden/golden.integration.test.ts::Golden file tests state.validate SDK output matches gsd-tools.cjs
+sdk/src/golden/golden.integration.test.ts::Golden file tests validate.consistency SDK JSON matches gsd-tools.cjs
+sdk/src/golden/golden.integration.test.ts::Golden file tests validate.health SDK JSON matches gsd-tools.cjs
+sdk/src/golden/golden.integration.test.ts::Golden file tests verify.codebase-drift SDK JSON matches gsd-tools.cjs
+sdk/src/golden/golden.integration.test.ts::Golden file tests verify.schema-drift SDK JSON matches gsd-tools.cjs
+sdk/src/golden/read-only-parity.integration.test.ts::Read-only golden parity (JSON toEqual) 'intel.diff' matches gsd-tools.cjs JSON
+sdk/src/golden/read-only-parity.integration.test.ts::Read-only golden parity (JSON toEqual) 'intel.extract-exports' matches gsd-tools.cjs JSON
+sdk/src/golden/read-only-parity.integration.test.ts::Read-only golden parity (JSON toEqual) 'intel.query' matches gsd-tools.cjs JSON
+sdk/src/golden/read-only-parity.integration.test.ts::Read-only golden parity (JSON toEqual) 'intel.status' matches gsd-tools.cjs JSON
+sdk/src/golden/read-only-parity.integration.test.ts::Read-only golden parity (JSON toEqual) 'intel.validate' matches gsd-tools.cjs JSON
+sdk/src/golden/read-only-parity.integration.test.ts::Read-only golden parity (JSON toEqual) 'list.todos' matches gsd-tools.cjs JSON
+sdk/src/golden/read-only-parity.integration.test.ts::Read-only golden parity (JSON toEqual) 'phases.list' matches gsd-tools.cjs JSON
+sdk/src/golden/read-only-parity.integration.test.ts::Read-only golden parity (JSON toEqual) 'resolve-model' matches gsd-tools.cjs JSON
+sdk/src/golden/read-only-parity.integration.test.ts::Read-only golden parity (JSON toEqual) 'roadmap.get-phase' matches gsd-tools.cjs JSON
+sdk/src/golden/read-only-parity.integration.test.ts::Read-only golden parity (JSON toEqual) 'skill-manifest' matches gsd-tools.cjs JSON
+sdk/src/golden/read-only-parity.integration.test.ts::Read-only golden parity (JSON toEqual) 'state-snapshot' matches gsd-tools.cjs JSON
+sdk/src/golden/read-only-parity.integration.test.ts::Read-only golden parity (JSON toEqual) 'stats.json' matches gsd-tools.cjs JSON
+sdk/src/golden/read-only-parity.integration.test.ts::Read-only golden parity (JSON toEqual) 'todo.match-phase' matches gsd-tools.cjs JSON
+sdk/src/golden/read-only-parity.integration.test.ts::Read-only golden parity (JSON toEqual) 'verify.path-exists' matches gsd-tools.cjs JSON
+sdk/src/golden/read-only-parity.integration.test.ts::Read-only golden parity (JSON toEqual) 'verify.schema-drift' matches gsd-tools.cjs JSON
+sdk/src/golden/read-only-parity.integration.test.ts::audit-open golden parity (excluding scanned_at) SDK JSON matches gsd-tools.cjs except volatile scanned_at
+sdk/src/golden/read-only-parity.integration.test.ts::config-path (plain stdout vs SDK { path }) SDK path matches gsd-tools.cjs plain-text stdout
+sdk/src/golden/read-only-parity.integration.test.ts::state.json golden parity (excluding last_updated) SDK rebuilt frontmatter matches gsd-tools.cjs except volatile last_updated
+sdk/src/golden/read-only-parity.integration.test.ts::state.load golden parity SDK load payload matches gsd-tools.cjs state load
+sdk/src/query/init.test.ts::initExecutePhase keeps same-milestone archived phase directory instead of nulling it (#3469)
+sdk/src/query/init.test.ts::initRemoveWorkspace rejects path separator in workspace name (T-14-01)
+sdk/src/query/init.test.ts::initRemoveWorkspace returns error when name arg missing
+sdk/src/query/phase-lifecycle.test.ts::replaceInCurrentMilestone replaces inside active <details> even when footer text exists after </details>
+sdk/src/query/phase-lifecycle.test.ts::replaceInCurrentMilestone replaces inside active milestone when it is wrapped in a <details> block
+sdk/src/query/phase.test.ts::phasePlanIndex #3430: native phase-plan-index warns about noncanonical plan-shaped files it cannot index
+sdk/src/query/skills.test.ts::agentSkills CLI stdout emits empty output (no JSON null) when agent type is unmapped
+sdk/src/query/skills.test.ts::agentSkills CLI stdout writes raw <agent_skills> block to stdout — not JSON-wrapped
+sdk/src/runtime-bridge-sync/index.test.ts::executeForCjs - sync primitive idempotency: calling twice with identical input returns identical output
+sdk/src/runtime-bridge-sync/index.test.ts::executeForCjs - sync primitive idempotency: unknown command returns same errorKind on repeat calls
+sdk/src/runtime-bridge-sync/index.test.ts::executeForCjs - sync primitive native_failure: handler execution failure is classified as native_failure
+sdk/src/runtime-bridge-sync/index.test.ts::executeForCjs - sync primitive returns a non-Promise object synchronously
+sdk/src/runtime-bridge-sync/index.test.ts::executeForCjs - sync primitive success: generate-slug returns ok:true with data and exitCode:0
+sdk/src/runtime-bridge-sync/index.test.ts::executeForCjs - sync primitive unknown_command: returns ok:false with errorKind unknown_command
+sdk/src/runtime-bridge-sync/index.test.ts::executeForCjs - sync primitive unknown_command: unregistered command is classified as unknown_command
+sdk/src/runtime-bridge-sync/projectdir-regression.test.ts::executeForCjs projectDir regression (Phase 5.0 bug) negative: nonexistent projectDir returns ok:true with {error} (handler-level not-found)
+sdk/src/runtime-bridge-sync/projectdir-regression.test.ts::executeForCjs projectDir regression (Phase 5.0 bug) threads projectDir to the handler: state.json returns frontmatter data from the tmpdir fixture
+sdk/src/runtime-bridge-sync/projectdir-regression.test.ts::executeForCjs projectDir regression (Phase 5.0 bug) workstream support: GSDTransport routes workstream requests natively (Phase 6 fix)
