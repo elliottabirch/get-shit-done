@@ -1,7 +1,7 @@
 ---
 gsd_state_version: 1.0
 milestone: v1.1
-milestone_name: milestone
+milestone_name: Make the StorageAdapter Seam Real
 status: executing
 last_updated: "2026-05-17T16:24:01.585Z"
 last_activity: 2026-05-17

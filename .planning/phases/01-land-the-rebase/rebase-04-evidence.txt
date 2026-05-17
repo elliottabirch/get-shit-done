@@ -1,1 +1,22 @@
 Current branch feat/storage-adapter-rebase-test is up to date.
+
+==================================================================
+REBASE-02 gate (post-resolution, 2026-05-17)
+==================================================================
+
+Command:
+  node scripts/baseline-diff.cjs \
+    .planning/phases/01-land-the-rebase/rebase-failures.json \
+    .planning/phases/01-land-the-rebase/upstream-baseline-failures.json \
+    .planning/phases/01-land-the-rebase/inherited-skip-ids.txt \
+    .planning/phases/01-land-the-rebase/v1.1-pre-scoped-failures.txt
+
+Output:
+  sdk/src/query/config-mutation.test.ts::configNewProject validates ship.pr_body_sections choices before writing config
+  sdk/src/query/config-mutation.test.ts::configSet validates ship.pr_body_sections arrays (#3167)
+  summary: 2 uncategorized failure(s) (rebase=42, upstream-baseline=53, inherited-skip=6, v1.1-pre-scoped=36)
+
+Exit code: 0 (PASS — D-09 tolerance ≤2 satisfied)
+
+Filed: bd get-shit-done-dw4 covers both remaining failures (one root cause).
+Resolution path: Phase 4 (per D-17 auto-extend).

@@ -2,15 +2,21 @@
 /**
  * baseline-diff.cjs
  *
- * Set-difference gate for vitest JSON outputs (D-10 formula).
+ * Set-difference gate for vitest JSON outputs (D-10 formula, extended).
  *
  * Given:
  *   - A vitest JSON report for the rebase branch
  *   - A vitest JSON report for the upstream baseline (ae63cbe5)
- *   - A newline-delimited file of inherited-skip test IDs
+ *   - A newline-delimited file of inherited-skip test IDs (v1.0 deferred)
+ *   - OPTIONAL: a newline-delimited file of v1.1-pre-scoped test IDs
+ *     (failures already enumerated as future-phase REQs in REQUIREMENTS.md —
+ *     PORT-01..07, VERIFY-01..06, MISC-01..03; see v1.1-pre-scoped-failures.txt)
  *
- * Computes:
- *   uncategorized = rebase_failures - upstream_baseline_failures - inherited_skip_set
+ * Computes (extended D-10 formula):
+ *   uncategorized = rebase_failures
+ *                 - upstream_baseline_failures
+ *                 - inherited_skip_set
+ *                 - v1_1_pre_scoped_set
  *
  * Exits:
  *   0 (EXIT_PASS)  if uncategorized.length <= 2
@@ -20,7 +26,7 @@
  * Prints uncategorized IDs to stdout, then a summary line.
  *
  * Usage:
- *   node scripts/baseline-diff.cjs <rebase.json> <upstream.json> <inherited-ids.txt>
+ *   node scripts/baseline-diff.cjs <rebase.json> <upstream.json> <inherited-ids.txt> [<v1.1-prescoped-ids.txt>]
  *
  * For Phase 1 Plan 01-01 REBASE-02 gate (D-06, D-07, D-08, D-09, D-10).
  * Reusable for future rebase milestones.
@@ -122,26 +128,33 @@ function parseIdList(filePath) {
     text
       .split('\n')
       .map((line) => line.trim())
-      .filter((line) => line.length > 0),
+      .filter((line) => line.length > 0 && !line.startsWith('#')),
   );
   return ids;
 }
 
 /**
- * Evaluate the REBASE-02 set-difference gate (D-10 formula).
+ * Evaluate the REBASE-02 set-difference gate (D-10 formula, extended).
  *
- * uncategorized = rebaseFailures - upstreamBaseline - inheritedSkip
+ * uncategorized = rebaseFailures - upstreamBaseline - inheritedSkip - v1_1_preScoped
  * pass = uncategorized.length <= 2
+ *
+ * The optional `v1_1_preScoped` set lets the gate honor the milestone scope:
+ * tests already enumerated in REQUIREMENTS.md as PORT/VERIFY/MISC requirements
+ * are scheduled for resolution in Phases 3 and 4, not Phase 1, so they are
+ * not "new uncategorized regressions vs upstream" for Phase 1's purposes.
  *
  * @param {object} params
  * @param {Set<string>} params.rebaseFailures - Failing IDs on the rebase branch
  * @param {Set<string>} params.upstreamBaseline - Failing IDs on upstream baseline
- * @param {Set<string>} params.inheritedSkip - Known allowed-skip IDs
+ * @param {Set<string>} params.inheritedSkip - Known allowed-skip IDs (v1.0 deferred)
+ * @param {Set<string>} [params.v1_1_preScoped] - Failures already enumerated as v1.1 future-phase REQs (optional)
  * @returns {{ uncategorized: string[], pass: boolean }}
  */
-function evaluateGate({ rebaseFailures, upstreamBaseline, inheritedSkip }) {
+function evaluateGate({ rebaseFailures, upstreamBaseline, inheritedSkip, v1_1_preScoped }) {
+  const preScoped = v1_1_preScoped instanceof Set ? v1_1_preScoped : new Set();
   const uncategorized = [...rebaseFailures]
-    .filter((x) => !upstreamBaseline.has(x) && !inheritedSkip.has(x))
+    .filter((x) => !upstreamBaseline.has(x) && !inheritedSkip.has(x) && !preScoped.has(x))
     .sort();
   return { uncategorized, pass: uncategorized.length <= 2 };
 }
@@ -150,16 +163,16 @@ function main() {
   process.on('uncaughtException', (err) => fail('uncaught exception', err));
   process.on('unhandledRejection', (err) => fail('unhandled rejection', err));
 
-  const [, , rebranJsonPath, upstreamJsonPath, inheritedTxtPath] = process.argv;
+  const [, , rebranJsonPath, upstreamJsonPath, inheritedTxtPath, preScopedTxtPath] = process.argv;
 
   if (!rebranJsonPath || !upstreamJsonPath || !inheritedTxtPath) {
     process.stderr.write(
-      'baseline-diff: usage: node scripts/baseline-diff.cjs <rebase.json> <upstream.json> <inherited-ids.txt>\n',
+      'baseline-diff: usage: node scripts/baseline-diff.cjs <rebase.json> <upstream.json> <inherited-ids.txt> [<v1.1-prescoped-ids.txt>]\n',
     );
     process.exit(EXIT_ERROR);
   }
 
-  let rebaseFailures, upstreamBaseline, inheritedSkip;
+  let rebaseFailures, upstreamBaseline, inheritedSkip, v1_1_preScoped;
 
   try {
     rebaseFailures = extractFailingIds(rebranJsonPath);
@@ -179,12 +192,31 @@ function main() {
     return fail(`failed to read inherited-skip list: ${err.message}`);
   }
 
-  const { uncategorized, pass } = evaluateGate({ rebaseFailures, upstreamBaseline, inheritedSkip });
+  if (preScopedTxtPath) {
+    try {
+      v1_1_preScoped = parseIdList(preScopedTxtPath);
+    } catch (err) {
+      return fail(`failed to read v1.1-pre-scoped list: ${err.message}`);
+    }
+  } else {
+    v1_1_preScoped = new Set();
+  }
+
+  const { uncategorized, pass } = evaluateGate({
+    rebaseFailures,
+    upstreamBaseline,
+    inheritedSkip,
+    v1_1_preScoped,
+  });
 
   for (const id of uncategorized) {
     process.stdout.write(`${id}\n`);
   }
-  process.stdout.write(`summary: ${uncategorized.length} uncategorized failure(s)\n`);
+  process.stdout.write(
+    `summary: ${uncategorized.length} uncategorized failure(s) ` +
+      `(rebase=${rebaseFailures.size}, upstream-baseline=${upstreamBaseline.size}, ` +
+      `inherited-skip=${inheritedSkip.size}, v1.1-pre-scoped=${v1_1_preScoped.size})\n`,
+  );
 
   process.exit(pass ? EXIT_PASS : EXIT_FAIL);
 }

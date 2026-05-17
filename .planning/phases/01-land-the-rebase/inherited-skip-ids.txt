@@ -3,4 +3,4 @@ sdk/src/golden/golden.integration.test.ts::phase mutations > phase.add-batch mat
 sdk/src/golden/golden.integration.test.ts::phase mutations > phase.insert matches gsd-tools.cjs
 sdk/src/golden/golden.integration.test.ts::validate.health > SDK JSON matches gsd-tools.cjs
 sdk/src/golden/read-only-parity.integration.test.ts::state.load golden parity > SDK load payload matches gsd-tools.cjs state load
-sdk/src/lifecycle-e2e.integration.test.ts::E2E Lifecycle: InitRunner → GSD.runPhase() full lifecycle
+sdk/src/lifecycle-e2e.integration.test.ts::E2E Lifecycle: InitRunner → GSD.runPhase() full lifecycle GSD.runPhase() drives Phase 1 through the full lifecycle without human intervention

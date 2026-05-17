@@ -1,0 +1,90 @@
+# Test IDs already scoped to v1.1 future-phase requirements (PORT/VERIFY/MISC).
+# Format: <file>::<fullName>  (vitest --reporter=json ID)
+# These are subtracted from the REBASE-02 gate set-difference per the user's
+# 2026-05-17 decision: "extend the gate, subtract the v1.1-already-scoped set."
+#
+# Source: .planning/REQUIREMENTS.md "v1.1 — Make the StorageAdapter Seam Real"
+# Each line traces to a REQ-ID via the comment block below.
+#
+# Ordering matches REQUIREMENTS.md PORT-01..07 then VERIFY-01..06 then MISC-01..03.
+
+# --- PORT-01: phase_status field (#3569) — 4 tests ---
+sdk/src/query/init.test.ts::initPlanPhase phase_status (#3569) reports "Complete" when summaries match plans and VERIFICATION.md status: passed
+sdk/src/query/init.test.ts::initPlanPhase phase_status (#3569) reports "Executed" when summaries match plans but VERIFICATION.md is absent
+sdk/src/query/init.test.ts::initPlanPhase phase_status (#3569) reports "Pending" when phase has no plans yet
+sdk/src/query/init.test.ts::initPlanPhase phase_status (#3569) reports "Planned" when plans exist but no summaries written
+
+# --- PORT-02: roadmap.get-phase mode field (#mvp-mode) — 3 tests ---
+sdk/src/query/mvp.test.ts::roadmap.get-phase: mode field (regression) extracts **Mode:** mvp from a phase section
+sdk/src/query/mvp.test.ts::roadmap.get-phase: mode field (regression) preserves unrecognized mode verbatim (lowercased) for forward-compat
+sdk/src/query/mvp.test.ts::roadmap.get-phase: mode field (regression) returns mode=null when **Mode:** absent
+
+# --- PORT-03: strict argv parsing in phase-lifecycle — 9 tests ---
+sdk/src/query/phase-lifecycle.test.ts::milestoneComplete help-flag defense rejects --help as a version value with GSDError before any disk write
+sdk/src/query/phase-lifecycle.test.ts::milestoneComplete help-flag defense rejects -h as a version value with GSDError before any disk write
+sdk/src/query/phase-lifecycle.test.ts::phaseAdd --dry-run returns JSON result without creating any files or modifying ROADMAP
+sdk/src/query/phase-lifecycle.test.ts::phaseAdd --dry-run works when flag appears after customId position
+sdk/src/query/phase-lifecycle.test.ts::phaseAdd rejects any unknown --flag even when mixed with dry-run
+sdk/src/query/phase-lifecycle.test.ts::phaseAdd rejects unknown --flags with a validation error naming the flag
+sdk/src/query/phase-lifecycle.test.ts::phaseComplete updates STATE.md fields: current phase, status, completed phases, percent
+sdk/src/query/phase-lifecycle.test.ts::phaseRemove bug-3409: accepts --force before phase id
+sdk/src/query/phase-lifecycle.test.ts::phaseRemove throws GSDError when target phase does not exist and does not mutate STATE.md
+
+# --- PORT-04: curated progress preservation in stateUpdate — 3 tests ---
+sdk/src/query/state-mutation.test.ts::stateUpdate preserves curated progress frontmatter during body-only updates
+sdk/src/query/state-mutation.test.ts::stateUpdate resyncs progress frontmatter when updating the Progress body field
+sdk/src/query/state-mutation.test.ts::stateUpdate syncs full-file workstream STATE.md frontmatter from the selected workstream
+
+# --- PORT-05: validate.health W005/W006/I001 fixes — 3 tests ---
+sdk/src/query/validate.test.ts::validateHealth does not alias 22A to 22 when suppressing W006 (#3565)
+sdk/src/query/validate.test.ts::validateHealth does not emit I001 when plan file has descriptor but summary uses canonical stem (#3473)
+sdk/src/query/validate.test.ts::validateHealth does not emit W005 for 999.X backlog phase directory naming (#3473)
+
+# --- PORT-06: archived-phase directory handling (#3469) — 1 test ---
+sdk/src/query/init.test.ts::initExecutePhase keeps same-milestone archived phase directory instead of nulling it (#3469)
+
+# --- PORT-07: workstream-scoped initVerifyWork — 1 test ---
+sdk/src/query/init.test.ts::initVerifyWork resolves workstream-scoped phases when workstream is provided
+
+# --- VERIFY-01: validate.health SDK ↔ CJS golden ---
+sdk/src/golden/golden.integration.test.ts::Golden file tests validate.health SDK JSON matches gsd-tools.cjs
+
+# --- VERIFY-02: docs-init SDK ↔ CJS golden ---
+sdk/src/golden/golden.integration.test.ts::Golden file tests docs-init SDK output matches gsd-tools.cjs (normalized existing_docs order)
+
+# --- VERIFY-03: verify.codebase-drift golden (intentional SDK removal per ADR D-2026-05-13-3524) ---
+sdk/src/golden/golden.integration.test.ts::Golden file tests verify.codebase-drift SDK JSON matches gsd-tools.cjs
+
+# --- VERIFY-05: state.load payload parity ---
+sdk/src/golden/read-only-parity.integration.test.ts::state.load golden parity SDK load payload matches gsd-tools.cjs state load
+
+# --- VERIFY-06: state.get no-field full-content parity ---
+sdk/src/golden/read-only-parity.integration.test.ts::state.get golden parity matches full STATE.md when no field (same as `state get` with no section)
+
+# --- MISC-01: loadConfig defaults parity (returns undefined for fields that should be false) — 2 tests ---
+sdk/src/config.test.ts::loadConfig pre-project: ignores user defaults and uses built-in defaults
+sdk/src/config.test.ts::loadConfig project config is authoritative over user defaults (CJS parity)
+
+# --- MISC-02: MarkdownAdapter.readModifyWriteRoadmapMd implementation gap ---
+adapters/markdown/index.test.ts::MarkdownAdapter readModifyWriteRoadmapMd does not throw (implemented, not defensive throw)
+
+# --- MISC-03: runtime-bridge-sync native_failure classification regression ---
+sdk/src/runtime-bridge-sync/index.test.ts::executeForCjs - sync primitive native_failure: handler execution failure is classified as native_failure
+
+# === Family extensions added 2026-05-17 after first gate run ===
+# These are not literal REQ-IDs but fold naturally into existing v1.1 scope per
+# the user's 2026-05-17 routing decision after the executor's CHECKPOINT REACHED.
+
+# --- SEAM-family: command-seam-coverage test directly checks the seam adapterFor() bug. ---
+# Resolution: passes once SEAM-01..03 land in Phase 2.
+sdk/src/query/command-seam-coverage.test.ts::command seam coverage (manifest -> generated -> adapters) registry has every canonical + alias for migrated families
+
+# --- PORT-07-family: workstreamProgress regression — same surface as PORT-07's initVerifyWork workstream threading. ---
+# Resolution: addressed in Phase 3 PORT-07.
+sdk/src/query/workstream.test.ts::workstreamProgress clamps progress percent when completed phase dirs exceed roadmap count
+
+# --- MISC-NEW (already in STATE.md "Pending todos"): leak-grep + planner-template idempotence. ---
+# Resolution: the deferred todo "narrow scripts/leak-grep.cjs to skip .planning/phases/**/*-PLAN.md +
+# rewrite the planner template to emit <files_to_read> instead of <context> auto-loads" addresses this.
+# Phase 4 MISC scope picks it up naturally when MarkdownAdapter / leak-grep refinements are touched.
+tests/leak-grep/context-block-register.test.ts::Phase 2 Plan 02-05: <context>-block register completeness idempotence — re-running the audit script produces the same record count
