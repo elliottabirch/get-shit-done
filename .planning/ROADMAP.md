@@ -41,11 +41,11 @@ The rest of v1.1 is necessary but secondary. A 351-commit upstream rebase was co
   4. `git rebase main` from the landed `feat/storage-adapter` tip completes with conflicts only in adapter-interface seam files; zero conflicts in pure business-logic files.
   5. Both `fork/v1.0-shipped` tag and `rebase/onto-upstream-2026-05-16` checkpoint branch remain present on `origin` throughout this phase — confirmed via `git ls-remote origin` before closing Phase 1.
 
-**Plans:** 2 plans
+**Plans:** 1/2 plans executed
 Plans:
 **Wave 1**
 
-- [ ] 01-01-PLAN.md — Wave 0/1: setup (staging branch, baseline capture, set-difference gate, cherry-pick audit) + automated verification gates (REBASE-02 test, REBASE-03 build, REBASE-04 dry-run rebase)
+- [x] 01-01-PLAN.md — Wave 0/1: setup (staging branch, baseline capture, set-difference gate, cherry-pick audit) + automated verification gates (REBASE-02 test, REBASE-03 build, REBASE-04 dry-run rebase)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
