@@ -1,3 +1,103 @@
+# Requirements — Milestone v1.1: Upstream Drift Reconciliation
+
+**Source of truth:** `.planning/research/upstream-drift/DELTA.md`
+
+**Locked invariants** (carried from v1.0):
+- Strict-superset of upstream `gsd-build/get-shit-done` when no adapter is configured
+- Two-repo model: this fork + sibling `~/code/gsd-beads`
+- Periodic rebase against `upstream/main`; conflicts only in adapter-interface seam
+
+**Milestone framing:** Land the 351-commit rebase already completed on `rebase/onto-upstream-2026-05-16`, port the upstream features dropped during "take theirs" resolutions, close out the BeadsAdapter defects uncovered along the way, and reconcile the seven beads-vs-markdown adapter divergences observed during initial beads-mode use.
+
+---
+
+## Active Requirements
+
+### REBASE — Land the rebase work
+
+- [ ] **REBASE-01**: All 351 commits from `rebase/onto-upstream-2026-05-16` land on `feat/storage-adapter` (fast-forward or replace)
+- [ ] **REBASE-02**: `feat/storage-adapter` tests run green at ≥97% (currently 2008/2066 = 97.2%; target stays at-or-above this baseline as feature ports land)
+- [ ] **REBASE-03**: TypeScript build (`npm run build:sdk-only`) passes with zero errors
+- [ ] **REBASE-04**: `git rebase main` from the cutover branch produces no conflicts (clean replayability check)
+- [ ] **REBASE-05**: `fork/v1.0-shipped` tag and `rebase/onto-upstream-2026-05-16` checkpoint branch remain in `origin` for safety until milestone closes
+
+### PORT — Restore upstream features dropped during take-theirs
+
+Each bullet maps to a test cluster from `DELTA.md` Group 1-7. Owner is the SDK file where the feature lives.
+
+- [ ] **PORT-01** (Group 1): Restore `phase_status` field (#3569) on `initPlanPhase`/`initVerifyWork` output. Maps disk + VERIFICATION.md state → `Pending`/`Planned`/`Executed`/`Complete`. Already filed: bd `get-shit-done-s93`. (4 tests)
+- [ ] **PORT-02** (Group 2): Restore `mode` field extraction in `roadmap.get-phase` (`**Mode:** mvp` parsing). (3 tests)
+- [ ] **PORT-03** (Group 3): Restore strict argv parsing in phase-lifecycle handlers — `--dry-run`, `--force`, unknown-flag rejection, `--help` defense in milestoneComplete. (9 tests)
+- [ ] **PORT-04** (Group 4): Restore curated-progress preservation in `stateUpdate` — body-only updates must not stomp progress frontmatter; explicit Progress updates must recompute. Honor `options.preserveExistingProgress`. (3 tests)
+- [ ] **PORT-05** (Group 5): Restore three validate.health rule fixes — `#3473` 999.X backlog phase recognition; `#3565` no-aliasing of phase variants; `#3473` descriptor-vs-canonical plan-file matching. (3 tests)
+- [ ] **PORT-06** (Group 6): Fix `shouldDropArchivedPhaseMatch` (#3469) so same-milestone archived dirs are kept, not nulled. (1 test)
+- [ ] **PORT-07** (Group 7): Thread `workstream` through `initVerifyWork` so verify-work resolves workstream-scoped phases. (1 test)
+
+### VERIFY — Integration test parity (Group 8)
+
+- [ ] **VERIFY-01**: `validate.health` SDK ↔ CJS golden — investigate divergence root cause; fix or regenerate per investigation.
+- [ ] **VERIFY-02**: `docs-init` SDK ↔ CJS golden — same investigate-then-decide.
+- [ ] **VERIFY-03**: `verify.codebase-drift` golden — update to reflect intentional SDK removal (CJS-only per ADR D-2026-05-13-3524).
+- [ ] **VERIFY-04**: `audit-uat` JSON parity — investigate.
+- [ ] **VERIFY-05**: `state.load` payload parity — investigate.
+- [ ] **VERIFY-06**: `state.get` no-field full-content parity — investigate.
+- [ ] **VERIFY-07**: All other unintentional regressions surfaced by the integration test suite are diagnosed and fixed before milestone close (catch-all for tests not currently listed).
+
+### MISC — Orthogonal regressions (Group 9)
+
+- [ ] **MISC-01**: `loadConfig` defaults parity — fields that should default `false` currently return `undefined`.
+- [ ] **MISC-02**: `MarkdownAdapter.readModifyWriteRoadmapMd` — `core.atomicWriteFileSync is not a function`. Implementation gap.
+- [ ] **MISC-03**: `runtime-bridge-sync` `native_failure` classification regression.
+
+### DEFECT — BeadsAdapter contract gaps
+
+- [ ] **DEFECT-01**: BeadsAdapter handles singleton bodies > 64KB (DECISIONS.md class). Already filed: bd `get-shit-done-qjk`. Add conformance test for ≥1MB round-trip; update path router or column type per chosen approach.
+- [ ] **DEFECT-02**: Conformance suite includes a large-body singleton test that asserts byte-identical round-trip; runs against MarkdownAdapter and BeadsAdapter both.
+
+### DIVERGE — Beads/markdown adapter divergences (all 7 from session-end audit)
+
+- [ ] **DIVERGE-01**: Stub SDK handlers (`thread-seed.list-seeds`, `workspace.ensure-dir`) — implement or remove from workflows that call them. Currently return `{"error": "stub"}`.
+- [ ] **DIVERGE-02**: `init.new-milestone` `current_milestone_name` returns placeholder `"milestone"` instead of parsing real name from PROJECT.md or STATE.md.
+- [ ] **DIVERGE-03**: BeadsAdapter `>64KB` singleton fix — same as DEFECT-01 above (cross-referenced).
+- [ ] **DIVERGE-04**: **Disk/bd dual-write divergence trap** — when `adapter: "beads"` is configured, `.planning/PROJECT.md`/`STATE.md`/etc. exist on disk AND in bd. They drift if not manually synced. Resolution required: either (a) BeadsAdapter mirrors to disk on putRecord; (b) the disk copies are deleted for migrated singletons; (c) explicit dual-storage adapter mode. **High severity — silent drift trap.**
+- [ ] **DIVERGE-05**: `phases.clear` SDK handler — untested under BeadsAdapter; verify it doesn't either no-op silently or delete bd-tier phase data unintentionally.
+- [ ] **DIVERGE-06**: STATE.md "Reference" section preserved across milestone-switch but `state.milestone-switch` doesn't reset milestone-scoped Reference content. Polish.
+- [ ] **DIVERGE-07**: Conformance / contract test that proves identical observable behavior of init.new-milestone + state.milestone-switch under MarkdownAdapter and BeadsAdapter (catch-all for divergences we haven't found yet).
+
+---
+
+## v1.1 Requirements summary
+
+**Total active:** 30 (5 REBASE + 7 PORT + 7 VERIFY + 3 MISC + 2 DEFECT + 7 DIVERGE — minus 1 cross-reference = 30 unique)
+
+**Scope rationale:**
+- REBASE class is small but load-bearing — cutover work and verification
+- PORT class restores feature parity lost during the rebase resolution
+- VERIFY/MISC class closes the integration-test-suite gap to a known-green state
+- DEFECT class fixes the adapter-contract violation that blocked DECISIONS.md migration
+- DIVERGE class addresses the beads-mode bugs surfaced by actually USING the adapter (which v1.0 didn't fully do — v1.0 shipped the adapter; v1.1 surfaces what real use revealed)
+
+---
+
+## Future Requirements (deferred)
+
+None at this point — all known v1.1 work is captured above. Add deferred items here as they arise during execution.
+
+## Out of Scope
+
+- Sibling `gsd-beads` work beyond what cross-references PORT/DEFECT/DIVERGE here
+- New StorageAdapter capabilities or methods (purely reconciliation milestone)
+- Phase 8 distribution rework (DIST-04 first-green parity-CI on a real PR is a v1.0 closeout item, separately tracked)
+- Any feature additions not strictly required to land the rebase + restore parity
+
+---
+
+## v1.1 Traceability
+
+(Filled in by roadmap step — maps each REQ-ID to a phase + plan.)
+
+---
+
 # Requirements — Milestone v1.0: StorageAdapter interface + MarkdownAdapter
 
 **Source of truth:** `.planning/research/fork-investigation/SYNTHESIS.md`
