@@ -1,5 +1,8 @@
 {
   "workflow": {
     "security_enforcement": false
+  },
+  "storage": {
+    "adapter": "beads"
   }
 }

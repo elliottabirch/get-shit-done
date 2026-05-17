@@ -1,41 +1,96 @@
-# Repository Guidelines
+# Agent Instructions
 
-## Active Discussions
+This project uses **bd** (beads) for issue tracking. Run `bd prime` for full workflow context.
 
-For current work on **Grok Build compatibility** and multi-runtime synchronization across Grok Build, Claude Code, Gemini CLI, and Codex, see:
+> **Architecture in one line:** Issues live in a local Dolt database
+> (`.beads/dolt/`); cross-machine sync uses `bd dolt push/pull` (a
+> git-compatible protocol), stored under `refs/dolt/data` on your git
+> remote — separate from `refs/heads/*` where your code lives.
+> `.beads/issues.jsonl` is a passive export, not the wire protocol.
+>
+> See [SYNC_CONCEPTS.md](https://github.com/gastownhall/beads/blob/main/docs/SYNC_CONCEPTS.md)
+> for the one-screen overview and anti-patterns (don't treat JSONL as the
+> source of truth; don't `bd import` during normal operation; don't
+> reach for third-party Dolt hosting before trying the default).
 
-- `docs/discussions/grok-build-support-2026-05.md`
+## Quick Reference
 
-## Project Structure & Module Organization
+```bash
+bd ready              # Find available work
+bd show <id>          # View issue details
+bd update <id> --claim  # Claim work atomically
+bd close <id>         # Complete work
+bd dolt push          # Push beads data to remote
+```
 
-This repository ships GSD as a Node.js CLI and SDK. Root package entry points live in `bin/`, scripts in `scripts/`, runtime hooks in `hooks/`, command definitions in `commands/gsd/`, and workflow/template content in `get-shit-done/`. Agent role files are in `agents/`; docs are in `docs/`; logos and terminal images are in `assets/`. Root tests are in `tests/*.test.cjs`. The TypeScript SDK is isolated under `sdk/`, with source and Vitest tests in `sdk/src/`.
+## Non-Interactive Shell Commands
 
-## Build, Test, and Development Commands
+**ALWAYS use non-interactive flags** with file operations to avoid hanging on confirmation prompts.
 
-Use Node.js `>=22`.
+Shell commands like `cp`, `mv`, and `rm` may be aliased to include `-i` (interactive) mode on some systems, causing the agent to hang indefinitely waiting for y/n input.
 
-- `npm install`: install root dependencies.
-- `npm test`: builds the SDK first, then runs root `node:test` suites via `scripts/run-tests.cjs`.
-- `npm run test:coverage`: runs root tests with `c8` and enforces 70% line coverage for included CommonJS library files.
-- `npm run build:hooks`: rebuilds generated hook artifacts.
-- `npm run build:sdk`: installs SDK dependencies and builds TypeScript.
-- `cd sdk && npm test`: runs SDK Vitest unit and integration projects.
-- `cd sdk && npm run build`: type-checks and emits `sdk/dist/`.
+**Use these forms instead:**
+```bash
+# Force overwrite without prompting
+cp -f source dest           # NOT: cp source dest
+mv -f source dest           # NOT: mv source dest
+rm -f file                  # NOT: rm file
 
-## Coding Style & Naming Conventions
+# For recursive operations
+rm -rf directory            # NOT: rm -r directory
+cp -rf source dest          # NOT: cp -r source dest
+```
 
-Match the existing style in the edited area. Root JavaScript is CommonJS, generally strict-mode, two-space indentation, semicolons, `const`/`let`, and `node:` imports for built-ins. SDK code is strict TypeScript using ESM/`NodeNext`. Keep command, workflow, and test filenames kebab-case, for example `commands/gsd/plan-phase.md` and `tests/bug-2396-makefile-test-priority.test.cjs`. Agent files use `gsd-*.md`. Avoid unrelated formatting and unnecessary dependencies.
+**Other commands that may prompt:**
+- `scp` - use `-o BatchMode=yes` for non-interactive
+- `ssh` - use `-o BatchMode=yes` to fail instead of prompting
+- `apt-get` - use `-y` flag
+- `brew` - use `HOMEBREW_NO_AUTO_UPDATE=1` env var
 
-## Testing Guidelines
+<!-- BEGIN BEADS INTEGRATION v:1 profile:minimal hash:7510c1e2 -->
+## Beads Issue Tracker
 
-Root tests use Node’s built-in `node:test` and `node:assert/strict`; do not add Jest, Mocha, or Chai. Prefer helpers from `tests/helpers.cjs` for temporary projects, cleanup, and CLI execution. Name root tests `*.test.cjs`; run one with `node --test tests/name.test.cjs`. SDK tests use Vitest with `*.test.ts` for unit tests and `*.integration.test.ts` for integration tests.
+This project uses **bd (beads)** for issue tracking. Run `bd prime` to see full workflow context and commands.
 
-## Commit & Pull Request Guidelines
+### Quick Reference
 
-Recent history follows Conventional Commit prefixes such as `fix:`, `feat:`, and `ci:`, often with issue references: `fix(#2623): resolve parent .planning root...`. Keep commits scoped and descriptive.
+```bash
+bd ready              # Find available work
+bd show <id>          # View issue details
+bd update <id> --claim  # Claim work
+bd close <id>         # Complete work
+```
 
-Every PR must link an approved or confirmed issue with `Closes #123`, `Fixes #123`, or `Resolves #123`. Use the matching template in `.github/PULL_REQUEST_TEMPLATE/`. Include behavior changes, root cause when relevant, test evidence, affected platforms/runtimes, and update `CHANGELOG.md` or docs for user-facing changes.
+### Rules
 
-## Security & Configuration Tips
+- Use `bd` for ALL task tracking — do NOT use TodoWrite, TaskCreate, or markdown TODO lists
+- Run `bd prime` for detailed command reference and session close protocol
+- Use `bd remember` for persistent knowledge — do NOT use MEMORY.md files
 
-Do not commit secrets, local config, or generated worktree artifacts. Before release-facing changes, run the relevant scan scripts in `scripts/`, especially `secret-scan.sh`, `base64-scan.sh`, and `prompt-injection-scan.sh`.
+**Architecture in one line:** issues live in a local Dolt DB; sync uses `refs/dolt/data` on your git remote; `.beads/issues.jsonl` is a passive export. See https://github.com/gastownhall/beads/blob/main/docs/SYNC_CONCEPTS.md for details and anti-patterns.
+
+## Session Completion
+
+**When ending a work session**, you MUST complete ALL steps below. Work is NOT complete until `git push` succeeds.
+
+**MANDATORY WORKFLOW:**
+
+1. **File issues for remaining work** - Create issues for anything that needs follow-up
+2. **Run quality gates** (if code changed) - Tests, linters, builds
+3. **Update issue status** - Close finished work, update in-progress items
+4. **PUSH TO REMOTE** - This is MANDATORY:
+   ```bash
+   git pull --rebase
+   git push
+   git status  # MUST show "up to date with origin"
+   ```
+5. **Clean up** - Clear stashes, prune remote branches
+6. **Verify** - All changes committed AND pushed
+7. **Hand off** - Provide context for next session
+
+**CRITICAL RULES:**
+- Work is NOT complete until `git push` succeeds
+- NEVER stop before pushing - that leaves work stranded locally
+- NEVER say "ready to push when you are" - YOU must push
+- If push fails, resolve and retry until it succeeds
+<!-- END BEADS INTEGRATION -->
