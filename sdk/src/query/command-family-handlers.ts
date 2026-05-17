@@ -16,8 +16,8 @@ import { roadmapUpdatePlanProgress } from './roadmap-update-plan-progress.js';
 import {
   verifyPlanStructure, verifyPhaseCompleteness, verifyReferences,
   verifyCommits, verifyArtifacts, verifySchemaDrift,
-  verifyCodebaseDrift,
 } from './verify.js';
+// verifyCodebaseDrift intentionally not imported — CJS-only per ADR (see verify.ts:681).
 import { verifyFatSkills } from './verify-fat-skills.js';
 import { verifyKeyLinks, validateConsistency, validateHealth, validateAgents, validateContext } from './validate.js';
 import {
@@ -73,7 +73,7 @@ export const FAMILY_HANDLERS: Record<string, Readonly<Record<string, QueryHandle
     'verify.artifacts': verifyArtifacts,
     'verify.key-links': verifyKeyLinks,
     'verify.schema-drift': verifySchemaDrift,
-    'verify.codebase-drift': verifyCodebaseDrift,
+    // verify.codebase-drift handled directly by CJS router (see verify.ts:681)
     'verify.fat-skills': verifyFatSkills,
   },
   validate: {

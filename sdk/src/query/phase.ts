@@ -217,6 +217,24 @@ function extractObjective(content: string): string | null {
   return m ? m[1].trim() : null;
 }
 
+/**
+ * Extract canonical plan id (e.g. "09-01") from a plan/summary filename.
+ *
+ * Port of `extractCanonicalPlanId` from `get-shit-done/bin/lib/phase.cjs:55`
+ * and `core.cjs:776`. Strips PLAN/SUMMARY suffixes, splits on '-', and finds
+ * two adjacent phase-token-shaped parts.
+ */
+function extractCanonicalPlanId(filename: string): string {
+  const base = filename.replace(/-PLAN\.md$/i, '').replace(/-SUMMARY\.md$/i, '').replace(/\.md$/i, '');
+  const parts = base.split('-').filter(Boolean);
+  const tokenRe = /^\d+[A-Z]?(?:\.\d+)*$/i;
+  const phaseIdx = parts.findIndex(p => tokenRe.test(p));
+  if (phaseIdx >= 0 && phaseIdx + 1 < parts.length && tokenRe.test(parts[phaseIdx + 1]!)) {
+    return `${parts[phaseIdx]}-${parts[phaseIdx + 1]}`;
+  }
+  return base;
+}
+
 // ─── Exported handlers ─────────────────────────────────────────────────────
 
 /**
@@ -335,7 +353,7 @@ export const findPhase = async (
 export const phasePlanIndex = async (
   adapter: StorageAdapter,
   args: string[],
-  _projectDir: string,
+  projectDir: string,
   workstream?: string,
 ): Promise<QueryResult> => {
   const phase = args[0];
@@ -468,9 +486,6 @@ export const phasePlanIndex = async (
     }
 
     const hasSummary = completedPlanIds.has(planId) || completedPlanIds.has(extractCanonicalPlanId(planFile));
-    if (!hasSummary) {
-      incomplete.push(planId);
-    }
 
     rawPlans.push({
       id: planId,

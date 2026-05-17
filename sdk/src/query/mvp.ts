@@ -30,6 +30,7 @@ import { relative, resolve, sep } from 'node:path';
 import { GSDError, ErrorClassification } from '../errors.js';
 import { loadConfig } from '../config.js';
 import { roadmapGetPhase } from './roadmap.js';
+import { adapterFor } from './helpers.js';
 import type { QueryHandler } from './utils.js';
 
 // ─── phase.mvp-mode ─────────────────────────────────────────────────────────
@@ -71,7 +72,8 @@ export const phaseMvpMode: QueryHandler<MvpModeResult> = async (args, projectDir
   const cliFlagPresent = args.includes('--cli-flag');
 
   // Precedence #2: ROADMAP.md
-  const phaseResult = await roadmapGetPhase([phaseNum], projectDir, workstream);
+  const adapter = await adapterFor(projectDir);
+  const phaseResult = await roadmapGetPhase(adapter, [phaseNum], projectDir, workstream);
   const phaseData = phaseResult.data as { found?: boolean; mode?: string | null };
   const roadmapMode = phaseData.found && typeof phaseData.mode === 'string'
     ? phaseData.mode.trim().toLowerCase()

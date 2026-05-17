@@ -70,7 +70,9 @@ import { agentSkills } from './skills.js';
 import { requirementsMarkComplete, roadmapAnnotateDependencies } from './roadmap.js';
 import { roadmapUpdatePlanProgress } from './roadmap-update-plan-progress.js';
 import { statePlannedPhase } from './state-mutation.js';
-import { verifySchemaDrift, verifyCodebaseDrift } from './verify.js';
+import { verifySchemaDrift } from './verify.js';
+// verifyCodebaseDrift intentionally not imported — see verify.ts:681 comment
+// (ADR docs/adr/3524-cjs-sdk-hard-seam.md §3: CJS-only).
 import {
   todoMatchPhase, statsJson, statsTable, progressBar, progressTable, listTodos, todoComplete,
 } from './progress.js';
@@ -397,7 +399,7 @@ export function createRegistry(opts?: {
     'verify.artifacts': verifyArtifacts,
     'verify.key-links': verifyKeyLinks,
     'verify.schema-drift': verifySchemaDrift,
-    'verify.codebase-drift': verifyCodebaseDrift,
+    // verify.codebase-drift handled directly by CJS router (see verify.ts:681)
     'verify.fat-skills': verifyFatSkills,
   };
 

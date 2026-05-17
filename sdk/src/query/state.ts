@@ -20,6 +20,7 @@
  * ```
  */
 
+import { join } from 'node:path';
 import { extractFrontmatter, stripFrontmatter } from './frontmatter.js';
 import { adapterFor, planningPaths, planningRelativePath, escapeRegex } from './helpers.js';
 import {
@@ -156,6 +157,9 @@ export async function buildStateFrontmatter(
 
   try {
     const phasesRel = planningRelativePath(workstream, 'phases');
+    // scanPhasePlans (still raw-fs internally) needs an absolute disk path.
+    // TODO(adapter-migration): once scanPhasePlans is adapter-aware, drop phasesDir.
+    const phasesDir = planningPaths(projectDir, workstream).phases;
     const isDirInMilestone = await getMilestonePhaseFilter(adapter, workstream);
     const phaseRefs = await adapter.listCollection(phasesRel);
     const phaseDirNames: string[] = [];

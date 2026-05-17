@@ -232,6 +232,12 @@ export const resolveModel: QueryHandler = async (args, projectDir, workstream) =
   const config = await loadConfig(projectDir, workstream);
   const profile = String(config.model_profile || 'balanced').toLowerCase();
 
+  // Detect whether .planning/config.json exists on disk — drives the
+  // "no project config -> return empty model id" CJS-parity branch below.
+  const adapter = await adapterFor(projectDir);
+  const configRelPath = planningRelativePath(workstream, 'config.json');
+  const configExists = await adapter.exists(configRelPath);
+
   // Check per-agent override first
   const overrides = (config as Record<string, unknown>).model_overrides as Record<string, string> | undefined;
   const override = overrides?.[agentType];
