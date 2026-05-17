@@ -3,6 +3,13 @@
 # Usage: ./scripts/install-hooks.sh
 set -e
 
+# npm strips .git before running `prepare` on git-URL installs, so a
+# consumer running `npm i github:user/repo` has no git checkout here. The
+# hooks are only useful in a dev checkout — exit cleanly otherwise.
+if ! git rev-parse --show-toplevel >/dev/null 2>&1; then
+  exit 0
+fi
+
 HOOK_DIR="$(git rev-parse --show-toplevel)/.git/hooks"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
