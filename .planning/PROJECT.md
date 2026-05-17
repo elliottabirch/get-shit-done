@@ -41,7 +41,24 @@ time, before any runtime hook can intercept.
 The conclusion: a clean architectural seam at the storage layer is the
 only durable solution. This fork adds that seam.
 
-## Current Milestone: v1.0 — StorageAdapter interface + MarkdownAdapter
+## Current Milestone: v1.1 — Upstream Drift Reconciliation
+
+**Goal:** Ingest upstream commits accumulated since the v1.0 cutover (`4029d103`) and reconcile any adapter-seam drift they introduce, plus close out the BeadsAdapter `>64KB singleton` defect uncovered during the v1.0 → v1.1 migration.
+
+**Target features:**
+- Upstream delta investigation (commits since `4029d103`, classified by seam-impact)
+- Rebase/merge upstream changes onto `feat/storage-adapter`
+- Reconcile any seam drift introduced by upstream changes
+- BeadsAdapter: handle singleton bodies > 64KB (`DECISIONS.md` class) — defect `get-shit-done-qjk`
+- Conformance suite: large-body test case for singleton round-trip
+
+**Key context:**
+- v1.0 closed at commit `4029d103`; bd store now holds 4/5 top-level singletons (PROJECT.md, ROADMAP.md, STATE.md, REQUIREMENTS.md). DECISIONS.md (87 KB) deferred until the >64KB defect ships.
+- v1.0 phase artifacts archived to `.planning/archived-milestone/v1.0/phases/`.
+- Upstream commits flagged in `CLAUDE.md` worth investigating: `#2898` (durable planning runtime), `#2901` (planning-workspace seam), `#2908` (manifest-backed query routing seam) — all touch areas adjacent to our adapter seam.
+- Branch strategy unchanged: `main` mirrors `upstream/main`; work happens on `feat/storage-adapter`.
+
+## Previous Milestone: v1.0 — StorageAdapter interface + MarkdownAdapter
 
 **Status:** ✓ **v1.0 SHIPPED** (2026-05-14). All 8 phases complete on `feat/storage-adapter`; 51/51 plans complete. Distribution decision: maintain long-lived fork (ADR `D-2026-05-13-DIST-05`, option-b — chosen because the fork's StorageAdapter design is materially larger in scope than upstream's accepted seam PRs #2898/#2901/#2908 and there is no external-adopter pressure forcing an upstream merge today). Reopens annually as a review item. Phase 7 conformance-test-suite shipped 2026-05-12 with 56-entry manifest + paired harness; Phase 8 shipped DIST-01 adapter factory + DIST-02 migration docs + DIST-03 rebase playbook + DIST-04 strict-superset parity CI workflow + DIST-05 ADR. One outstanding HUMAN-UAT item: first-green parity-CI run on a real PR (DIST-04 follow-up — workflow file + plumbing shipped; data-shape fixtures need fixing).
 
@@ -169,14 +186,20 @@ This fork is bootstrapped from a substantial body of work in the sibling
 
 This document evolves at phase transitions and milestone boundaries.
 
-**After each phase:** Update phase-status table; log decisions in
-`.planning/DECISIONS.md`; add risks to the synthesis risk register if
-new ones emerge.
+**After each phase transition** (via `/gsd-transition`):
+1. Requirements invalidated? → Move to Out of Scope with reason
+2. Requirements validated? → Move to Validated with phase reference
+3. New requirements emerged? → Add to Active
+4. Decisions to log? → Add to Key Decisions (`.planning/DECISIONS.md`)
+5. "What This Is" still accurate? → Update if drifted
 
-**After v1.0 ships:** review for upstream PR submission. If accepted,
-this fork archives.
+**After each milestone** (via `/gsd-complete-milestone`):
+1. Full review of all sections
+2. Core Value check — still the right priority?
+3. Audit Out of Scope — reasons still valid?
+4. Update Context with current state
 
 ---
 
-*Last updated: 2026-05-14 — **v1.0 SHIPPED.** All 8 phases complete; 51/51 plans complete. Phase 8 closed with ADR D-2026-05-13-DIST-05 (option-b: maintain long-lived fork). One HUMAN-UAT item outstanding (DIST-04 first-green parity-CI run on a real PR; workflow shipped, fixtures need fixing). Sibling `gsd-beads@feat/phase-6-reset` graduation to `main` is post-v1.0 work.*
+*Last updated: 2026-05-16 — **v1.1 STARTED: Upstream Drift Reconciliation.** v1.0 phase artifacts archived to `.planning/archived-milestone/v1.0/phases/`. 4/5 top-level singletons migrated into bd; DECISIONS.md migration deferred until the >64KB singleton defect (`get-shit-done-qjk`) ships in this milestone.*
 *Decision log: `.planning/DECISIONS.md`. Investigation input: `.planning/research/fork-investigation/SYNTHESIS.md`.*
