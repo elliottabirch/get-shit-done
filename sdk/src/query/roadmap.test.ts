@@ -1,3 +1,4 @@
+// leak-grep-allow file — test fixtures legitimately write to .planning/ in tmpdir mocks
 /**
  * Unit tests for roadmap query handlers.
  *
@@ -449,7 +450,7 @@ describe('extractCurrentMilestone', () => {
     await writeFile(join(tmpDir, '.planning', 'STATE.md'), state);
     await writeFile(join(tmpDir, '.planning', 'ROADMAP.md'), roadmapWithActiveDetails);
 
-    const result = await extractCurrentMilestone(roadmapWithActiveDetails, tmpDir);
+    const result = await extractCurrentMilestone(adapter, roadmapWithActiveDetails);
 
     // Active milestone's phases must survive
     expect(result).toContain('### Phase 1: Library');
@@ -484,7 +485,7 @@ describe('extractCurrentMilestone', () => {
     await writeFile(join(tmpDir, '.planning', 'STATE.md'), stateQuoted);
     await writeFile(join(tmpDir, '.planning', 'ROADMAP.md'), roadmap);
 
-    const result = await extractCurrentMilestone(roadmap, tmpDir);
+    const result = await extractCurrentMilestone(adapter, roadmap);
 
     expect(result).toContain('### Phase 3: Polish');
     expect(result).toMatch(/^##\s+v0\.9 Local-First Bus/m);
@@ -510,7 +511,7 @@ describe('extractCurrentMilestone', () => {
     await writeFile(join(tmpDir, '.planning', 'STATE.md'), state);
     await writeFile(join(tmpDir, '.planning', 'ROADMAP.md'), roadmapWithDetailsOpen);
 
-    const result = await extractCurrentMilestone(roadmapWithDetailsOpen, tmpDir);
+    const result = await extractCurrentMilestone(adapter, roadmapWithDetailsOpen);
 
     expect(result).toContain('### Phase 3: Polish');
     expect(result).toContain('Add polish.');
@@ -534,7 +535,7 @@ describe('extractCurrentMilestone', () => {
     await writeFile(join(tmpDir, '.planning', 'STATE.md'), state);
     await writeFile(join(tmpDir, '.planning', 'ROADMAP.md'), roadmap);
 
-    const result = await extractCurrentMilestone(roadmap, tmpDir);
+    const result = await extractCurrentMilestone(adapter, roadmap);
 
     expect(result).toContain('### Phase 1: Right Phase');
     expect(result).toContain('This is the active milestone');
@@ -570,7 +571,7 @@ describe('extractCurrentMilestone', () => {
     await writeFile(join(tmpDir, '.planning', 'STATE.md'), state);
     await writeFile(join(tmpDir, '.planning', 'ROADMAP.md'), roadmap);
 
-    const result = await extractCurrentMilestone(roadmap, tmpDir);
+    const result = await extractCurrentMilestone(adapter, roadmap);
 
     expect(result).toContain('### Phase 1: Right Phase');
     expect(result).toContain('This is the active milestone');
@@ -605,7 +606,7 @@ Detail
     await writeFile(join(tmpDir, '.planning', 'STATE.md'), state);
     await writeFile(join(tmpDir, '.planning', 'ROADMAP.md'), roadmap);
 
-    const result = await extractCurrentMilestone(roadmap, tmpDir);
+    const result = await extractCurrentMilestone(adapter, roadmap);
 
     // The critical contract: must NOT return a synthesized `## v0.9` heading
     // anchored to truncated body. The truncation case (without the nested-
@@ -635,7 +636,7 @@ Detail
     await writeFile(join(tmpDir, '.planning', 'STATE.md'), state);
     await writeFile(join(tmpDir, '.planning', 'ROADMAP.md'), roadmap);
 
-    const result = await extractCurrentMilestone(roadmap, tmpDir);
+    const result = await extractCurrentMilestone(adapter, roadmap);
 
     // Must not synthesize a phantom heading
     expect(result).not.toMatch(/^##\s+v0\.9/m);
@@ -660,7 +661,7 @@ Detail
     await writeFile(join(tmpDir, '.planning', 'STATE.md'), state);
     await writeFile(join(tmpDir, '.planning', 'ROADMAP.md'), roadmap);
 
-    const result = await extractCurrentMilestone(roadmap, tmpDir);
+    const result = await extractCurrentMilestone(adapter, roadmap);
 
     // Synthesized heading must be `## v0.9 …`, not `## # v0.9 …`
     expect(result).toMatch(/^##\s+v0\.9 Hash-Prefixed/m);
@@ -686,7 +687,7 @@ Detail
     await writeFile(join(tmpDir, '.planning', 'STATE.md'), state);
     await writeFile(join(tmpDir, '.planning', 'ROADMAP.md'), roadmap);
 
-    const result = await extractCurrentMilestone(roadmap, tmpDir);
+    const result = await extractCurrentMilestone(adapter, roadmap);
 
     expect(result).toContain('### Phase 3: Polish');
     expect(result).toMatch(/^##\s+v0\.9 Local-First Bus\s+\(active\)/m);
@@ -713,7 +714,7 @@ Detail
     await writeFile(join(tmpDir, '.planning', 'STATE.md'), stateSingle);
     await writeFile(join(tmpDir, '.planning', 'ROADMAP.md'), roadmap);
 
-    const result = await extractCurrentMilestone(roadmap, tmpDir);
+    const result = await extractCurrentMilestone(adapter, roadmap);
 
     expect(result).toContain('### Phase 3: Polish');
     expect(result).toMatch(/^##\s+v0\.9 Local-First Bus/m);
@@ -744,7 +745,7 @@ Detail
     await writeFile(join(tmpDir, '.planning', 'STATE.md'), state);
     await writeFile(join(tmpDir, '.planning', 'ROADMAP.md'), roadmap);
 
-    const result = await extractCurrentMilestone(roadmap, tmpDir);
+    const result = await extractCurrentMilestone(adapter, roadmap);
 
     // Heading slice is what got returned — original `### v0.9` heading
     // present, Phase 1 from the heading slice present.
@@ -789,7 +790,7 @@ Detail
     await writeFile(join(tmpDir, '.planning', 'STATE.md'), state);
     await writeFile(join(tmpDir, '.planning', 'ROADMAP.md'), roadmap);
 
-    const result = await extractCurrentMilestone(roadmap, tmpDir);
+    const result = await extractCurrentMilestone(adapter, roadmap);
 
     expect(result).toContain('### Phase 1: First-block Phase');
     expect(result).not.toContain('### Phase 99: Second-block Phase');
@@ -863,7 +864,7 @@ Candidates pending milestone selection.
     await writeFile(join(tmpDir, '.planning', 'STATE.md'), state);
     await writeFile(join(tmpDir, '.planning', 'ROADMAP.md'), roadmap);
 
-    const slice = await extractCurrentMilestone(roadmap, tmpDir);
+    const slice = await extractCurrentMilestone(adapter, roadmap);
 
     // The generic Phase Details heading and all four detail sections must
     // survive — they belong to the active v2.0 milestone even though they
@@ -876,7 +877,7 @@ Candidates pending milestone selection.
 
     // And roadmapGetPhase (which calls extractCurrentMilestone internally)
     // must locate Phase 4's detail section.
-    const result = await roadmapGetPhase(['4'], tmpDir);
+    const result = await roadmapGetPhase(adapter, ['4'], tmpDir);
     const data = result.data as Record<string, unknown>;
     expect(data.found).toBe(true);
     expect(data.phase_number).toBe('4');
@@ -956,7 +957,7 @@ describe('roadmapGetPhase', () => {
     await writeFile(join(tmpDir, '.planning', 'STATE.md'), state);
     await writeFile(join(tmpDir, '.planning', 'ROADMAP.md'), roadmap);
 
-    const result = await roadmapGetPhase(['3'], tmpDir);
+    const result = await roadmapGetPhase(adapter, ['3'], tmpDir);
     const data = result.data as Record<string, unknown>;
     expect(data.found).toBe(true);
     expect(data.phase_number).toBe('3');
@@ -1073,7 +1074,7 @@ describe('roadmapAnalyze', () => {
     await writeFile(join(tmpDir, '.planning', 'STATE.md'), state);
     await writeFile(join(tmpDir, '.planning', 'ROADMAP.md'), roadmap);
 
-    const result = await roadmapAnalyze([], tmpDir);
+    const result = await roadmapAnalyze(adapter, [], tmpDir);
     const data = result.data as Record<string, unknown>;
     // Defensive guard: fail with a clear message if roadmapAnalyze didn't
     // populate data.milestones, rather than throwing TypeError on `.some()`.

@@ -1,3 +1,4 @@
+// leak-grep-allow file — test fixtures legitimately write to .planning/ in tmpdir mocks
 /**
  * Tests for the three MVP-mode query handlers in `mvp.ts`:
  *   - `phase.mvp-mode` — precedence chain resolver
@@ -48,7 +49,7 @@ describe('roadmap.get-phase: mode field (regression)', () => {
     const dir = tmpProject();
     try {
       writeRoadmap(dir, `# Roadmap\n\n## Phase 1: Walking Skeleton\n\n**Mode:** mvp\n**Goal:** Ship the walking skeleton.\n\n**Success Criteria**:\n1. Stack works end-to-end\n`);
-      const result = await roadmapGetPhase(['1'], dir);
+      const result = await roadmapGetPhase(adapter, ['1'], dir);
       const data = result.data as { found: boolean; mode?: string | null };
       expect(data.found).toBe(true);
       expect(data.mode).toBe('mvp');
@@ -61,7 +62,7 @@ describe('roadmap.get-phase: mode field (regression)', () => {
     const dir = tmpProject();
     try {
       writeRoadmap(dir, `# Roadmap\n\n## Phase 2: Standard\n\n**Goal:** Generic phase.\n`);
-      const result = await roadmapGetPhase(['2'], dir);
+      const result = await roadmapGetPhase(adapter, ['2'], dir);
       const data = result.data as { found: boolean; mode?: string | null };
       expect(data.found).toBe(true);
       expect(data.mode).toBeNull();
@@ -74,7 +75,7 @@ describe('roadmap.get-phase: mode field (regression)', () => {
     const dir = tmpProject();
     try {
       writeRoadmap(dir, `# Roadmap\n\n## Phase 3: Future\n\n**Mode:** Spike\n**Goal:** Try a spike.\n`);
-      const result = await roadmapGetPhase(['3'], dir);
+      const result = await roadmapGetPhase(adapter, ['3'], dir);
       const data = result.data as { found: boolean; mode?: string | null };
       expect(data.mode).toBe('spike');
     } finally {

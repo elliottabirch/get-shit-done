@@ -1,3 +1,4 @@
+// leak-grep-allow file — test fixtures legitimately write to .planning/ in tmpdir mocks
 /**
  * Unit tests for init composition handlers.
  *
@@ -329,14 +330,14 @@ describe('initExecutePhase', () => {
   });
 
   it('accepts --phase flag form for existing phase (#3387)', async () => {
-    const result = await initExecutePhase(['--phase', '9'], tmpDir);
+    const result = await initExecutePhase(adapter, ['--phase', '9'], tmpDir);
     const data = result.data as Record<string, unknown>;
     expect(data.phase_found).toBe(true);
     expect(data.phase_number).toBe('09');
   });
 
   it('accepts --phase=value flag form for existing phase (#3387)', async () => {
-    const result = await initExecutePhase(['--phase=9'], tmpDir);
+    const result = await initExecutePhase(adapter, ['--phase=9'], tmpDir);
     const data = result.data as Record<string, unknown>;
     expect(data.phase_found).toBe(true);
     expect(data.phase_number).toBe('09');
@@ -401,7 +402,7 @@ describe('initExecutePhase', () => {
         '# Plan\n',
       );
 
-      const result = await initExecutePhase(['2'], tmp);
+      const result = await initExecutePhase(adapter, ['2'], tmp);
       const data = result.data as Record<string, unknown>;
       expect(data.phase_found).toBe(true);
       expect(data.phase_dir).toBe('.planning/milestones/v2.0-phases/02-auth');
@@ -427,14 +428,14 @@ describe('initPlanPhase', () => {
   });
 
   it('accepts --phase flag form for existing phase (#3387)', async () => {
-    const result = await initPlanPhase(['--phase', '9'], tmpDir);
+    const result = await initPlanPhase(adapter, ['--phase', '9'], tmpDir);
     const data = result.data as Record<string, unknown>;
     expect(data.phase_found).toBe(true);
     expect(data.phase_number).toBe('09');
   });
 
   it('accepts --phase=value flag form for existing phase (#3387)', async () => {
-    const result = await initPlanPhase(['--phase=9'], tmpDir);
+    const result = await initPlanPhase(adapter, ['--phase=9'], tmpDir);
     const data = result.data as Record<string, unknown>;
     expect(data.phase_found).toBe(true);
     expect(data.phase_number).toBe('09');
@@ -459,7 +460,7 @@ describe('initPlanPhase', () => {
         ['---', 'phase: 09', 'status: passed', 'score: 100', 'verified: true', '---', '# Verification'].join('\n'),
       );
 
-      const result = await initPlanPhase(['9'], tmpDir);
+      const result = await initPlanPhase(adapter, ['9'], tmpDir);
       const data = result.data as Record<string, unknown>;
       expect(data.phase_status).toBe('Complete');
     });
@@ -472,13 +473,13 @@ describe('initPlanPhase', () => {
         ['---', 'phase: 10-read-only-queries', 'plan: 01', '---', '<objective>x</objective>'].join('\n'),
       );
 
-      const result = await initPlanPhase(['10'], tmpDir);
+      const result = await initPlanPhase(adapter, ['10'], tmpDir);
       const data = result.data as Record<string, unknown>;
       expect(data.phase_status).toBe('Planned');
     });
 
     it('reports "Pending" when phase has no plans yet', async () => {
-      const result = await initPlanPhase(['10'], tmpDir);
+      const result = await initPlanPhase(adapter, ['10'], tmpDir);
       const data = result.data as Record<string, unknown>;
       expect(data.phase_status).toBe('Pending');
     });
@@ -488,7 +489,7 @@ describe('initPlanPhase', () => {
       // not closed. This is the regression hot zone: pre-fix, init.plan-phase
       // gave no signal here, so the workflow couldn't distinguish this from
       // an already-closed phase either.
-      const result = await initPlanPhase(['9'], tmpDir);
+      const result = await initPlanPhase(adapter, ['9'], tmpDir);
       const data = result.data as Record<string, unknown>;
       expect(data.phase_status).toBe('Executed');
     });
@@ -577,14 +578,14 @@ describe('initVerifyWork', () => {
   });
 
   it('accepts --phase flag form for existing phase (#3387)', async () => {
-    const result = await initVerifyWork(['--phase', '9'], tmpDir);
+    const result = await initVerifyWork(adapter, ['--phase', '9'], tmpDir);
     const data = result.data as Record<string, unknown>;
     expect(data.phase_found).toBe(true);
     expect(data.phase_number).toBe('09');
   });
 
   it('accepts --phase=value flag form for existing phase (#3387)', async () => {
-    const result = await initVerifyWork(['--phase=9'], tmpDir);
+    const result = await initVerifyWork(adapter, ['--phase=9'], tmpDir);
     const data = result.data as Record<string, unknown>;
     expect(data.phase_found).toBe(true);
     expect(data.phase_number).toBe('09');
@@ -604,7 +605,7 @@ describe('initVerifyWork', () => {
       '',
     ].join('\n'));
 
-    const result = await initVerifyWork(['32'], tmpDir, 'delivery');
+    const result = await initVerifyWork(adapter, ['32'], tmpDir, 'delivery');
     const data = result.data as Record<string, unknown>;
 
     expect(data.phase_found).toBe(true);
@@ -634,14 +635,14 @@ describe('initPhaseOp', () => {
   });
 
   it('accepts --phase flag form for existing phase (#3387)', async () => {
-    const result = await initPhaseOp(['--phase', '9'], tmpDir);
+    const result = await initPhaseOp(adapter, ['--phase', '9'], tmpDir);
     const data = result.data as Record<string, unknown>;
     expect(data.phase_found).toBe(true);
     expect(data.phase_number).toBe('09');
   });
 
   it('accepts --phase=value flag form for existing phase (#3387)', async () => {
-    const result = await initPhaseOp(['--phase=9'], tmpDir);
+    const result = await initPhaseOp(adapter, ['--phase=9'], tmpDir);
     const data = result.data as Record<string, unknown>;
     expect(data.phase_found).toBe(true);
     expect(data.phase_number).toBe('09');

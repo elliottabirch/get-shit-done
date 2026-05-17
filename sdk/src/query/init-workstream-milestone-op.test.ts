@@ -1,3 +1,4 @@
+// leak-grep-allow file — test fixtures legitimately write to .planning/ in tmpdir mocks
 /**
  * Tests for workstream resolution in initMilestoneOp and roadmapAnalyze.
  *
@@ -14,6 +15,7 @@ import { tmpdir } from 'node:os';
 import { initMilestoneOp } from './init.js';
 import { roadmapAnalyze } from './roadmap.js';
 import { resolveQueryRuntimeContext } from './query-runtime-context.js';
+import { MarkdownAdapter } from '../../../adapters/markdown/index.js';
 
 // ─── Shared fixture ────────────────────────────────────────────────────────
 
@@ -89,7 +91,7 @@ describe('initMilestoneOp workstream resolution (#3196)', () => {
   });
 
   it('reads phase_count from workstream ROADMAP when --ws is passed', async () => {
-    const result = await initMilestoneOp([], tmpDir, 'test-ws');
+    const result = await initMilestoneOp(new MarkdownAdapter(tmpDir), [], tmpDir, 'test-ws');
     const data = result.data as Record<string, unknown>;
 
     expect(data.phase_count).toBe(2);
@@ -101,7 +103,7 @@ describe('initMilestoneOp workstream resolution (#3196)', () => {
   it('returns phase_count 0 when reading root .planning/ (no workstream) that has no ROADMAP', async () => {
     // Root .planning has no ROADMAP — without the fix this was where milestone-op
     // always looked even when a workstream was active.
-    const result = await initMilestoneOp([], tmpDir, undefined);
+    const result = await initMilestoneOp(new MarkdownAdapter(tmpDir), [], tmpDir, undefined);
     const data = result.data as Record<string, unknown>;
 
     // Root has no ROADMAP so phase_count falls back to on-disk dirs (0)
@@ -120,7 +122,7 @@ describe('initMilestoneOp workstream resolution (#3196)', () => {
       const ctx = resolveQueryRuntimeContext({ projectDir: tmpDir });
       expect(ctx.ws).toBe('test-ws');
 
-      const result = await initMilestoneOp([], ctx.projectDir, ctx.ws);
+      const result = await initMilestoneOp(new MarkdownAdapter(ctx.projectDir), [], ctx.projectDir, ctx.ws);
       const data = result.data as Record<string, unknown>;
       expect(data.phase_count).toBe(2);
       expect(data.roadmap_exists).toBe(true);
@@ -142,7 +144,7 @@ describe('initMilestoneOp workstream resolution (#3196)', () => {
       const ctx = resolveQueryRuntimeContext({ projectDir: tmpDir, ws: 'test-ws' });
       expect(ctx.ws).toBe('test-ws');
 
-      const result = await initMilestoneOp([], ctx.projectDir, ctx.ws);
+      const result = await initMilestoneOp(new MarkdownAdapter(ctx.projectDir), [], ctx.projectDir, ctx.ws);
       const data = result.data as Record<string, unknown>;
       expect(data.phase_count).toBe(2);
     } finally {
@@ -197,7 +199,7 @@ describe('roadmapAnalyze workstream resolution (#3196)', () => {
   });
 
   it('analyzes workstream ROADMAP when workstream is passed', async () => {
-    const result = await roadmapAnalyze([], tmpDir, 'test-ws');
+    const result = await roadmapAnalyze(new MarkdownAdapter(tmpDir), [], tmpDir, 'test-ws');
     const data = result.data as Record<string, unknown>;
     const phases = data.phases as Array<Record<string, unknown>>;
 
@@ -207,7 +209,7 @@ describe('roadmapAnalyze workstream resolution (#3196)', () => {
   });
 
   it('returns error when no ROADMAP in root .planning (no workstream)', async () => {
-    const result = await roadmapAnalyze([], tmpDir, undefined);
+    const result = await roadmapAnalyze(new MarkdownAdapter(tmpDir), [], tmpDir, undefined);
     const data = result.data as Record<string, unknown>;
 
     // Root has no ROADMAP.md → error path
@@ -224,7 +226,7 @@ describe('roadmapAnalyze workstream resolution (#3196)', () => {
       const ctx = resolveQueryRuntimeContext({ projectDir: tmpDir });
       expect(ctx.ws).toBe('test-ws');
 
-      const result = await roadmapAnalyze([], ctx.projectDir, ctx.ws);
+      const result = await roadmapAnalyze(new MarkdownAdapter(ctx.projectDir), [], ctx.projectDir, ctx.ws);
       const data = result.data as Record<string, unknown>;
       expect(data.phase_count).toBe(2);
     } finally {

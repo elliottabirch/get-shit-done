@@ -1,3 +1,4 @@
+// leak-grep-allow file — test fixtures legitimately write to .planning/ in tmpdir mocks
 /**
  * Unit tests for complex init composition handlers.
  *
@@ -152,7 +153,7 @@ describe('initNewProject', () => {
       workflow: { research: true, plan_check: true, verifier: true, nyquist_validation: true },
     }));
 
-    const result = await initNewProject([], tmpDir);
+    const result = await initNewProject(adapter, [], tmpDir);
     const data = result.data as Record<string, unknown>;
 
     expect(data.agents_installed).toBe(false);
@@ -238,7 +239,7 @@ describe('initProgress', () => {
       workflow: { research: true, plan_check: true, verifier: true, nyquist_validation: true },
     }));
 
-    const result = await initProgress([], tmpDir);
+    const result = await initProgress(adapter, [], tmpDir);
     const data = result.data as Record<string, unknown>;
     expect(data.planner_model).toBe('gpt-5.5');
     expect(data.executor_model).toBe('gpt-5.3-codex');
@@ -341,7 +342,8 @@ describe('initProgress', () => {
         '',
       ].join('\n'));
 
-      const result = await initProgress([], tmp);
+      const tmpAdapter = new MarkdownAdapter(tmp);
+      const result = await initProgress(tmpAdapter, [], tmp);
       const data = result.data as Record<string, unknown>;
       const phases = data.phases as Record<string, unknown>[];
       const phase412 = phases.find(p => p.number === '4.12');

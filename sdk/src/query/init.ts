@@ -62,6 +62,31 @@ function pathExists(base: string, relPath: string): boolean {
 }
 
 /**
+ * Extract phase identifier from args. Supports three forms (#3387):
+ *   - `--phase=9` (equals)
+ *   - `--phase 9` (space-separated)
+ *   - `9` (positional, first arg)
+ *
+ * Returns undefined if no phase token is parseable.
+ */
+function extractPhaseArg(args: string[]): string | undefined {
+  const equalsArg = args.find((arg) => arg.startsWith('--phase='));
+  if (equalsArg) {
+    const value = equalsArg.slice('--phase='.length).trim();
+    return value || undefined;
+  }
+
+  const flagIndex = args.indexOf('--phase');
+  if (flagIndex !== -1) {
+    const value = args[flagIndex + 1];
+    return value && !value.startsWith('--') ? value : undefined;
+  }
+
+  const first = args[0];
+  return first && !first.startsWith('--') ? first : undefined;
+}
+
+/**
  * Get the latest completed milestone from MILESTONES.md.
  * Port of getLatestCompletedMilestone from init.cjs lines 10-25.
  */
@@ -278,7 +303,7 @@ export const initExecutePhase = async (
   projectDir: string,
   workstream?: string,
 ): Promise<QueryResult> => {
-  const phase = args[0];
+  const phase = extractPhaseArg(args);
   if (!phase) {
     return { data: { error: 'phase required for init execute-phase' } };
   }
@@ -362,7 +387,7 @@ export const initPlanPhase = async (
   projectDir: string,
   workstream?: string,
 ): Promise<QueryResult> => {
-  const phase = args[0];
+  const phase = extractPhaseArg(args);
   if (!phase) {
     return { data: { error: 'phase required for init plan-phase' } };
   }
@@ -607,7 +632,7 @@ export const initVerifyWork = async (
   projectDir: string,
   _workstream?: string,
 ): Promise<QueryResult> => {
-  const phase = args[0];
+  const phase = extractPhaseArg(args);
   if (!phase) {
     return { data: { error: 'phase required for init verify-work' } };
   }
@@ -646,7 +671,7 @@ export const initPhaseOp = async (
   projectDir: string,
   workstream?: string,
 ): Promise<QueryResult> => {
-  const phase = args[0];
+  const phase = extractPhaseArg(args);
   if (!phase) {
     return { data: { error: 'phase required for init phase-op' } };
   }
@@ -825,10 +850,10 @@ export const initMilestoneOp = async (
   adapter: StorageAdapter,
   _args: string[],
   projectDir: string,
-  _workstream?: string,
+  workstream?: string,
 ): Promise<QueryResult> => {
-  const config = await loadConfig(projectDir);
-  const milestone = await getMilestoneInfo(adapter);
+  const config = await loadConfig(projectDir, workstream);
+  const milestone = await getMilestoneInfo(adapter, workstream);
 
   let phaseCount = 0;
   let completedPhases = 0;
@@ -841,9 +866,9 @@ export const initMilestoneOp = async (
   // gets summaries — even though the roadmap has phases still to do.
   let roadmapPhaseNumbers: string[] = [];
   try {
-    const roadmapRaw = await adapter.getRecord('ROADMAP.md');
+    const roadmapRaw = await adapter.getRecord(planningRelativePath(workstream, 'ROADMAP.md'));
     if (roadmapRaw) {
-      const currentSection = await extractCurrentMilestone(adapter, roadmapRaw);
+      const currentSection = await extractCurrentMilestone(adapter, roadmapRaw, workstream);
       roadmapPhaseNumbers = extractPhasesFromSection(currentSection).map(p => p.number);
     }
   } catch { /* intentionally empty */ }
@@ -861,9 +886,10 @@ export const initMilestoneOp = async (
     const m = tok.match(/^(\d+)([A-Z]?(?:\.\d+)*)$/);
     return m ? String(parseInt(m[1], 10)) + m[2] : tok;
   };
+  const phasesRel = planningRelativePath(workstream, 'phases');
   const diskPhaseDirs: Map<string, string> = new Map();
   try {
-    const phaseRefs = await adapter.listCollection('phases');
+    const phaseRefs = await adapter.listCollection(phasesRel);
     for (const ref of phaseRefs) {
       const st = await adapter.stat(ref.path);
       if (st?.kind !== 'dir') continue;
@@ -879,7 +905,7 @@ export const initMilestoneOp = async (
       const dirName = diskPhaseDirs.get(canonicalizePhase(num));
       if (!dirName) continue;
       try {
-        const phaseFileRefs = await adapter.listCollection(`phases/${dirName}`);
+        const phaseFileRefs = await adapter.listCollection(`${phasesRel}/${dirName}`);
         const hasSummary = phaseFileRefs.some(r => r.name.endsWith('-SUMMARY.md') || r.name === 'SUMMARY.md');
         if (hasSummary) completedPhases++;
       } catch { /* intentionally empty */ }
@@ -888,13 +914,13 @@ export const initMilestoneOp = async (
     // Fallback: no parseable ROADMAP (e.g. brand-new project). Preserve the
     // legacy on-disk-count behavior so existing no-roadmap tests still pass.
     try {
-      const phaseRefs = await adapter.listCollection('phases');
+      const phaseRefs = await adapter.listCollection(phasesRel);
       for (const ref of phaseRefs) {
         const st = await adapter.stat(ref.path);
         if (st?.kind !== 'dir') continue;
         phaseCount++;
         try {
-          const phaseFileRefs = await adapter.listCollection(`phases/${ref.name}`);
+          const phaseFileRefs = await adapter.listCollection(`${phasesRel}/${ref.name}`);
           const hasSummary = phaseFileRefs.some(r => r.name.endsWith('-SUMMARY.md') || r.name === 'SUMMARY.md');
           if (hasSummary) completedPhases++;
         } catch { /* intentionally empty */ }
@@ -904,7 +930,7 @@ export const initMilestoneOp = async (
 
   let archivedMilestones: string[] = [];
   try {
-    const archiveRefs = await adapter.listCollection('archive');
+    const archiveRefs = await adapter.listCollection(planningRelativePath(workstream, 'archive'));
     for (const ref of archiveRefs) {
       const st = await adapter.stat(ref.path);
       if (st?.kind === 'dir') archivedMilestones.push(ref.name);
@@ -921,11 +947,11 @@ export const initMilestoneOp = async (
     all_phases_complete: phaseCount > 0 && phaseCount === completedPhases,
     archived_milestones: archivedMilestones,
     archive_count: archivedMilestones.length,
-    project_exists: await adapter.exists('PROJECT.md'),
-    roadmap_exists: await adapter.exists('ROADMAP.md'),
-    state_exists: await adapter.exists('STATE.md'),
-    archive_exists: await adapter.exists('archive'),
-    phases_dir_exists: await adapter.exists('phases'),
+    project_exists: await adapter.exists(planningRelativePath(workstream, 'PROJECT.md')),
+    roadmap_exists: await adapter.exists(planningRelativePath(workstream, 'ROADMAP.md')),
+    state_exists: await adapter.exists(planningRelativePath(workstream, 'STATE.md')),
+    archive_exists: await adapter.exists(planningRelativePath(workstream, 'archive')),
+    phases_dir_exists: await adapter.exists(phasesRel),
   };
 
   return { data: await withProjectRoot(adapter, projectDir, result, config as Record<string, unknown>) };

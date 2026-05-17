@@ -24,7 +24,16 @@ import { homedir } from 'node:os';
 
 import { loadConfig } from '../config.js';
 import { resolveModel } from './config-query.js';
-import { planningPaths, normalizePhaseName, phaseTokenMatches, toPosixPath, planningRelativePath } from './helpers.js';
+import { agentSkills } from './skills.js';
+import {
+  planningPaths,
+  normalizePhaseName,
+  phaseTokenMatches,
+  toPosixPath,
+  planningRelativePath,
+  detectRuntime,
+  resolveAgentsDir,
+} from './helpers.js';
 import {
   getMilestoneInfo,
   extractCurrentMilestone,
@@ -54,6 +63,37 @@ function pathExists(base: string, relPath: string): boolean {
 }
 
 /**
+ * Agents required for the new-project workflow. initNewProject reports
+ * whether each is installed in the runtime's agents/ directory and whether
+ * its agent_skills payload resolves — separated so workflows can distinguish
+ * "agent not registered" from "skill payload empty" (#3388).
+ */
+const NEW_PROJECT_REQUIRED_AGENTS = [
+  'gsd-project-researcher',
+  'gsd-research-synthesizer',
+  'gsd-roadmapper',
+];
+
+function hasAgentDefinition(agentsDir: string, agent: string): boolean {
+  return existsSync(join(agentsDir, `${agent}.md`)) ||
+    existsSync(join(agentsDir, `${agent}.agent.md`));
+}
+
+async function resolveAgentSkillPayloadAgents(
+  requiredAgents: string[],
+  projectDir: string,
+): Promise<string[]> {
+  const available: string[] = [];
+  for (const agent of requiredAgents) {
+    const result = await agentSkills([agent], projectDir);
+    if (typeof result.data === 'string' && result.data.trim() !== '') {
+      available.push(agent);
+    }
+  }
+  return available;
+}
+
+/**
  * Extract ROADMAP checkbox states: `- [x] Phase N` → true, `- [ ] Phase N` → false.
  * Shared by initProgress and initManager so both treat ROADMAP as the
  * fallback/override source of truth for completion.
@@ -66,6 +106,32 @@ function extractCheckboxStates(content: string): Map<string, boolean> {
     states.set(m[2], m[1].toLowerCase() === 'x');
   }
   return states;
+}
+
+/**
+ * Extract terminal phase markers from ROADMAP phase headings, e.g.
+ * `(COMPLETE)`, `(SHIPPED ...)`, `(DEFERRED)`, `(SUPERSEDED ...)`,
+ * `(MERGED INTO ...)`, `(FOLDED INTO ...)`. Phases with these labels in
+ * their heading should be treated as complete by initProgress when
+ * deriving status — without this, a phase shipped/deferred at the
+ * heading level (no `[x]` checkbox) is misclassified `not_started` and
+ * surfaces in `next_phase`. (#3472)
+ *
+ * Each match adds both the original token and the leading-zero-stripped
+ * variant so canonical/padded forms both resolve.
+ */
+function extractTerminalStatusLabels(content: string): Set<string> {
+  const terminal = new Set<string>();
+  const headingPattern = /#{2,4}\s*Phase\s+(\d+[A-Z]?(?:\.\d+)*)\s*:\s*([^\n]+)/gi;
+  const terminalRe = /(?:\(|\*\*)\s*(SHIPPED|COMPLETE|DEFERRED|SUPERSEDED|MERGED\s+INTO|FOLDED\s+INTO)\b/i;
+  let m: RegExpExecArray | null;
+  while ((m = headingPattern.exec(content)) !== null) {
+    if (terminalRe.test(m[2])) {
+      terminal.add(m[1]);
+      terminal.add(m[1].replace(/^0+/, '') || '0');
+    }
+  }
+  return terminal;
 }
 
 /**
@@ -198,6 +264,18 @@ export const initNewProject = async (
     getModelAlias('gsd-roadmapper', projectDir),
   ]);
 
+  // #3388: surface required-agent registration AND skill payload availability
+  // separately so workflows can distinguish missing agents from empty skills.
+  const runtime = detectRuntime(config as { runtime?: unknown });
+  const agentsDir = resolveAgentsDir(runtime);
+  const missingRequiredAgents = NEW_PROJECT_REQUIRED_AGENTS.filter(
+    agent => !hasAgentDefinition(agentsDir, agent),
+  );
+  const agentSkillPayloadAgents = await resolveAgentSkillPayloadAgents(
+    NEW_PROJECT_REQUIRED_AGENTS,
+    projectDir,
+  );
+
   const result: Record<string, unknown> = {
     researcher_model: researcherModel,
     synthesizer_model: synthesizerModel,
@@ -222,6 +300,13 @@ export const initNewProject = async (
     exa_search_available: hasExaSearch,
 
     project_path: '.planning/PROJECT.md',
+    agent_runtime: runtime,
+    agents_dir: agentsDir,
+    required_agents: NEW_PROJECT_REQUIRED_AGENTS,
+    required_agents_installed: missingRequiredAgents.length === 0,
+    missing_required_agents: missingRequiredAgents,
+    agent_skill_payloads_available: agentSkillPayloadAgents.length === NEW_PROJECT_REQUIRED_AGENTS.length,
+    agent_skill_payload_agents: agentSkillPayloadAgents,
   };
 
   return { data: await withProjectRoot(adapter, projectDir, result, config as Record<string, unknown>) };
@@ -254,6 +339,7 @@ export const initProgress = async (
   const roadmapPhaseNames = new Map<string, string>();
   const seenPhaseNums = new Set<string>();
   let checkboxStates = new Map<string, boolean>();
+  let terminalStatusLabels = new Set<string>();
 
   try {
     const rawRoadmap = await adapter.getRecord(planningRelativePath(workstream, 'ROADMAP.md'));
@@ -267,6 +353,7 @@ export const initProgress = async (
         roadmapPhaseNames.set(pNum, pName);
       }
       checkboxStates = extractCheckboxStates(roadmapContent);
+      terminalStatusLabels = extractTerminalStatusLabels(roadmapContent);
     }
   } catch { /* intentionally empty */ }
 
@@ -307,10 +394,14 @@ export const initProgress = async (
       // #2674: align with initManager — a ROADMAP `- [x] Phase N` checkbox
       // wins over disk state. A stub phase dir with no SUMMARY is leftover
       // scaffolding; the user's explicit [x] is the authoritative signal.
+      // #3472: heading-level terminal labels (SHIPPED/COMPLETE/DEFERRED/...)
+      // also win over disk state and over absence of [x] checkbox.
       const strippedNum = phaseNumber.replace(/^0+/, '') || '0';
       const roadmapComplete =
         checkboxStates.get(phaseNumber) === true ||
-        checkboxStates.get(strippedNum) === true;
+        checkboxStates.get(strippedNum) === true ||
+        terminalStatusLabels.has(phaseNumber) ||
+        terminalStatusLabels.has(strippedNum);
       if (roadmapComplete && status !== 'complete') {
         status = 'complete';
       }
@@ -337,11 +428,15 @@ export const initProgress = async (
   } catch { /* intentionally empty */ }
 
   // Add ROADMAP-only phases not yet on disk. For phases with a ROADMAP
-  // `[x]` checkbox, treat them as complete (#2646).
+  // `[x]` checkbox, treat them as complete (#2646). For phases marked
+  // terminal at the heading level (`(SHIPPED ...)`, `(COMPLETE)`,
+  // `(DEFERRED)`, etc.), also treat as complete (#3472).
   for (const [num, name] of roadmapPhaseNames) {
     const stripped = num.replace(/^0+/, '') || '0';
     if (!seenPhaseNums.has(stripped)) {
-      const status = deriveStatusFromCheckbox(num, checkboxStates);
+      const checkboxStatus = deriveStatusFromCheckbox(num, checkboxStates);
+      const isTerminalLabeled = terminalStatusLabels.has(num) || terminalStatusLabels.has(stripped);
+      const status = isTerminalLabeled ? 'complete' : checkboxStatus;
       const phaseInfo: Record<string, unknown> = {
         number: num,
         name: name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, ''),

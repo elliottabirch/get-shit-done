@@ -1,3 +1,4 @@
+// leak-grep-allow file — test fixtures legitimately write to .planning/ in tmpdir mocks
 /**
  * Unit tests for phase query handlers.
  *
@@ -333,7 +334,7 @@ describe('phasePlanIndex', () => {
     ].join('\n'));
     await writeFile(join(archiveDir, '02-01-SUMMARY.md'), '# Summary\n');
 
-    const result = await phasePlanIndex(['2'], tmpDir);
+    const result = await phasePlanIndex(adapter, ['2'], tmpDir);
     const data = result.data as Record<string, unknown>;
     const plans = data.plans as Array<Record<string, unknown>>;
 
@@ -360,7 +361,7 @@ describe('phasePlanIndex', () => {
       '</objective>',
     ].join('\n'));
 
-    const result = await phasePlanIndex(['11'], tmpDir);
+    const result = await phasePlanIndex(adapter, ['11'], tmpDir);
     const data = result.data as Record<string, unknown>;
     const plans = data.plans as Array<Record<string, unknown>>;
     const waves = data.waves as Record<string, string[]>;
@@ -403,7 +404,7 @@ describe('phasePlanIndex', () => {
       '</objective>',
     ].join('\n'));
 
-    const result = await phasePlanIndex(['12'], tmpDir);
+    const result = await phasePlanIndex(adapter, ['12'], tmpDir);
     const data = result.data as Record<string, unknown>;
     const plans = data.plans as Array<Record<string, unknown>>;
     const waves = data.waves as Record<string, string[]>;
@@ -451,7 +452,7 @@ describe('phasePlanIndex', () => {
       '<objective>Plan B — wrong wave declaration.</objective>',
     ].join('\n'));
 
-    const result = await phasePlanIndex(['13'], tmpDir);
+    const result = await phasePlanIndex(adapter, ['13'], tmpDir);
     const data = result.data as Record<string, unknown>;
     const warnings = data.warnings as string[] | undefined;
 
@@ -494,7 +495,7 @@ describe('phasePlanIndex', () => {
 
     let thrownError: unknown;
     try {
-      await phasePlanIndex(['14'], tmpDir);
+      await phasePlanIndex(adapter, ['14'], tmpDir);
     } catch (err) {
       thrownError = err;
     }
@@ -530,7 +531,7 @@ describe('phasePlanIndex', () => {
       '<objective>Plan B.</objective>',
     ].join('\n'));
 
-    const result = await phasePlanIndex(['15'], tmpDir);
+    const result = await phasePlanIndex(adapter, ['15'], tmpDir);
     const data = result.data as Record<string, unknown>;
     const plans = data.plans as Array<Record<string, unknown>>;
 
@@ -555,7 +556,7 @@ describe('phasePlanIndex', () => {
       '<objective>Noncanonical plan filename.</objective>',
     ].join('\n'));
 
-    const result = await phasePlanIndex(['16'], tmpDir);
+    const result = await phasePlanIndex(adapter, ['16'], tmpDir);
     const data = result.data as Record<string, unknown>;
 
     expect(data.plans).toEqual([]);
@@ -588,7 +589,7 @@ describe('phasePlanIndex', () => {
       '<objective>Plan B — short-form dep.</objective>',
     ].join('\n'));
 
-    const result = await phasePlanIndex(['17'], tmpDir);
+    const result = await phasePlanIndex(adapter, ['17'], tmpDir);
     const data = result.data as Record<string, unknown>;
     const waves = data.waves as Record<string, string[]>;
     const warnings = (data.warnings as string[] | undefined) ?? [];
@@ -622,7 +623,7 @@ describe('phasePlanIndex', () => {
       '<objective>Plan B — short-form dep on decimal phase.</objective>',
     ].join('\n'));
 
-    const result = await phasePlanIndex(['99.9'], tmpDir);
+    const result = await phasePlanIndex(adapter, ['99.9'], tmpDir);
     const data = result.data as Record<string, unknown>;
     const waves = data.waves as Record<string, string[]>;
     const warnings = (data.warnings as string[] | undefined) ?? [];
@@ -646,7 +647,7 @@ describe('phasePlanIndex', () => {
       '<objective>Plan with bogus dep.</objective>',
     ].join('\n'));
 
-    const result = await phasePlanIndex(['19'], tmpDir);
+    const result = await phasePlanIndex(adapter, ['19'], tmpDir);
     const data = result.data as Record<string, unknown>;
     const warnings = (data.warnings as string[] | undefined) ?? [];
 
