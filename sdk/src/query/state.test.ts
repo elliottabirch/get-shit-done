@@ -179,7 +179,7 @@ progress:
 ${STATE_BODY}`;
     await writeFile(join(tmpDir, '.planning', 'STATE.md'), stateContent);
 
-    const result = await stateJson([], tmpDir);
+    const result = await stateJson(adapter, [], tmpDir);
     const data = result.data as Record<string, unknown>;
     const progress = data.progress as Record<string, unknown>;
 
@@ -408,7 +408,7 @@ describe('stateSnapshot — bug #3265 frontmatter precedence', () => {
     await mkdir(join(localDir, '.planning'), { recursive: true });
     await writeFile(join(localDir, '.planning', 'STATE.md'), stateContent);
 
-    const result = await stateSnapshot([], localDir);
+    const result = await stateSnapshot(new MarkdownAdapter(localDir), [], localDir);
     const data = result.data as Record<string, unknown>;
 
     // Frontmatter status must win
@@ -436,7 +436,7 @@ describe('stateSnapshot — bug #3265 frontmatter precedence', () => {
     await mkdir(join(localDir, '.planning'), { recursive: true });
     await writeFile(join(localDir, '.planning', 'STATE.md'), stateContent);
 
-    const result = await stateSnapshot([], localDir);
+    const result = await stateSnapshot(new MarkdownAdapter(localDir), [], localDir);
     const data = result.data as Record<string, unknown>;
 
     // Frontmatter current_plan must win over body bold value
@@ -458,7 +458,7 @@ describe('stateSnapshot — bug #3265 frontmatter precedence', () => {
     await mkdir(join(localDir, '.planning'), { recursive: true });
     await writeFile(join(localDir, '.planning', 'STATE.md'), stateContent);
 
-    const result = await stateSnapshot([], localDir);
+    const result = await stateSnapshot(new MarkdownAdapter(localDir), [], localDir);
     const data = result.data as Record<string, unknown>;
 
     // No frontmatter — body extraction must still work
@@ -486,7 +486,7 @@ describe('stateSnapshot — bug #3265 frontmatter precedence', () => {
     await mkdir(join(localDir, '.planning'), { recursive: true });
     await writeFile(join(localDir, '.planning', 'STATE.md'), stateContent);
 
-    const result = await stateSnapshot([], localDir);
+    const result = await stateSnapshot(new MarkdownAdapter(localDir), [], localDir);
     const data = result.data as Record<string, unknown>;
 
     expect(data.status).toBe('planning');
@@ -558,7 +558,7 @@ describe('stateSnapshot — CR #3275 fmScalar non-string scalar coercion', () =>
     await mkdir(join(localDir, '.planning'), { recursive: true });
     await writeFile(join(localDir, '.planning', 'STATE.md'), stateContent);
 
-    const result = await stateSnapshot([], localDir);
+    const result = await stateSnapshot(new MarkdownAdapter(localDir), [], localDir);
     const data = result.data as Record<string, unknown>;
 
     // Frontmatter wins: current_phase must be "19", not "03" (from body)
@@ -585,7 +585,7 @@ describe('stateSnapshot — CR #3275 fmScalar non-string scalar coercion', () =>
     await mkdir(join(localDir, '.planning'), { recursive: true });
     await writeFile(join(localDir, '.planning', 'STATE.md'), stateContent);
 
-    const result = await stateSnapshot([], localDir);
+    const result = await stateSnapshot(new MarkdownAdapter(localDir), [], localDir);
     const data = result.data as Record<string, unknown>;
 
     // total_phases is parsed as int downstream: frontmatter 7 must win over body 3
@@ -612,7 +612,7 @@ describe('stateSnapshot — CR #3275 fmScalar non-string scalar coercion', () =>
     await mkdir(join(localDir, '.planning'), { recursive: true });
     await writeFile(join(localDir, '.planning', 'STATE.md'), stateContent);
 
-    const result = await stateSnapshot([], localDir);
+    const result = await stateSnapshot(new MarkdownAdapter(localDir), [], localDir);
     const data = result.data as Record<string, unknown>;
 
     expect(data.total_plans_in_phase).toBe(5);

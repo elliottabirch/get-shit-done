@@ -276,7 +276,7 @@ Progress: [█████░░░░░] 50%
     const result = await stateUpdate(['Last Activity', '2026-05-07'], tmpDir);
     expect((result.data as Record<string, unknown>).updated).toBe(true);
 
-    const loaded = await stateJson([], tmpDir);
+    const loaded = await stateJson(adapter, [], tmpDir);
     const progress = (loaded.data as Record<string, unknown>).progress as Record<string, unknown>;
     expect(Number(progress.total_phases)).toBe(12);
     expect(Number(progress.completed_phases)).toBe(6);

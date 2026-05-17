@@ -113,17 +113,22 @@ function updateCurrentPositionFields(content: string, fields: Record<string, str
 
   let posBody = posMatch[2];
 
+  // Callback form on every replace below to defuse `$&` / `$N` interpretation
+  // when user state contains literal dollar amounts (`Budget: $2,500 ...`).
   if (fields.status && /^Status:/m.test(posBody)) {
-    posBody = posBody.replace(/^Status:.*$/m, `Status: ${fields.status}`);
+    const value = fields.status;
+    posBody = posBody.replace(/^Status:.*$/m, () => `Status: ${value}`);
   }
   if (fields.lastActivity && /^Last activity:/im.test(posBody)) {
-    posBody = posBody.replace(/^Last activity:.*$/im, `Last activity: ${fields.lastActivity}`);
+    const value = fields.lastActivity;
+    posBody = posBody.replace(/^Last activity:.*$/im, () => `Last activity: ${value}`);
   }
   if (fields.plan && /^Plan:/m.test(posBody)) {
-    posBody = posBody.replace(/^Plan:.*$/m, `Plan: ${fields.plan}`);
+    const value = fields.plan;
+    posBody = posBody.replace(/^Plan:.*$/m, () => `Plan: ${value}`);
   }
 
-  return content.replace(posPattern, `${posMatch[1]}${posBody}`);
+  return content.replace(posPattern, () => `${posMatch[1]}${posBody}`);
 }
 
 /** Port of `readTextArgOrFile` from `state.cjs` — inline text or file path under project root. */
@@ -520,31 +525,37 @@ export const stateBeginPhase: QueryHandler = async (args, projectDir, workstream
       const header = positionMatch[1];
       let posBody = positionMatch[2];
 
+      // Callback form on every replace to defuse `$&` / `$N` interpretation
+      // when user state contains literal dollar amounts (#bug-3287).
       const newPhase = `Phase: ${phaseNumber}${phaseName ? ` (${phaseName})` : ''} — EXECUTING`;
       if (/^Phase:/m.test(posBody)) {
-        posBody = posBody.replace(/^Phase:.*$/m, newPhase);
+        posBody = posBody.replace(/^Phase:.*$/m, () => newPhase);
       } else {
         posBody = newPhase + '\n' + posBody;
       }
 
       const newPlan = `Plan: 1 of ${planNum ?? '?'}`;
       if (/^Plan:/m.test(posBody)) {
-        posBody = posBody.replace(/^Plan:.*$/m, newPlan);
+        posBody = posBody.replace(/^Plan:.*$/m, () => newPlan);
       } else {
-        posBody = posBody.replace(/^(Phase:.*$)/m, `$1\n${newPlan}`);
+        // `$1\n${newPlan}` is a real backreference — keep it but use callback
+        // so newPlan isn't reinterpreted.
+        posBody = posBody.replace(/^(Phase:.*$)/m, (_match, group1: string) => `${group1}\n${newPlan}`);
       }
 
       const newStatus = `Status: Executing Phase ${phaseNumber}`;
       if (/^Status:/m.test(posBody)) {
-        posBody = posBody.replace(/^Status:.*$/m, newStatus);
+        posBody = posBody.replace(/^Status:.*$/m, () => newStatus);
       }
 
       const newActivity = `Last activity: ${today} -- Phase ${phaseNumber} execution started`;
       if (/^Last activity:/im.test(posBody)) {
-        posBody = posBody.replace(/^Last activity:.*$/im, newActivity);
+        posBody = posBody.replace(/^Last activity:.*$/im, () => newActivity);
       }
 
-      content = content.replace(positionPattern, `${header}${posBody}`);
+      // Use callback form to avoid `$&` / `$N` interpretation in posBody
+      // when the user has dollar-amounts in their state body (#bug-3287).
+      content = content.replace(positionPattern, () => `${header}${posBody}`);
       updated.push('Current Position');
     }
 
