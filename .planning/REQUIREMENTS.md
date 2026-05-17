@@ -1,29 +1,49 @@
-# Requirements — Milestone v1.1: Upstream Drift Reconciliation
+# Requirements — Milestone v1.1: Make the StorageAdapter Seam Real
 
-**Source of truth:** `.planning/research/upstream-drift/DELTA.md`
+**Source of truth:** `.planning/research/upstream-drift/DELTA.md` + bd `get-shit-done-qt2`
 
 **Locked invariants** (carried from v1.0):
 - Strict-superset of upstream `gsd-build/get-shit-done` when no adapter is configured
 - Two-repo model: this fork + sibling `~/code/gsd-beads`
 - Periodic rebase against `upstream/main`; conflicts only in adapter-interface seam
 
-**Milestone framing:** Land the 351-commit rebase already completed on `rebase/onto-upstream-2026-05-16`, port the upstream features dropped during "take theirs" resolutions, close out the BeadsAdapter defects uncovered along the way, and reconcile the seven beads-vs-markdown adapter divergences observed during initial beads-mode use.
+**Milestone framing — RESCOPED 2026-05-17:**
+
+The original v1.1 framing ("Upstream Drift Reconciliation") evolved during execution. Stage 1 of the disk-deletion experiment (Fix C from the v1.0 audit) revealed that **the adapter seam is not actually plumbed through the runtime**. The `adapterFor()` helper at `sdk/src/query/helpers.ts` hardcodes `MarkdownAdapter`, ignoring `storage.adapter` config. 101 callsites across 30 files all silently use MarkdownAdapter regardless of configuration. Filed as bd `get-shit-done-qt2` (P0).
+
+This means v1.0's headline value proposition ("pluggable storage backends") is currently false at runtime. The fork APPEARS to support beads mode because:
+- `createStorageAdapter` correctly creates a BeadsAdapter at the CLI/registry boundary
+- BUT every migrated handler internally bypasses that adapter via `adapterFor()`
+- So writes go to disk (markdown), reads from `gsd-sdk query` go to bd, drift is silent
+
+**v1.1 is now: make the seam real, then land the rebase + restore parity.** The original upstream-drift work is still in scope but secondary — without a working seam, none of it is meaningful.
 
 ---
 
 ## Active Requirements
 
+### SEAM — Make the StorageAdapter seam load-bearing (P0 — bd `get-shit-done-qt2`)
+
+The headline work for v1.1. Replace 101 `adapterFor(projectDir)` callsites with the adapter threaded through the handler signature. Without this, the rest of v1.1's work is decorative.
+
+- [ ] **SEAM-01**: All 101 `adapterFor(projectDir)` callsites in `sdk/src/query/` replaced with the adapter argument threaded through the handler signature. (Reference inventory: `grep -rn "adapterFor(projectDir)" sdk/src/query/ | wc -l` ≥ 101)
+- [ ] **SEAM-02**: `adapterFor` is either deleted from `helpers.ts` OR rewritten to honor `config.storage.adapter` (decision point: leave as a deprecation stub vs delete entirely).
+- [ ] **SEAM-03**: Every QueryHandler signature in the registry threads `adapter` as first arg (no remaining handlers using the legacy `(args, projectDir, workstream)` signature for migrated families).
+- [ ] **SEAM-04**: Round-trip conformance test: configure `adapter: "beads"`, run `state.milestone-switch --milestone vX.Y --name "Test"`, verify the bd-tier STATE.md singleton received the write byte-for-byte.
+- [ ] **SEAM-05**: Same round-trip test under `adapter: "markdown"` (regression guard so the seam fix doesn't break the default path).
+- [ ] **SEAM-06**: Conformance suite gets a "seam-realness" entry that runs ALL migrated state-mutation handlers against BOTH adapters and asserts post-write reads return identical content.
+
 ### REBASE — Land the rebase work
 
-- [ ] **REBASE-01**: All 351 commits from `rebase/onto-upstream-2026-05-16` land on `feat/storage-adapter` (fast-forward or replace)
-- [ ] **REBASE-02**: `feat/storage-adapter` tests run green at ≥97% (currently 2008/2066 = 97.2%; target stays at-or-above this baseline as feature ports land)
-- [ ] **REBASE-03**: TypeScript build (`npm run build:sdk-only`) passes with zero errors
-- [ ] **REBASE-04**: `git rebase main` from the cutover branch produces no conflicts (clean replayability check)
-- [ ] **REBASE-05**: `fork/v1.0-shipped` tag and `rebase/onto-upstream-2026-05-16` checkpoint branch remain in `origin` for safety until milestone closes
+- [ ] **REBASE-01**: All 351 commits from `rebase/onto-upstream-2026-05-16` land on `feat/storage-adapter` (fast-forward or replace).
+- [ ] **REBASE-02**: `feat/storage-adapter` tests run green at ≥97% under the DEFAULT adapter (markdown). Beads-mode test pass rate becomes a SEAM acceptance criterion (where it should be near 100%).
+- [ ] **REBASE-03**: TypeScript build (`npm run build:sdk-only`) passes with zero errors.
+- [ ] **REBASE-04**: `git rebase main` from the cutover branch produces no conflicts (clean replayability check).
+- [ ] **REBASE-05**: `fork/v1.0-shipped` tag and `rebase/onto-upstream-2026-05-16` checkpoint branch remain in `origin` for safety until milestone closes.
 
 ### PORT — Restore upstream features dropped during take-theirs
 
-Each bullet maps to a test cluster from `DELTA.md` Group 1-7. Owner is the SDK file where the feature lives.
+Maps to `DELTA.md` Group 1-7. Most should become trivial after SEAM lands because handlers will actually run against the configured adapter.
 
 - [ ] **PORT-01** (Group 1): Restore `phase_status` field (#3569) on `initPlanPhase`/`initVerifyWork` output. Maps disk + VERIFICATION.md state → `Pending`/`Planned`/`Executed`/`Complete`. Already filed: bd `get-shit-done-s93`. (4 tests)
 - [ ] **PORT-02** (Group 2): Restore `mode` field extraction in `roadmap.get-phase` (`**Mode:** mvp` parsing). (3 tests)
@@ -41,7 +61,7 @@ Each bullet maps to a test cluster from `DELTA.md` Group 1-7. Owner is the SDK f
 - [ ] **VERIFY-04**: `audit-uat` JSON parity — investigate.
 - [ ] **VERIFY-05**: `state.load` payload parity — investigate.
 - [ ] **VERIFY-06**: `state.get` no-field full-content parity — investigate.
-- [ ] **VERIFY-07**: All other unintentional regressions surfaced by the integration test suite are diagnosed and fixed before milestone close (catch-all for tests not currently listed).
+- [ ] **VERIFY-07**: All other unintentional regressions surfaced by the integration test suite are diagnosed and fixed before milestone close.
 
 ### MISC — Orthogonal regressions (Group 9)
 
@@ -49,33 +69,37 @@ Each bullet maps to a test cluster from `DELTA.md` Group 1-7. Owner is the SDK f
 - [ ] **MISC-02**: `MarkdownAdapter.readModifyWriteRoadmapMd` — `core.atomicWriteFileSync is not a function`. Implementation gap.
 - [ ] **MISC-03**: `runtime-bridge-sync` `native_failure` classification regression.
 
-### DEFECT — BeadsAdapter contract gaps
+### DEFECT — BeadsAdapter contract gaps (mostly resolve via SEAM)
 
-- [ ] **DEFECT-01**: BeadsAdapter handles singleton bodies > 64KB (DECISIONS.md class). Already filed: bd `get-shit-done-qjk`. Add conformance test for ≥1MB round-trip; update path router or column type per chosen approach.
-- [ ] **DEFECT-02**: Conformance suite includes a large-body singleton test that asserts byte-identical round-trip; runs against MarkdownAdapter and BeadsAdapter both.
+- [ ] **DEFECT-01**: BeadsAdapter handles singleton bodies > 64KB (DECISIONS.md class). Already filed: bd `get-shit-done-qjk`. Resolution depends on SEAM-02 outcome — if disk-tier carve-out is chosen for ADR logs, this becomes a routing decision rather than a column-widening fix.
+- [ ] **DEFECT-02**: Conformance suite includes a large-body singleton test that asserts byte-identical round-trip; runs against MarkdownAdapter and BeadsAdapter both. (Cross-references SEAM-06.)
 
-### DIVERGE — Beads/markdown adapter divergences (all 7 from session-end audit)
+### DIVERGE — Beads/markdown adapter divergences (most are SEAM-04..06 acceptance evidence)
 
-- [ ] **DIVERGE-01**: Stub SDK handlers (`thread-seed.list-seeds`, `workspace.ensure-dir`) — implement or remove from workflows that call them. Currently return `{"error": "stub"}`.
-- [ ] **DIVERGE-02**: `init.new-milestone` `current_milestone_name` returns placeholder `"milestone"` instead of parsing real name from PROJECT.md or STATE.md.
-- [ ] **DIVERGE-03**: BeadsAdapter `>64KB` singleton fix — same as DEFECT-01 above (cross-referenced).
-- [ ] **DIVERGE-04**: **Disk/bd dual-write divergence trap** — when `adapter: "beads"` is configured, `.planning/PROJECT.md`/`STATE.md`/etc. exist on disk AND in bd. They drift if not manually synced. Resolution required: either (a) BeadsAdapter mirrors to disk on putRecord; (b) the disk copies are deleted for migrated singletons; (c) explicit dual-storage adapter mode. **High severity — silent drift trap.**
-- [ ] **DIVERGE-05**: `phases.clear` SDK handler — untested under BeadsAdapter; verify it doesn't either no-op silently or delete bd-tier phase data unintentionally.
-- [ ] **DIVERGE-06**: STATE.md "Reference" section preserved across milestone-switch but `state.milestone-switch` doesn't reset milestone-scoped Reference content. Polish.
-- [ ] **DIVERGE-07**: Conformance / contract test that proves identical observable behavior of init.new-milestone + state.milestone-switch under MarkdownAdapter and BeadsAdapter (catch-all for divergences we haven't found yet).
+After SEAM lands, several DIVERGE items resolve automatically — they were symptoms of the same root cause. Listed for traceability and as test cases for SEAM acceptance.
+
+- [ ] **DIVERGE-01**: Stub SDK handlers (`thread-seed.list-seeds`, `workspace.ensure-dir`) — implement or remove from workflows that call them. Currently return `{"error": "stub"}`. (Independent of SEAM.)
+- [ ] **DIVERGE-02**: `init.new-milestone` `current_milestone_name` returns placeholder `"milestone"`. Root cause traced to `state.milestone-switch` defaulting `--name` to literal `"milestone"` (state-mutation.ts:1132). Workflow callers must always pass `--name`. Either fix the default or document the requirement.
+- [ ] **DIVERGE-03**: BeadsAdapter `>64KB` singleton fix — same as DEFECT-01 (cross-reference).
+- [ ] **DIVERGE-04**: **Disk/bd dual-write divergence trap** — RESOLVED-IN-PRINCIPLE by SEAM. After all handlers route through the configured adapter, there is no second store to drift against; whichever adapter is configured is authoritative. Verify via SEAM-04..06 acceptance tests.
+- [ ] **DIVERGE-05**: `phases.clear` SDK handler — untested under BeadsAdapter; verify it doesn't no-op silently or delete bd-tier phase data unintentionally. (SEAM-04 family case.)
+- [ ] **DIVERGE-06**: STATE.md "Reference" section preserved across milestone-switch but milestone-switch doesn't reset milestone-scoped Reference content. Polish.
+- [ ] **DIVERGE-07**: Conformance suite covers identical observable behavior of `init.new-milestone` + `state.milestone-switch` under MarkdownAdapter and BeadsAdapter. (Cross-references SEAM-06.)
 
 ---
 
 ## v1.1 Requirements summary
 
-**Total active:** 30 (5 REBASE + 7 PORT + 7 VERIFY + 3 MISC + 2 DEFECT + 7 DIVERGE — minus 1 cross-reference = 30 unique)
+**Total active:** 35 (6 SEAM + 5 REBASE + 7 PORT + 7 VERIFY + 3 MISC + 2 DEFECT + 7 DIVERGE — minus 4 cross-references = 33 unique).
 
 **Scope rationale:**
-- REBASE class is small but load-bearing — cutover work and verification
-- PORT class restores feature parity lost during the rebase resolution
-- VERIFY/MISC class closes the integration-test-suite gap to a known-green state
-- DEFECT class fixes the adapter-contract violation that blocked DECISIONS.md migration
-- DIVERGE class addresses the beads-mode bugs surfaced by actually USING the adapter (which v1.0 didn't fully do — v1.0 shipped the adapter; v1.1 surfaces what real use revealed)
+- **SEAM** is the new headline. Without it, the fork's value proposition is broken at runtime. The other 27 requirements are downstream of this — many become trivial or unnecessary after SEAM lands.
+- **REBASE** is small but load-bearing — cutover work and verification.
+- **PORT** restores feature parity lost during the rebase resolution. Most ports become straightforward after SEAM because handlers actually use the configured adapter.
+- **VERIFY/MISC** closes integration test gaps to known-green state.
+- **DEFECT/DIVERGE** mostly resolve as SEAM acceptance evidence; only DIVERGE-01 and DIVERGE-06 are independent.
+
+**Honest assessment:** v1.1 is now a multi-week milestone, not a multi-day one. SEAM alone is multi-day work (101 callsites + signature refactors + conformance). PORT/VERIFY/MISC/DIVERGE total ≥30 individually-small fixes that compound. Plan accordingly.
 
 ---
 

@@ -41,22 +41,25 @@ time, before any runtime hook can intercept.
 The conclusion: a clean architectural seam at the storage layer is the
 only durable solution. This fork adds that seam.
 
-## Current Milestone: v1.1 — Upstream Drift Reconciliation
+## Current Milestone: v1.1 — Make the StorageAdapter Seam Real
 
-**Goal:** Ingest upstream commits accumulated since the v1.0 cutover (`4029d103`) and reconcile any adapter-seam drift they introduce, plus close out the BeadsAdapter `>64KB singleton` defect uncovered during the v1.0 → v1.1 migration.
+**Goal (rescoped 2026-05-17):** Replace the `adapterFor()` shortcut at `sdk/src/query/helpers.ts` (which hardcodes `MarkdownAdapter` regardless of `storage.adapter` config) with proper adapter threading from the registry — so the fork's headline value proposition (pluggable storage backends) actually works at runtime. Also: land the 351-commit upstream rebase already completed on `rebase/onto-upstream-2026-05-16`, restore upstream features dropped during "take theirs" resolutions, and close out adapter defects.
 
 **Target features:**
-- Upstream delta investigation (commits since `4029d103`, classified by seam-impact)
-- Rebase/merge upstream changes onto `feat/storage-adapter`
-- Reconcile any seam drift introduced by upstream changes
-- BeadsAdapter: handle singleton bodies > 64KB (`DECISIONS.md` class) — defect `get-shit-done-qjk`
-- Conformance suite: large-body test case for singleton round-trip
+- **SEAM (P0):** make the StorageAdapter seam load-bearing — replace 101 `adapterFor` callsites, conformance tests under both adapters, regression guard for default markdown path. (bd `get-shit-done-qt2`)
+- **REBASE:** land 351 upstream commits on `feat/storage-adapter`, verify build + ≥97% test pass rate
+- **PORT:** restore 7 upstream features the rebase dropped (phase_status, mode field, strict argv, curated progress, validate.health rules, archived-dir handling, workstream threading)
+- **VERIFY:** integration test parity (6 specific goldens + catch-all)
+- **MISC:** orthogonal regressions (loadConfig defaults, readModifyWriteRoadmapMd impl, runtime-bridge classification)
+- **DEFECT/DIVERGE:** BeadsAdapter contract gaps and the 7 beads-vs-markdown divergences from the v1.0 audit — most resolve automatically once SEAM lands
 
 **Key context:**
-- v1.0 closed at commit `4029d103`; bd store now holds 4/5 top-level singletons (PROJECT.md, ROADMAP.md, STATE.md, REQUIREMENTS.md). DECISIONS.md (87 KB) deferred until the >64KB defect ships.
+- v1.0 closed at commit `4029d103`. Subsequent investigation (Stage 1 of Fix C, 2026-05-17) revealed that the adapter seam claimed in v1.0 is decorative not load-bearing — `adapterFor()` returns `MarkdownAdapter` unconditionally, so 101 migrated handler callsites bypass whatever adapter is configured. Filed as bd `get-shit-done-qt2` (P0).
 - v1.0 phase artifacts archived to `.planning/archived-milestone/v1.0/phases/`.
-- Upstream commits flagged in `CLAUDE.md` worth investigating: `#2898` (durable planning runtime), `#2901` (planning-workspace seam), `#2908` (manifest-backed query routing seam) — all touch areas adjacent to our adapter seam.
-- Branch strategy unchanged: `main` mirrors `upstream/main`; work happens on `feat/storage-adapter`.
+- Rebase already completed on `rebase/onto-upstream-2026-05-16` (5a063672). 2008/2066 tests passing. ~50 failures are upstream features lost to "take theirs"; most of them depend on a real adapter seam to be testable under beads mode.
+- DECISIONS.md (87 KB) NOT migrated to bd — exceeds bd's 64KB TEXT column limit (bd `get-shit-done-qjk`). After SEAM lands, this becomes a routing decision rather than a column-widening fix.
+- Honest assessment: this is a multi-week milestone, not multi-day. SEAM alone is multi-day; PORT/VERIFY/MISC/DIVERGE compound from there.
+- Original framing was "Upstream Drift Reconciliation"; renamed to reflect the reality that SEAM is now the primary work and reconciliation is secondary.
 
 ## Previous Milestone: v1.0 — StorageAdapter interface + MarkdownAdapter
 

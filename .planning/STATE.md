@@ -1,9 +1,9 @@
 ---
 gsd_state_version: 1.0
 milestone: v1.1
-milestone_name: Upstream Drift Reconciliation
+milestone_name: Make the StorageAdapter Seam Real
 status: planning
-last_updated: "2026-05-17T03:41:07.855Z"
+last_updated: "2026-05-17T06:15:03.908Z"
 last_activity: 2026-05-17
 progress:
   total_phases: 0
