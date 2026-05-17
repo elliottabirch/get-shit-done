@@ -118,7 +118,61 @@ None at this point — all known v1.1 work is captured above. Add deferred items
 
 ## v1.1 Traceability
 
-(Filled in by roadmap step — maps each REQ-ID to a phase + plan.)
+Every v1.1 REQ-ID maps to exactly one phase. Coverage: 33/33 unique (35 rows; DEFECT-01/DIVERGE-03 are the same physical defect with two IDs; SEAM-06/DEFECT-02 are the same conformance suite entry with two traceability angles).
+
+| REQ-ID | Phase | Status | Notes |
+|--------|-------|--------|-------|
+| REBASE-01 | Phase 1 — Land the rebase | Pending | |
+| REBASE-02 | Phase 1 — Land the rebase | Pending | |
+| REBASE-03 | Phase 1 — Land the rebase | Pending | |
+| REBASE-04 | Phase 1 — Land the rebase | Pending | |
+| REBASE-05 | Phase 1 — Land the rebase | Pending | |
+| SEAM-01 | Phase 2 — Make the seam real | Pending | bd `get-shit-done-qt2` |
+| SEAM-02 | Phase 2 — Make the seam real | Pending | bd `get-shit-done-qt2` |
+| SEAM-03 | Phase 2 — Make the seam real | Pending | bd `get-shit-done-qt2` |
+| SEAM-04 | Phase 2 — Make the seam real | Pending | |
+| SEAM-05 | Phase 2 — Make the seam real | Pending | |
+| SEAM-06 | Phase 2 — Make the seam real | Pending | cross-ref: DEFECT-02 |
+| DEFECT-02 | Phase 2 — Make the seam real | Pending | cross-ref: SEAM-06 |
+| PORT-01 | Phase 3 — Port upstream features | Pending | bd `get-shit-done-s93` |
+| PORT-02 | Phase 3 — Port upstream features | Pending | |
+| PORT-03 | Phase 3 — Port upstream features | Pending | |
+| PORT-04 | Phase 3 — Port upstream features | Pending | |
+| PORT-05 | Phase 3 — Port upstream features | Pending | |
+| PORT-06 | Phase 3 — Port upstream features | Pending | |
+| PORT-07 | Phase 3 — Port upstream features | Pending | |
+| DEFECT-01 | Phase 4 — Close out defects, divergences, integration parity, and misc | Pending | bd `get-shit-done-qjk`; cross-ref: DIVERGE-03 |
+| DIVERGE-01 | Phase 4 — Close out defects, divergences, integration parity, and misc | Pending | |
+| DIVERGE-02 | Phase 4 — Close out defects, divergences, integration parity, and misc | Pending | |
+| DIVERGE-03 | Phase 4 — Close out defects, divergences, integration parity, and misc | Pending | cross-ref: DEFECT-01 |
+| DIVERGE-04 | Phase 4 — Close out defects, divergences, integration parity, and misc | Pending | resolves via Phase 2; Phase 4 verifies |
+| DIVERGE-05 | Phase 4 — Close out defects, divergences, integration parity, and misc | Pending | |
+| DIVERGE-06 | Phase 4 — Close out defects, divergences, integration parity, and misc | Pending | |
+| DIVERGE-07 | Phase 4 — Close out defects, divergences, integration parity, and misc | Pending | |
+| VERIFY-01 | Phase 4 — Close out defects, divergences, integration parity, and misc | Pending | investigate before regenerating |
+| VERIFY-02 | Phase 4 — Close out defects, divergences, integration parity, and misc | Pending | investigate before regenerating |
+| VERIFY-03 | Phase 4 — Close out defects, divergences, integration parity, and misc | Pending | update per ADR D-2026-05-13-3524 |
+| VERIFY-04 | Phase 4 — Close out defects, divergences, integration parity, and misc | Pending | investigate before regenerating |
+| VERIFY-05 | Phase 4 — Close out defects, divergences, integration parity, and misc | Pending | investigate before regenerating |
+| VERIFY-06 | Phase 4 — Close out defects, divergences, integration parity, and misc | Pending | investigate before regenerating |
+| VERIFY-07 | Phase 4 — Close out defects, divergences, integration parity, and misc | Pending | catch-all |
+| MISC-01 | Phase 4 — Close out defects, divergences, integration parity, and misc | Pending | |
+| MISC-02 | Phase 4 — Close out defects, divergences, integration parity, and misc | Pending | |
+| MISC-03 | Phase 4 — Close out defects, divergences, integration parity, and misc | Pending | |
+
+**Coverage by phase:**
+
+| Phase | REQ count (unique) | REQ-IDs |
+|-------|--------------------|---------|
+| 1 — Land the rebase | 5 | REBASE-01..05 |
+| 2 — Make the seam real | 7 | SEAM-01..06, DEFECT-02 |
+| 3 — Port upstream features | 7 | PORT-01..07 |
+| 4 — Close out defects, divergences, integration parity, and misc | 14 | DEFECT-01, DIVERGE-01..07, VERIFY-01..07, MISC-01..03 |
+| **Total unique** | **33** | — |
+
+---
+
+*Last updated: 2026-05-17 — v1.1 traceability filled by gsd-roadmapper after roadmap creation. 33/33 unique requirements mapped.*
 
 ---
 
@@ -166,10 +220,10 @@ None at this point — all known v1.1 work is captured above. Add deferred items
 
 ### LEAKS — Plug workflow leaks (top-10 + `<context>`-block class)
 
-- [x] **LEAKS-01**: Top-10 leaking workflows refactored to use only adapter calls (no Read/Write/Edit/cp/mv against `.planning/`): `plan-phase` (12 leaks), `execute-phase` (10), `spike` (10), `forensics` (9), `progress` (8), `verify-phase` (8), `sketch` (8), `discuss-phase` (8), `execute-plan` (8), `gsd-debugger` (7+) (completed 2026-05-10, Plans 04-03/04-04/04-07) <!-- leak-grep-ignore — describes past leak-grep rules -->.
+- [x] **LEAKS-01**: Top-10 leaking workflows refactored to use only adapter calls (no Read/Write/Edit/cp/mv against `.planning/`): `plan-phase` (12 leaks), `execute-phase` (10), `spike` (10), `forensics` (9), `progress` (8), `verify-phase` (8), `sketch` (8), `discuss-phase` (8), `execute-plan` (8), `gsd-debugger` (7+) (completed 2026-05-10, Plans 04-03/04-04/04-07) <!-- leak-grep-ignore — describes past leak-grep rules -->
 - [x] **LEAKS-02**: `<context>`-block leak class mitigated — skill frontmatter `@.planning/...` references either intercepted at install time, rewritten to SDK calls, or explicitly declared as a documented exception (resolves OQ-4) (completed 2026-05-10, Plan 04-05)
 - [x] **LEAKS-03**: Two raw-git outliers (`spec-phase.md` Step 7, `eval-review.md` end) refactored to use `gsd-sdk query commit` instead of raw `git add`/`git commit` (resolves OQ-3) (completed 2026-05-10, Plan 04-04)
-- [x] **LEAKS-04**: CI gate enforces leak-grep (extended per Rubric R5 to catch `cp`, `mv`, `rm -rf`, `>>` against `.planning/`) so new direct I/O cannot regress (completed 2026-05-10, Plan 04-07) <!-- leak-grep-ignore — meta-describes the leak-grep shell patterns -->.
+- [x] **LEAKS-04**: CI gate enforces leak-grep (extended per Rubric R5 to catch `cp`, `mv`, `rm -rf`, `>>` against `.planning/`) so new direct I/O cannot regress (completed 2026-05-10, Plan 04-07) <!-- leak-grep-ignore — meta-describes the leak-grep shell patterns -->
 - [x] **LEAKS-05**: Rule-4 demotion tooling shipped — `verify.fat-skills` SDK query lists all non-router skills with line-count + leak count, surfaced in CI (completed 2026-05-10, Plans 04-06/04-07)
 
 ### PRIMITIVES — Foundational primitive lift

@@ -3,10 +3,10 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Make the StorageAdapter Seam Real
 status: planning
-last_updated: "2026-05-17T06:15:03.908Z"
+last_updated: "2026-05-17T07:30:00.000Z"
 last_activity: 2026-05-17
 progress:
-  total_phases: 0
+  total_phases: 4
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -17,10 +17,10 @@ progress:
 
 ## Current Position
 
-Phase: Not started (defining requirements)
+Phase: Phase 1 — Land the rebase (about to plan)
 Plan: —
-Status: Defining requirements
-Last activity: 2026-05-17 — Milestone v1.1 started
+Status: Roadmap created (4 phases); next action is `/gsd-plan-phase 1`
+Last activity: 2026-05-17 — v1.1 ROADMAP.md written by gsd-roadmapper (33/33 REQ coverage, 4 batched phases)
 
 ## Reference
 
