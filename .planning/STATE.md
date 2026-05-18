@@ -3,24 +3,24 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Make the StorageAdapter Seam Real
 status: executing
-last_updated: "2026-05-17T16:24:01.585Z"
-last_activity: 2026-05-17
+last_updated: "2026-05-18T16:08:29Z"
+last_activity: 2026-05-18
 progress:
   total_phases: 4
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 2
-  completed_plans: 1
-  percent: 0
+  completed_plans: 2
+  percent: 25
 ---
 
 # Project State
 
 ## Current Position
 
-Phase: 1 (Land the rebase) — EXECUTING
-Plan: 2 of 2
-Status: Ready to execute
-Last activity: 2026-05-17
+Phase: Phase 1 — Land the rebase (closed)
+Plan: — (Phase 2 next)
+Status: Phase 1 closed; ready to plan Phase 2
+Last activity: 2026-05-18 — Phase 1 closed (cutover complete; canonical at 332f9efe7f0045eb8473f183b9ad22ab8c50360d)
 
 ## Reference
 

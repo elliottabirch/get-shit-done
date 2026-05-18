@@ -1,0 +1,60 @@
+# Cutover Evidence — Plan 01-02 Task 3
+
+## Pre-Cutover State
+
+Generated: 2026-05-18T16:09:17Z
+
+from (origin/feat/storage-adapter before push): ecf72c9fa97e10b3e40439300f45a088c1bc6e44
+to   (feat/storage-adapter-staging tip):         332f9efe7f0045eb8473f183b9ad22ab8c50360d
+
+## Cutover (Plan 01-02 Task 3)
+
+### Force-Push Command
+
+```
+git push --force-with-lease=feat/storage-adapter:ecf72c9fa97e10b3e40439300f45a088c1bc6e44 origin feat/storage-adapter-staging:feat/storage-adapter
+```
+
+### Force-Push Output
+
+```
+To https://github.com/elliottabirch/get-shit-done
+ + ecf72c9f...332f9efe feat/storage-adapter-staging -> feat/storage-adapter (forced update)
+```
+
+Push exit code: 0 (SUCCESS)
+
+### Post-Cutover SHA Verification
+
+NEW_REMOTE_SHA:   332f9efe7f0045eb8473f183b9ad22ab8c50360d
+STAGING_TIP_NOW:  332f9efe7f0045eb8473f183b9ad22ab8c50360d
+SHA MATCH: PASS — origin/feat/storage-adapter == feat/storage-adapter-staging
+
+### REBASE-05 Post-Cutover Safety-Refs Check
+
+870569761b4b22a9c056bb67e8989dd3dedbbcb9	refs/heads/rebase/onto-upstream-2026-05-16
+0ecf5a781bf4dd95d8e3a45c59b9b3d5ec51a3ee	refs/tags/fork/v1.0-shipped
+
+REF_COUNT: 2
+REBASE-05 PASS: both safety refs present on origin post-cutover
+
+### REBASE-01 Commit-Count Check (SC #1, post-cutover)
+
+Commits in ae63cbe5..origin/feat/storage-adapter: 369
+ae63cbe5 ancestor check: PASS (git merge-base --is-ancestor ae63cbe5 origin/feat/storage-adapter)
+REBASE-01 PASS: 369 >= 357 threshold
+
+### STATE.md Update + bd Mirror
+
+STATE.md size: 9276 bytes
+STATE.md update: Phase 1 closed; ready to plan Phase 2
+bd update command: bd update get-shit-done-c1j --description <STATE.md content>
+bd mirror result: bd description includes 'Phase 1 closed': true (9232 bytes)
+
+### Final Canonical SHA
+
+origin/feat/storage-adapter: 332f9efe7f0045eb8473f183b9ad22ab8c50360d
+Timestamp: 2026-05-18T16:09:17Z
+
+All REBASE-01..05 gates: PASS
+Phase 1 status: CLOSED
