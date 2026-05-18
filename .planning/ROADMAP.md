@@ -67,12 +67,12 @@ Plans:
   4. The conformance suite "seam-realness" manifest entry runs ALL migrated state-mutation handlers against MarkdownAdapter AND BeadsAdapter; pass rate ≥ 95% at merge. Any sub-95% handler is enumerated by name in a failure manifest file — not silently skipped or counted as "flaky." The large-body singleton test (DEFECT-02 / SEAM-06) is one of these entries and asserts byte-identical round-trip for bodies > 64KB against both adapters.
   5. `adapterFor` is either deleted from `helpers.ts` or present only as a documented deprecation stub that throws `NotYetMigratedError` at call time — it does not silently return a live adapter under any code path reachable from the SDK query registry.
 
-**Plans:** 7 plans
+**Plans:** 1/7 plans executed
 Plans:
 
 **Wave 1**
 
-- [ ] 02-01-PLAN.md — Wave 0/1: getTouchedPaths interface + sibling BeadsAdapter impl + conformance schema extension (kind:'seam-realness') + paired-seam test scaffolds [SEAM-06, DEFECT-02]
+- [x] 02-01-PLAN.md — Wave 0/1: getTouchedPaths interface + sibling BeadsAdapter impl + conformance schema extension (kind:'seam-realness') + paired-seam test scaffolds [SEAM-06, DEFECT-02]
 
 **Wave 2** *(blocked on Wave 1)*
 
