@@ -638,23 +638,17 @@ export class MarkdownAdapter implements StorageAdapter {
     }
   }
 
-  /** Pipeline-internal escape hatch (RESEARCH OQ #1). NOT on StorageAdapter interface. */
-  _txnContextForPipeline(): TxnCtx | undefined {
-    return this.activeTxn;
-  }
-
   /**
-   * Pipeline-internal: bypass shadow-dir merge, read the real file.
-   * Used by dry-run to compute before-image of touched paths.
+   * D-03 (Phase 2 / SEAM-06): Public-interface replacement for the deleted
+   * _txnContextForPipeline() escape hatch. Returns the union of activeTxn
+   * touchedPaths and removedPaths, or an empty Set if no transaction is active.
    */
-  async _realReadForPipeline(relPath: string): Promise<string | null> {
-    const abs = this.resolve(relPath);
-    try {
-      return await readFile(abs, 'utf-8');
-    } catch (err) {
-      if ((err as NodeJS.ErrnoException).code === 'ENOENT') return null;
-      throw err;
-    }
+  getTouchedPaths(): Set<string> {
+    if (!this.activeTxn) return new Set();
+    const all = new Set<string>();
+    for (const p of this.activeTxn.touchedPaths) all.add(p);
+    for (const p of this.activeTxn.removedPaths) all.add(p);
+    return all;
   }
 
   // Private helpers for snapshot/restore

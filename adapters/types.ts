@@ -127,6 +127,22 @@ export interface StorageAdapter {
   recordStateSignal(event: SignalEvent): Promise<StateWriteOutcome>;
 
   /**
+   * D-03 (Phase 2 / SEAM-06): Returns the set of relative paths that have been
+   * written (or removed) during the currently-active transaction. Callable only
+   * inside a withTransaction callback; returns an empty set if no transaction
+   * is active (does NOT throw — see RESEARCH.md §"getTouchedPaths Interface Decisions").
+   *
+   * MarkdownAdapter: returns the exact set from activeTxn.touchedPaths union
+   *   activeTxn.removedPaths (same data as the deleted _txnContextForPipeline).
+   * BeadsAdapter: returns a best-effort set of synthetic paths derived from the
+   *   ops buffered in the active transaction (D-04). Coarser-grained than
+   *   MarkdownAdapter; used for non-empty diff assertion only.
+   *
+   * Conformance asserts exact path set on MarkdownAdapter; non-empty on BeadsAdapter.
+   */
+  getTouchedPaths(): Set<string>;
+
+  /**
    * D-13 (Phase 7, ADR D-2026-05-12-NORMALIZE):
    * Canonicalize body per the adapter's storage normalization.
    * MarkdownAdapter returns body unchanged (byte-preserving storage).
