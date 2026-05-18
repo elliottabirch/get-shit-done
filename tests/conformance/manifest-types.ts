@@ -54,7 +54,7 @@ export type ExpectedOutcome =
 
 export interface ManifestEntry {
   /** Entry category; meta-coverage key is `${adapter}:${kind}:${name}`. */
-  kind: 'binB' | 'section-tuple' | 'noun-roundtrip' | 'rollback';
+  kind: 'binB' | 'section-tuple' | 'noun-roundtrip' | 'rollback' | 'seam-realness';
   /** Stable id; e.g. 'recordStateAppend:decision:scaffold' or 'STATE.md#Decisions:append'. */
   name: string;
   /** Human-readable summary; NOT the source of truth for expected behavior. */

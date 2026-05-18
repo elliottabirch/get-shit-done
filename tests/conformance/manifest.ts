@@ -640,6 +640,33 @@ export const CONFORMANCE_MANIFEST: readonly ManifestEntry[] = [
     },
     adr: 'D-2026-05-12-OQ06-TXN',
   },
+
+  // ============================================================================
+  // Phase 2 SEAM-06 — kind: 'seam-realness' entries
+  // Bodies filled progressively as handler-family migrations land in Plans 03-07.
+  // ============================================================================
+
+  // DEFECT-02 — large body (>64KB) byte-identical round-trip on both adapters
+  {
+    kind: 'seam-realness',
+    name: 'putRecord:large-body:round-trip',
+    description: 'putRecord + getRecord round-trip for body > 64KB; asserts byte-identical retrieval on both adapters (DEFECT-02)',
+    expected: {
+      markdown: { kind: 'presence' },
+      beads:    { kind: 'presence' },
+    },
+  },
+
+  // SEAM-04/05 — state.milestone-switch via registry dispatch (markdown side = byte-identical; beads side = bd-tier write reaches store)
+  {
+    kind: 'seam-realness',
+    name: 'state.milestone-switch:via-registry',
+    description: 'state.milestone-switch dispatched via full registry routes to configured adapter (SEAM-04 beads / SEAM-05 markdown byte-identical)',
+    expected: {
+      markdown: { kind: 'presence' },
+      beads:    { kind: 'presence' },
+    },
+  },
 ] as const;
 
 export type { ManifestEntry, AdapterName, ExpectedOutcome,
