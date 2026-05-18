@@ -640,8 +640,8 @@ export class MarkdownAdapter implements StorageAdapter {
 
   /**
    * D-03 (Phase 2 / SEAM-06): Public-interface replacement for the deleted
-   * _txnContextForPipeline() escape hatch. Returns the union of activeTxn
-   * touchedPaths and removedPaths, or an empty Set if no transaction is active.
+   * pipeline escape hatch. Returns the union of activeTxn touchedPaths and
+   * removedPaths, or an empty Set if no transaction is active.
    */
   getTouchedPaths(): Set<string> {
     if (!this.activeTxn) return new Set();
