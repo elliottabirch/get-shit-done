@@ -67,7 +67,36 @@ Plans:
   4. The conformance suite "seam-realness" manifest entry runs ALL migrated state-mutation handlers against MarkdownAdapter AND BeadsAdapter; pass rate ≥ 95% at merge. Any sub-95% handler is enumerated by name in a failure manifest file — not silently skipped or counted as "flaky." The large-body singleton test (DEFECT-02 / SEAM-06) is one of these entries and asserts byte-identical round-trip for bodies > 64KB against both adapters.
   5. `adapterFor` is either deleted from `helpers.ts` or present only as a documented deprecation stub that throws `NotYetMigratedError` at call time — it does not silently return a live adapter under any code path reachable from the SDK query registry.
 
-**Plans:** TBD (filled by /gsd-plan-phase)
+**Plans:** 7 plans
+Plans:
+
+**Wave 1**
+
+- [ ] 02-01-PLAN.md — Wave 0/1: getTouchedPaths interface + sibling BeadsAdapter impl + conformance schema extension (kind:'seam-realness') + paired-seam test scaffolds [SEAM-06, DEFECT-02]
+
+**Wave 2** *(blocked on Wave 1)*
+
+- [ ] 02-02-PLAN.md — pipeline.ts refactor: snapshot/getTouchedPaths/restore + hasSnapshot capability guard; pipeline.test.ts cleanup [SEAM-01, SEAM-02, SEAM-03]
+
+**Wave 3** *(blocked on Wave 2)*
+
+- [ ] 02-03-PLAN.md — state-mutation.ts (23 callsites) — TWO atomic commits per D-15: thread adapter + propagate StateWriteOutcome [SEAM-01, SEAM-03]
+
+**Wave 4** *(blocked on Wave 3)*
+
+- [ ] 02-04-PLAN.md — phase-lifecycle.ts (10) + spike-sketch.ts (7) + scratch.ts (6) — 3 atomic per-file commits [SEAM-01, SEAM-03]
+
+**Wave 5** *(blocked on Wave 4)*
+
+- [ ] 02-05-PLAN.md — named-docs.ts (6) + workstream.ts (4) + progress.ts (4) + config-mutation.ts (4) — 4 atomic per-file commits [SEAM-01, SEAM-03]
+
+**Wave 6** *(blocked on Wave 5)*
+
+- [ ] 02-06-PLAN.md — long-tail (20 files, 1-3 callsites each) grouped into 3 atomic commits by callsite count; CUMULATIVE GREP GATE proves all 28 handler-family files migrated [SEAM-01, SEAM-03]
+
+**Wave 7** *(blocked on Wave 6)*
+
+- [ ] 02-07-PLAN.md — closure: delete adapterFor + _adapterCache; fill ~30 seam-realness manifest bodies; DEFECT-02 large-body fixture; SEAM-04/SEAM-05 manual verification; phase gate [SEAM-01, SEAM-02, SEAM-04, SEAM-05, SEAM-06, DEFECT-02]
 
 ### Phase 3: Port upstream features
 

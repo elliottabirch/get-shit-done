@@ -522,11 +522,16 @@ export type ManifestEntryKind = 'binB' | 'section-tuple' | 'noun-roundtrip' | 'r
 
 ### 95% Pass Rate Computation Rule (D-12)
 
+> **Authoritative formula:** see `02-VALIDATION.md §"95% gate computation rule (SEAM-06)"`. The formula below is reproduced for convenience but VALIDATION.md is the source of truth.
+
 ```
-passRate = count(entries where kind !== 'known-gap') / total_entries × 100
+pass_rate = (entries where kind === 'seam-realness' AND test result PASS) / total kind:'seam-realness' entries
+gate: pass_rate >= 0.95
 ```
 
-Concretely: if there are 86 total entries (56 existing + 30 new), and 4 are `kind: 'known-gap'`, then `passRate = 82/86 = 95.3%`. Any handler that fails conformance in Phase 2 MUST be given a `kind: 'known-gap'` manifest entry with an `adr:` citation — it cannot be silently skipped.
+The denominator is the count of `kind: 'seam-realness'` entries (not all 86 entries — the v1.0 56 entries use other kinds and are gated by their own existing tests). The numerator is the count of seam-realness entries where the runtime test passes. Any handler whose runtime test fails MUST be re-classified as `kind: 'known-gap'` with a required `adr:` reference (D-12) — and is then EXCLUDED from the seam-realness denominator (a known-gap entry has a different `kind` string).
+
+Concretely: if 30 `kind: 'seam-realness'` entries exist and all 30 pass their runtime tests, `pass_rate = 30/30 = 100%`. If 2 fail and are re-classified to `kind: 'known-gap'`, the seam-realness count drops to 28, and `pass_rate = 28/28 = 100%`. The 95% gate exists to permit transient red status during a wave (e.g., 2/30 failing while a fix is being authored — `pass_rate = 28/30 = 93.3%` would FAIL the gate, forcing reclassification or fix).
 
 **Important:** The existing `withTransaction:mid-commit-replay` entry is already `kind: 'rollback'` with `expected.beads.kind = 'incomplete-per-Deferred-04'`. This is documented as a known-gap disposition within a `rollback` kind entry (not a separate `known-gap` kind entry). The "known-gap" disposition in D-12 means: when a Phase 2 seam-realness handler fails on one adapter, that entry gets `kind: 'known-gap'` as its kind field (not `kind: 'seam-realness'`), plus a required `adr:` cite. This matches the v1.0 pattern described in CONTEXT.md.
 
@@ -875,22 +880,27 @@ The SEAM-01 grep is necessary but not sufficient. A renamed helper (`internalAda
 
 ---
 
-## Open Questions
+## Open Questions (RESOLVED)
+
+> All three questions below were de facto resolved by the plan designs (02-01..02-03). Resolutions are recorded inline.
 
 1. **BeadsAdapter `getTouchedPaths` delivery mechanism**
    - What we know: BeadsAdapter's npm package is at `gsd-beads` (local at `~/code/gsd-beads`); it is NOT published to npm registry per CLAUDE.md; it is consumed via `require('gsd-beads')` from this repo's `node_modules`
    - What's unclear: whether the local npm link is symlinked or copied; whether a version bump + `npm install` is sufficient or requires a re-link
    - Recommendation: planner adds a Wave 0 task to check `ls -la node_modules/gsd-beads` and `cat node_modules/gsd-beads/package.json` to confirm the link type before planning the delivery mechanism
+   - **RESOLVED:** `file://` symlink delivery confirmed. **Plan 02-01 Task 2 Step 3** builds the sibling `gsd-beads` `dist` first; the fork's build picks up the new `getTouchedPaths` impl automatically via the existing symlink — no `npm install` and no version bump required for development. (Future cutover to a published gsd-beads is OUT OF SCOPE for Phase 2.)
 
 2. **Pipeline.ts adapter source for `wrapWithPipeline`**
    - What we know: `wrapWithPipeline` currently uses `adapterFor` to get an adapter; after D-01 it needs another source
    - What's unclear: which of the two approaches (pass adapter as param to `wrapWithPipeline` vs `options.getAdapter`) is cleaner given how the CLI entry point calls `wrapWithPipeline`
    - Recommendation: read the CLI entry point (`sdk/src/cli.ts` or similar) to confirm where `wrapWithPipeline` is called and what's available there before finalizing the approach
+   - **RESOLVED:** **Approach A selected** (pass adapter as a parameter to `wrapWithPipeline`). The caller already constructs the adapter in `createRegistry`, so passing it down is the cleanest — no closure-extract trickery, no `options.getAdapter?` indirection. **Implemented in Plan 02-02 Task 1** (the pipeline.ts refactor commit), with the new signature `wrapWithPipeline(registry, mutationCommands, options, adapter)` and the corresponding caller updates in `index.ts` / the CLI wiring.
 
 3. **`statePlannedPhase` double-registration**
    - What we know: `statePlannedPhase` is imported separately at index.ts:72 and also appears in the `stateHandlers` dict at `'state.planned-phase': statePlannedPhase`
    - What's unclear: whether this is intentional or a migration artifact from when some handlers were manually registered
    - Recommendation: trace the alias for `state.planned-phase` in `STATE_COMMAND_ALIASES` to confirm it's handled correctly
+   - **RESOLVED:** Treated as a migration artifact requiring runtime confirmation. **Plan 02-03 Task 1 Step 4** requires the executor to grep `index.ts` for both registration paths (the standalone import-and-register block AND the `stateHandlers` dict entry) and migrate BOTH in the same commit so the closure-wrapped handler is the only registration on the wire after the commit lands. The atomic-commit gate (D-15/D-18) ensures no intermediate state where the canonical name and an alias dispatch to different functions.
 
 ---
 

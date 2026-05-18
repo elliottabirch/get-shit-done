@@ -52,7 +52,7 @@ created: 2026-05-18
 | SEAM-03 | All migrated handlers receive `adapter: StorageAdapter` as first arg | Build (TypeScript) | `npm run build:sdk-only` exits 0 | N/A | ⬜ pending |
 | SEAM-04 | bd-tier round-trip: `state.milestone-switch` under `adapter: "beads"` reaches bd | Conformance | `npm run test:conformance:paired -- -t "seam-realness"` | ❌ Wave 0 | ⬜ pending |
 | SEAM-05 | markdown byte-identical regression vs upstream golden | Conformance | `npm run test:conformance:paired -- -t "seam-realness"` (markdown side) | ❌ Wave 0 | ⬜ pending |
-| SEAM-06 | All state-mutation handlers exercised against both adapters; ≥95% pass | Conformance | `npm run test:conformance:paired` full manifest; gate computes `(non-known-gap entries / total) >= 0.95` | ❌ Wave 0 | ⬜ pending |
+| SEAM-06 | All state-mutation handlers exercised against both adapters; ≥95% pass | Conformance | `npm run test:conformance:paired` full manifest; gate computes vitest `numPassedTests / (numPassedTests + numFailedTests) >= 0.95` over `tests/conformance/paired-seam-*.test.ts` (see authoritative script below) | ❌ Wave 0 | ⬜ pending |
 | DEFECT-02 | >64KB body byte-identical round-trip on both adapters | Conformance (large-body fixture) | `npm run test:conformance:paired -- -t "large-body"` | ❌ Wave 0 | ⬜ pending |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
@@ -98,11 +98,40 @@ SEAM-01's grep gate is necessary but not sufficient. A renamed helper would pass
 **95% gate computation rule (SEAM-06):**
 
 ```
-pass_rate = (entries where kind != 'known-gap' AND test result PASS) / total kind:'seam-realness' entries
+pass_rate = (entries where kind === 'seam-realness' AND test result PASS) / total kind:'seam-realness' entries
 gate: pass_rate >= 0.95
 ```
 
-The rule is reproducible from `tests/conformance/manifest.ts` alone — no out-of-band counter file. Any sub-95% handler MUST be enumerated by name as `kind: 'known-gap'` with a required `adr:` reference (per D-12). Silent skip is impossible because `meta-coverage.test.ts` enforces manifest ↔ test-registry bidirectional invariant.
+**Authoritative script** — pass/fail counts come from the **vitest test runner**, not from manifest grep. (Manifest grep alone cannot tell pass/fail at runtime; see DECISION TRAIL below for the why.) Plan 02-07 Task 5 Step 2 is the canonical execution site:
+
+```bash
+cd /Volumes/code/get-shit-done
+
+# Informational: total seam-realness manifest entries (sanity check; not the gate)
+TOTAL_MANIFEST=$(grep -c "kind: 'seam-realness'" tests/conformance/manifest.ts)
+echo "Total seam-realness manifest entries (informational): $TOTAL_MANIFEST"
+
+# Authoritative: run paired-seam-* with vitest JSON reporter, read pass/fail directly.
+npx vitest run --reporter=json --outputFile=/tmp/seam-results.json tests/conformance/paired-seam-*.test.ts
+[ -f /tmp/seam-results.json ] || { echo "FAIL: /tmp/seam-results.json was not produced"; exit 1; }
+
+PASS=$(node -e "const r=require('/tmp/seam-results.json'); process.stdout.write(String(r.numPassedTests))")
+FAIL=$(node -e "const r=require('/tmp/seam-results.json'); process.stdout.write(String(r.numFailedTests))")
+
+# Gate: pass_rate = numPassedTests / (numPassedTests + numFailedTests) >= 0.95
+node -e "
+const p = $PASS, f = $FAIL;
+if (p + f === 0) { console.error('FAIL: zero seam tests ran'); process.exit(1); }
+const rate = p / (p + f);
+console.log('SEAM-06 pass rate:', (rate * 100).toFixed(1) + '%');
+if (rate < 0.95) { console.error('FAIL: pass rate', rate, '< 0.95'); process.exit(1); }
+console.log('SEAM-06 gate: PASS');
+"
+```
+
+**Why vitest JSON, not manifest grep:** A `kind: 'known-gap'` entry has a different `kind` string than `kind: 'seam-realness'`, so it is NOT in the seam-realness manifest count to begin with. Subtracting "known-gap entries" from "seam-realness entries" via grep would always yield the original seam-realness count (the two grep patterns count disjoint sets), making any pass-rate computation that uses both as `pass_rate = (T - K) / T` trivially equal to 1.0 — a self-vacuous gate. The vitest JSON output, by contrast, gives runtime pass/fail counts that reflect actual test outcomes. Re-classifying a failing entry from `seam-realness` to `known-gap` removes it from BOTH the manifest count AND the paired-seam-* test run (since paired-seam-* is gated on `kind: 'seam-realness'`), correctly tightening the denominator without changing the numerator's pass count.
+
+The rule is reproducible from `tests/conformance/manifest.ts` plus the vitest output — no out-of-band counter file. Any failing seam-realness handler MUST be re-classified as `kind: 'known-gap'` with a required `adr:` reference (per D-12); silent skip is impossible because `meta-coverage.test.ts` enforces manifest ↔ test-registry bidirectional invariant.
 
 ---
 
