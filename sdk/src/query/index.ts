@@ -136,6 +136,8 @@ import {
   type GSDTemplateFillEvent,
 } from '../types.js';
 import type { QueryHandler, QueryResult } from './utils.js';
+import { wrapWithPipeline } from './pipeline.js';
+import type { PipelineOptions } from './pipeline.js';
 
 // ─── Re-exports ────────────────────────────────────────────────────────────
 
@@ -859,6 +861,14 @@ export function createRegistry(opts?: {
   registry.register('codebase-docs.exists', stubHandler);
   registry.register('config-query', stubHandler);
   registry.register('phase.get-summaries', stubHandler);
+
+  // Wire pipeline middleware so wrapWithPipeline has access to the adapter (D-02/Approach A).
+  // The options here default to dryRun=false; callers that need dry-run wrap the registry
+  // themselves with { dryRun: true } AFTER createRegistry returns. Pipeline is wired here
+  // to ensure the adapter reference is available when callers call wrapWithPipeline externally.
+  // For now, wiring with empty options is additive — a no-op wrapper that threads adapter through.
+  const pipelineOpts: PipelineOptions = {};
+  wrapWithPipeline(registry, QUERY_MUTATION_COMMANDS, pipelineOpts, adapter);
 
   return registry;
 }
