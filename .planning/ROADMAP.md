@@ -19,7 +19,7 @@ The rest of v1.1 is necessary but secondary. A 351-commit upstream rebase was co
 - Integer phases (1–4): canonical scope for v1.1.
 - Decimal phases (e.g. 2.1) reserved for urgent insertions during execution via `/gsd-insert-phase`.
 
-- [ ] **Phase 1: Land the rebase** — Fast-forward `feat/storage-adapter` to `rebase/onto-upstream-2026-05-16`, read and accept the diff, verify build green + ≥97% test pass rate under default adapter. *(this repo)*
+- [x] **Phase 1: Land the rebase** — Fast-forward `feat/storage-adapter` to `rebase/onto-upstream-2026-05-16`, read and accept the diff, verify build green + ≥97% test pass rate under default adapter. *(this repo)* (completed 2026-05-18)
 - [ ] **Phase 2: Make the seam real** — Replace all 101 `adapterFor(projectDir)` callsites with adapter threaded through handler signatures; delete or stub the shortcut; ship the seam-realness conformance suite under both adapters. *(this repo — bd `get-shit-done-qt2`)*
 - [ ] **Phase 3: Port upstream features** — Restore the 7 upstream features dropped during "take-theirs" rebase resolutions: phase_status, mode field, strict argv, curated progress, validate.health rules, archived-dir handling, workstream threading. *(this repo — bd `get-shit-done-s93` for PORT-01)*
 - [ ] **Phase 4: Close out defects, divergences, integration parity, and misc** — Diagnose and fix all VERIFY goldens (investigate before regenerating), MISC regressions, and DEFECT/DIVERGE items (most resolve as SEAM acceptance evidence after Phase 2). *(this repo)*
@@ -41,7 +41,7 @@ The rest of v1.1 is necessary but secondary. A 351-commit upstream rebase was co
   4. `git rebase main` from the landed `feat/storage-adapter` tip completes with conflicts only in adapter-interface seam files; zero conflicts in pure business-logic files.
   5. Both `fork/v1.0-shipped` tag and `rebase/onto-upstream-2026-05-16` checkpoint branch remain present on `origin` throughout this phase — confirmed via `git ls-remote origin` before closing Phase 1.
 
-**Plans:** 1/2 plans executed
+**Plans:** 2/2 plans complete
 Plans:
 **Wave 1**
 
@@ -49,7 +49,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 01-02-PLAN.md — Wave 2/3: human-gated diff review (01-REVIEW-NOTES.md) + force-push cutover + post-cutover REBASE-05 safety-ref confirmation
+- [x] 01-02-PLAN.md — Wave 2/3: human-gated diff review (01-REVIEW-NOTES.md) + force-push cutover + post-cutover REBASE-05 safety-ref confirmation
 
 ### Phase 2: Make the seam real
 

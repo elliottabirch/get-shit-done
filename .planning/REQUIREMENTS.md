@@ -36,7 +36,7 @@ The headline work for v1.1. Replace 101 `adapterFor(projectDir)` callsites with 
 ### REBASE — Land the rebase work
 
 - [x] **REBASE-01**: All 351 commits from `rebase/onto-upstream-2026-05-16` land on `feat/storage-adapter` (fast-forward or replace).
-- [ ] **REBASE-02**: `feat/storage-adapter` tests run green at ≥97% under the DEFAULT adapter (markdown). Beads-mode test pass rate becomes a SEAM acceptance criterion (where it should be near 100%).
+- [x] **REBASE-02**: `feat/storage-adapter` tests run green at ≥97% under the DEFAULT adapter (markdown). Beads-mode test pass rate becomes a SEAM acceptance criterion (where it should be near 100%).
 - [x] **REBASE-03**: TypeScript build (`npm run build:sdk-only`) passes with zero errors.
 - [x] **REBASE-04**: `git rebase main` from the cutover branch produces no conflicts (clean replayability check).
 - [x] **REBASE-05**: `fork/v1.0-shipped` tag and `rebase/onto-upstream-2026-05-16` checkpoint branch remain in `origin` for safety until milestone closes.
@@ -123,7 +123,7 @@ Every v1.1 REQ-ID maps to exactly one phase. Coverage: 33/33 unique (35 rows; DE
 | REQ-ID | Phase | Status | Notes |
 |--------|-------|--------|-------|
 | REBASE-01 | Phase 1 — Land the rebase | Complete | |
-| REBASE-02 | Phase 1 — Land the rebase | Pending | |
+| REBASE-02 | Phase 1 — Land the rebase | Complete | |
 | REBASE-03 | Phase 1 — Land the rebase | Complete | |
 | REBASE-04 | Phase 1 — Land the rebase | Complete | |
 | REBASE-05 | Phase 1 — Land the rebase | Complete | |
