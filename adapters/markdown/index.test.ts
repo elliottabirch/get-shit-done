@@ -153,6 +153,82 @@ describe('MarkdownAdapter', () => {
   });
 });
 
+// ============================================================================
+// Phase 2 Plan 02-01 — getTouchedPaths() TDD RED tests (D-02/D-03/SEAM-06)
+// ============================================================================
+describe('getTouchedPaths (D-03 Phase 2)', () => {
+  let projectDir: string;
+  let adapter: MarkdownAdapter;
+
+  beforeEach(async () => {
+    projectDir = await makeTmpProject();
+    adapter = new MarkdownAdapter(projectDir);
+  });
+
+  afterEach(async () => {
+    await rm(projectDir, { recursive: true, force: true });
+  });
+
+  it('returns an empty Set outside any transaction', () => {
+    const result = adapter.getTouchedPaths();
+    expect(result).toBeInstanceOf(Set);
+    expect(result.size).toBe(0);
+  });
+
+  it('returns paths written via putRecord during withTransaction', async () => {
+    let touched: Set<string> = new Set();
+    await adapter.withTransaction(async () => {
+      await adapter.putRecord('A.md', '# A');
+      touched = adapter.getTouchedPaths();
+    });
+    expect(touched.has('A.md')).toBe(true);
+  });
+
+  it('returns paths removed via removeRecord during withTransaction', async () => {
+    // seed a file first so removeRecord has something to remove
+    await adapter.putRecord('B.md', '# B');
+    let touched: Set<string> = new Set();
+    await adapter.withTransaction(async () => {
+      await adapter.removeRecord('B.md');
+      touched = adapter.getTouchedPaths();
+    });
+    expect(touched.has('B.md')).toBe(true);
+  });
+
+  it('returns union of putRecord and removeRecord paths inside the same transaction', async () => {
+    await adapter.putRecord('B.md', '# B');
+    let touched: Set<string> = new Set();
+    await adapter.withTransaction(async () => {
+      await adapter.putRecord('A.md', '# A');
+      await adapter.removeRecord('B.md');
+      touched = adapter.getTouchedPaths();
+    });
+    expect(touched.has('A.md')).toBe(true);
+    expect(touched.has('B.md')).toBe(true);
+  });
+
+  it('returns a fresh Set each call (mutations do not corrupt internal state)', async () => {
+    let set1: Set<string> = new Set();
+    let set2: Set<string> = new Set();
+    await adapter.withTransaction(async () => {
+      await adapter.putRecord('A.md', '# A');
+      set1 = adapter.getTouchedPaths();
+      set1.add('SHOULD_NOT_APPEAR.md');
+      set2 = adapter.getTouchedPaths();
+    });
+    expect(set2.has('SHOULD_NOT_APPEAR.md')).toBe(false);
+    expect(set2.has('A.md')).toBe(true);
+  });
+
+  it('_txnContextForPipeline no longer exists on MarkdownAdapter', () => {
+    expect(typeof (adapter as unknown as Record<string, unknown>)['_txnContextForPipeline']).toBe('undefined');
+  });
+
+  it('_realReadForPipeline no longer exists on MarkdownAdapter', () => {
+    expect(typeof (adapter as unknown as Record<string, unknown>)['_realReadForPipeline']).toBe('undefined');
+  });
+});
+
 describe('normalize (D-13 additive contract)', () => {
   let adapter: MarkdownAdapter;
 
