@@ -133,7 +133,7 @@ The `readModifyWriteRoadmapMd` test failure in `adapters/markdown/index.test.ts`
 | Conformance paired | vitest --config vitest.conformance.config.ts | 193 pass + 4 todo (same pre-existing 4 failures) |
 | Meta-coverage | vitest --config vitest.meta-coverage.config.ts | 3/3 PASS |
 
-## Self-Check
+## Self-Check: PASSED
 
 Checking created files exist:
 - adapters/types.ts: FOUND
@@ -144,5 +144,5 @@ Checking created files exist:
 - /Volumes/code/gsd-beads/src/index.ts: FOUND
 
 Checking commits exist:
-- Fork commits: 8ebbf0b6, a16eed14, d081b025, e793a423
-- Sibling commits: 89b608c, e08a76e
+- Fork: 8ebbf0b6 (RED), a16eed14 (GREEN), d081b025 (fix), e793a423 (Task 3), 76d04d5b (SUMMARY): ALL FOUND
+- Sibling: 89b608c (RED), e08a76e (GREEN): verified via git log in /Volumes/code/gsd-beads
