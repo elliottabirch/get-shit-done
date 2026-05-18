@@ -15,14 +15,15 @@
  * import { wrapWithPipeline } from './pipeline.js';
  *
  * const registry = createRegistry();
- * wrapWithPipeline(registry, MUTATION_COMMANDS, { dryRun: true });
+ * wrapWithPipeline(registry, MUTATION_COMMANDS, { dryRun: true }, adapter);
  * // mutations now return { data: { dry_run: true, diff: { ... } } }
  * ```
  */
 
-import { join } from 'node:path';
 import type { QueryResult } from './utils.js';
 import type { QueryRegistry } from './registry.js';
+import type { StorageAdapter } from '../../../adapters/types.js';
+import { hasSnapshot } from '../../../adapters/types.js';
 
 // ─── Types ─────────────────────────────────────────────────────────────────
 
@@ -78,11 +79,14 @@ function diffPlanningState(
  * @param registry - The registry whose handlers to wrap
  * @param mutationCommands - Set of command names that perform mutations
  * @param options - Pipeline configuration
+ * @param adapter - The StorageAdapter instance (from createRegistry's closure). Used by the
+ *   dry-run block to call snapshot/restore/getTouchedPaths without going through adapterFor.
  */
 export function wrapWithPipeline(
   registry: QueryRegistry,
   mutationCommands: Set<string>,
   options: PipelineOptions,
+  adapter: StorageAdapter,
 ): void {
   const { dryRun = false, onPrepare, onFinalize } = options;
 
@@ -114,40 +118,55 @@ export function wrapWithPipeline(
       let result: QueryResult;
 
       if (dryRun && isMutation) {
-        // ─── Dry-run: adapter-backed withTransaction ──────────────────
-        const { adapterFor } = await import('./helpers.js');
-        const adapter = await adapterFor(projectDir);
+        // ─── Dry-run: snapshot/restore two-pass approach (D-02) ──────
+        const beforeMap = new Map<string, string | null>();
+        const afterMap = new Map<string, string | null>();
+        let touchedPaths: Set<string> = new Set();
 
         let diff: Record<string, { before: string | null; after: string | null }> = {};
         let changedFiles: string[] = [];
 
-        // Cast to access MarkdownAdapter's dryRun option (not on interface, discretionary impl)
-        const ext = adapter as unknown as {
-          withTransaction<T>(fn: () => Promise<T>, opts?: { dryRun?: boolean }): Promise<T>;
-          _txnContextForPipeline?: () => { touchedPaths: Set<string>; removedPaths: Set<string> } | undefined;
-          _realReadForPipeline?: (relPath: string) => Promise<string | null>;
-        };
-
-        await ext.withTransaction(async () => {
-          // Run the real mutation against the shadow-dir-aware adapter.
-          await original(args, projectDir);
-
-          // Reach into the adapter for touched paths + real-read escape hatch.
-          // Both are MarkdownAdapter-internal (underscore prefix signals pipeline-only contract).
-          const ctx = ext._txnContextForPipeline?.();
-          const realRead = ext._realReadForPipeline;
-          if (!ctx || !realRead) return;  // non-MarkdownAdapter: leave diff empty
-
-          const allTouched = new Set<string>([...ctx.touchedPaths, ...ctx.removedPaths]);
-          const beforeMap = new Map<string, string | null>();
-          const afterMap = new Map<string, string | null>();
-          for (const p of allTouched) {
-            beforeMap.set(p, await realRead.call(ext, p));
-            afterMap.set(p, ctx.removedPaths.has(p) ? null : await adapter.getRecord(p));
+        if (hasSnapshot(adapter)) {
+          // MarkdownAdapter path: snapshot then mutate inside txn (rollback discards
+          // shadow-dir), capture afterMap inside txn (shadow-dir reads = post-mutation),
+          // then restore from snapshot, then capture beforeMap (post-restore = pre-mutation).
+          const snapId = await adapter.snapshot();
+          let restored = false;
+          try {
+            await adapter.withTransaction(async () => {
+              await original(args, projectDir);
+              touchedPaths = adapter.getTouchedPaths();
+              for (const p of touchedPaths) {
+                afterMap.set(p, await adapter.getRecord(p));
+              }
+            });
+            // Pass 2: restore then read before-images from pre-mutation state.
+            await adapter.restore(snapId);
+            restored = true;
+            for (const p of touchedPaths) {
+              beforeMap.set(p, await adapter.getRecord(p));
+            }
+          } finally {
+            // If we threw before the explicit restore landed, attempt cleanup now.
+            // Already-restored case: the second restore is a no-op or harmless throw,
+            // which we absorb because the snapshot is already gone.
+            if (!restored) {
+              try { await adapter.restore(snapId); } catch { /* best-effort */ }
+            }
           }
-          diff = diffPlanningState(beforeMap, afterMap);
-          changedFiles = Object.keys(diff).map(k => k.replace(/^\.planning\//, ''));
-        }, { dryRun: true });
+        } else {
+          // BeadsAdapter fallback (capabilities.snapshot=false): use withTransaction
+          // for rollback only. Diff is coarse-grained per D-04. touchedPaths populated
+          // from BeadsAdapter's best-effort impl (synthetic bd:// paths).
+          await adapter.withTransaction(async () => {
+            await original(args, projectDir);
+            touchedPaths = adapter.getTouchedPaths();
+          });
+          // beforeMap and afterMap remain empty; diff will be {} below.
+        }
+
+        diff = diffPlanningState(beforeMap, afterMap);
+        changedFiles = Object.keys(diff).map(k => k.replace(/^\.planning\//, ''));
 
         result = {
           data: {
