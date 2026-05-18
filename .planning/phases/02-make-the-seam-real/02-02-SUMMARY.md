@@ -148,6 +148,18 @@ completed: 2026-05-18
 
 No stubs. All functionality is fully implemented — the snapshot/restore two-pass produces real before/after diffs for MarkdownAdapter; BeadsAdapter fallback intentionally returns empty diff per D-04.
 
+## Self-Check: PASSED
+
+Checking created/modified files exist:
+- sdk/src/query/pipeline.ts: FOUND
+- sdk/src/query/index.ts: FOUND
+- sdk/src/query/pipeline.test.ts: FOUND
+- .planning/phases/02-make-the-seam-real/02-02-SUMMARY.md: FOUND
+
+Checking commits exist:
+- 67edff45 (Task 1+2 refactor): FOUND
+- 7abfa300 (SUMMARY docs): FOUND
+
 ---
 *Phase: 02-make-the-seam-real*
 *Completed: 2026-05-18*
