@@ -73,6 +73,8 @@ export const VALID_CONFIG_KEYS: ReadonlySet<string> = new Set([
   'runtime',
   // Phase 8 (DIST-01): storage adapter selection
   'storage.adapter',
+  // #3391 — configurable PR body sections for ship workflow
+  'ship.pr_body_sections',
 ]);
 
 /**
