@@ -23,7 +23,6 @@ import { join, relative } from 'node:path';
 import type { StorageAdapter } from '../../../adapters/types.js';
 import { GSDError, ErrorClassification } from '../errors.js';
 import {
-  adapterFor,
   escapeRegex,
   normalizeMd,
   normalizePhaseName,
@@ -62,7 +61,7 @@ import {
   updatePerformanceMetrics,
   decrementStateTotalPhases,
 } from './phase-helpers.js';
-import type { QueryHandler, QueryResult } from './utils.js';
+import type { QueryResult } from './utils.js';
 
 // ─── Null byte validation ────────────────────────────────────────────────
 
@@ -183,6 +182,7 @@ export function replaceInCurrentMilestone(
  * @returns The final written content
  */
 export async function readModifyWriteRoadmapMd(
+  adapter: StorageAdapter,
   projectDir: string,
   modifier: (content: string) => string | Promise<string>,
   workstream?: string,
@@ -190,7 +190,6 @@ export async function readModifyWriteRoadmapMd(
   const roadmapPath = planningPaths(projectDir, workstream).roadmap;
   const lockPath = await acquireStateLock(roadmapPath);
   try {
-    const adapter = await adapterFor(projectDir);
     const roadmapRel = planningRelativePath(workstream, 'ROADMAP.md');
     const content = (await adapter.getRecord(roadmapRel)) ?? '';
     const modified = await modifier(content);
@@ -213,14 +212,13 @@ export async function readModifyWriteRoadmapMd(
  * @param projectDir - Project root directory
  * @returns QueryResult with { phase_number, padded, name, slug, directory, naming_mode }
  */
-export const phaseAdd: QueryHandler = async (args, projectDir, workstream) => {
+export async function phaseAdd(adapter: StorageAdapter, args: string[], projectDir: string, workstream?: string): Promise<QueryResult> {
   const description = args[0];
   if (!description) {
     throw new GSDError('description required for phase add', ErrorClassification.Validation);
   }
   assertNoNullBytes(description, 'description');
 
-  const adapter = await adapterFor(projectDir);
   const configPath = planningRelativePath(workstream, 'config.json');
   let config: Record<string, unknown> = {};
   try {
@@ -292,7 +290,7 @@ export const phaseAdd: QueryHandler = async (args, projectDir, workstream) => {
  *
  * @param args - Either `--descriptions` followed by a JSON array string, or one description per arg (`--raw` ignored)
  */
-export const phaseAddBatch: QueryHandler = async (args, projectDir, workstream) => {
+export async function phaseAddBatch(adapter: StorageAdapter, args: string[], projectDir: string, workstream?: string): Promise<QueryResult> {
   let descriptions: string[];
   const descIdx = args.indexOf('--descriptions');
   if (descIdx !== -1 && args[descIdx + 1] !== undefined) {
@@ -321,7 +319,6 @@ export const phaseAddBatch: QueryHandler = async (args, projectDir, workstream) 
     }
   }
 
-  const adapter = await adapterFor(projectDir);
   const roadmapPath = planningRelativePath(workstream, 'ROADMAP.md');
   if (!(await adapter.exists(roadmapPath))) {
     throw new GSDError('ROADMAP.md not found', ErrorClassification.Validation);
@@ -401,7 +398,7 @@ export const phaseAddBatch: QueryHandler = async (args, projectDir, workstream) 
  * @param projectDir - Project root directory
  * @returns QueryResult with { phase_number, after_phase, name, slug, directory }
  */
-export const phaseInsert: QueryHandler = async (args, projectDir, workstream) => {
+export async function phaseInsert(adapter: StorageAdapter, args: string[], projectDir: string, workstream?: string): Promise<QueryResult> {
   const afterPhase = args[0];
   const description = args[1];
 
@@ -411,7 +408,6 @@ export const phaseInsert: QueryHandler = async (args, projectDir, workstream) =>
   assertNoNullBytes(afterPhase, 'afterPhase');
   assertNoNullBytes(description, 'description');
 
-  const adapter = await adapterFor(projectDir);
   const slug = generateSlugInternal(description);
   let decimalPhase = '';
   let dirName = '';
@@ -541,6 +537,7 @@ async function findPhaseDirAdapter(
  * Migrated to adapter in Phase 4, Plan 02.
  */
 async function findPhaseDir(
+  adapter: StorageAdapter,
   projectDir: string,
   phase: string,
   workstream?: string,
@@ -549,7 +546,6 @@ async function findPhaseDir(
   const normalized = normalizePhaseName(phase);
 
   try {
-    const adapter = await adapterFor(projectDir);
     const phasesRel = planningRelativePath(workstream, 'phases');
     const refs = await adapter.listCollection(phasesRel);
     const dirNames: string[] = [];
@@ -605,7 +601,7 @@ function normalizeScaffoldArgs(args: string[]): string[] {
   return [type, phase, ...(name !== undefined && name !== '' ? [name] : [])];
 }
 
-export const phaseScaffold: QueryHandler = async (args, projectDir, workstream) => {
+export async function phaseScaffold(adapter: StorageAdapter, args: string[], projectDir: string, workstream?: string): Promise<QueryResult> {
   const normalized = normalizeScaffoldArgs(args);
   const type = normalized[0];
   const phase = normalized[1];
@@ -630,7 +626,6 @@ export const phaseScaffold: QueryHandler = async (args, projectDir, workstream) 
     assertNoNullBytes(name, 'name');
   }
 
-  const adapter = await adapterFor(projectDir);
   const padded = phase ? normalizePhaseName(phase) : '00';
   const today = new Date().toISOString().split('T')[0];
 
@@ -719,14 +714,13 @@ export const phaseScaffold: QueryHandler = async (args, projectDir, workstream) 
  * @param projectDir - Project root directory
  * @returns QueryResult with { removed, directory_deleted, renamed_directories, roadmap_updated, state_updated }
  */
-export const phaseRemove: QueryHandler = async (args, projectDir, workstream) => {
+export async function phaseRemove(adapter: StorageAdapter, args: string[], projectDir: string, workstream?: string): Promise<QueryResult> {
   const targetPhase = args[0];
   if (!targetPhase) {
     throw new GSDError('phase number required for phase remove', ErrorClassification.Validation);
   }
   assertNoNullBytes(targetPhase, 'targetPhase');
 
-  const adapter = await adapterFor(projectDir);
   const roadmapPath = planningRelativePath(workstream, 'ROADMAP.md');
   if (!(await adapter.exists(roadmapPath))) {
     throw new GSDError('ROADMAP.md not found', ErrorClassification.Validation);
@@ -829,14 +823,13 @@ function stateReplaceFieldWithFallback(
  * @param projectDir - Project root directory
  * @returns QueryResult with completion details and warnings
  */
-export const phaseComplete: QueryHandler = async (args, projectDir, workstream) => {
+export async function phaseComplete(adapter: StorageAdapter, args: string[], projectDir: string, workstream?: string): Promise<QueryResult> {
   const phaseNum = args[0];
   if (!phaseNum) {
     throw new GSDError('phase number required for phase complete', ErrorClassification.Validation);
   }
   assertNoNullBytes(phaseNum, 'phaseNum');
 
-  const adapter = await adapterFor(projectDir);
   const today = new Date().toISOString().split('T')[0];
 
   // Step A: Validate phase exists and get info via adapter
@@ -1041,8 +1034,7 @@ export const phaseComplete: QueryHandler = async (args, projectDir, workstream) 
  * @param projectDir - Project root directory
  * @returns QueryResult with { cleared: count }
  */
-export const phasesClear: QueryHandler = async (args, projectDir, workstream) => {
-  const adapter = await adapterFor(projectDir);
+export async function phasesClear(adapter: StorageAdapter, args: string[], projectDir: string, workstream?: string): Promise<QueryResult> {
   const phasesPath = planningRelativePath(workstream, 'phases');
   const confirm = Array.isArray(args) && args.includes('--confirm');
   let cleared = 0;
@@ -1273,7 +1265,7 @@ function extractOneLinerFromBody(content: string): string | null {
  * Marks a milestone complete — archives ROADMAP/REQUIREMENTS, creates MILESTONES.md entry,
  * updates STATE.md, optionally archives phase directories. All via adapter.
  */
-export const milestoneComplete: QueryHandler = async (args, projectDir, workstream) => {
+export async function milestoneComplete(adapter: StorageAdapter, args: string[], projectDir: string, workstream?: string): Promise<QueryResult> {
   const version = args[0];
   if (!version) {
     throw new GSDError('version required for milestone complete (e.g., v1.0)', ErrorClassification.Validation);
@@ -1282,7 +1274,6 @@ export const milestoneComplete: QueryHandler = async (args, projectDir, workstre
 
   const nameOpt = parseMultiwordArg(args, 'name');
   const archivePhasesFlag = args.includes('--archive-phases');
-  const adapter = await adapterFor(projectDir);
   const today = new Date().toISOString().split('T')[0]!;
   const milestoneName = nameOpt || version;
 

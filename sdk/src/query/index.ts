@@ -488,12 +488,12 @@ export function createRegistry(opts?: {
   const phaseHandlers: Record<string, QueryHandler> = {
     'phase.list-plans': phaseListPlans,
     'phase.list-artifacts': phaseListArtifacts,
-    'phase.add': phaseAdd,
-    'phase.add-batch': phaseAddBatch,
-    'phase.insert': phaseInsert,
-    'phase.remove': phaseRemove,
-    'phase.complete': phaseComplete,
-    'phase.scaffold': phaseScaffold,
+    'phase.add': (args, pd, ws) => phaseAdd(adapter, args, pd, ws),
+    'phase.add-batch': (args, pd, ws) => phaseAddBatch(adapter, args, pd, ws),
+    'phase.insert': (args, pd, ws) => phaseInsert(adapter, args, pd, ws),
+    'phase.remove': (args, pd, ws) => phaseRemove(adapter, args, pd, ws),
+    'phase.complete': (args, pd, ws) => phaseComplete(adapter, args, pd, ws),
+    'phase.scaffold': (args, pd, ws) => phaseScaffold(adapter, args, pd, ws),
     'phase.next-decimal': (args, projectDir, ws) => phaseNextDecimal(adapter, args, projectDir, ws),
   };
 
@@ -508,7 +508,7 @@ export function createRegistry(opts?: {
 
   const phasesHandlers: Record<string, QueryHandler> = {
     'phases.list': (args, projectDir, ws) => phasesList(adapter, args, projectDir, ws),
-    'phases.clear': phasesClear,
+    'phases.clear': (args, pd, ws) => phasesClear(adapter, args, pd, ws),
     'phases.archive': (args, projectDir, ws) => phasesArchive(adapter, args, projectDir, ws),
   };
 
@@ -570,8 +570,8 @@ export function createRegistry(opts?: {
   registry.register('list.todos', listTodos);
   registry.register('todo.complete', todoComplete);
   registry.register('todo complete', todoComplete);
-  registry.register('milestone.complete', milestoneComplete);
-  registry.register('milestone complete', milestoneComplete);
+  registry.register('milestone.complete', (args, pd, ws) => milestoneComplete(adapter, args, pd, ws));
+  registry.register('milestone complete', (args, pd, ws) => milestoneComplete(adapter, args, pd, ws));
   // Phase 2 Plan 02-03 Task 1: summaryExtract + historyDigest migrated to
   // adapter-as-first-arg signature. Closure wrappers thread the adapter from
   // createRegistry's opts. All three aliases preserved.
@@ -744,13 +744,13 @@ export function createRegistry(opts?: {
   // Debug session (covers execute-phase debug archive, gsd-debugger 3 leaks)
   registry.register('debug.archive', (args, projectDir, ws) => debugArchive(args, projectDir, ws));
   // Spike/sketch (covers spike 3, spike-wrap-up 3, sketch 2, sketch-wrap-up 1)
-  registry.register('spike.get-manifest', (args, projectDir, ws) => spikeGetManifest(args, projectDir, ws));
-  registry.register('spike.get-conventions', (args, projectDir, ws) => spikeGetConventions(args, projectDir, ws));
-  registry.register('spike.put-wrap-up', (args, projectDir, ws) => spikePutWrapUp(args, projectDir, ws));
-  registry.register('spike.put-conventions', (args, projectDir, ws) => spikePutConventions(args, projectDir, ws));
-  registry.register('sketch.get-manifest', (args, projectDir, ws) => sketchGetManifest(args, projectDir, ws));
-  registry.register('sketch.get-conventions', (args, projectDir, ws) => sketchGetConventions(args, projectDir, ws));
-  registry.register('sketch.put-wrap-up', (args, projectDir, ws) => sketchPutWrapUp(args, projectDir, ws));
+  registry.register('spike.get-manifest', (args, pd, ws) => spikeGetManifest(adapter, args, pd, ws));
+  registry.register('spike.get-conventions', (args, pd, ws) => spikeGetConventions(adapter, args, pd, ws));
+  registry.register('spike.put-wrap-up', (args, pd, ws) => spikePutWrapUp(adapter, args, pd, ws));
+  registry.register('spike.put-conventions', (args, pd, ws) => spikePutConventions(adapter, args, pd, ws));
+  registry.register('sketch.get-manifest', (args, pd, ws) => sketchGetManifest(adapter, args, pd, ws));
+  registry.register('sketch.get-conventions', (args, pd, ws) => sketchGetConventions(adapter, args, pd, ws));
+  registry.register('sketch.put-wrap-up', (args, pd, ws) => sketchPutWrapUp(adapter, args, pd, ws));
   // Thread/seed/todo (covers thread 1, plant-seed 1, add-todo 1)
   registry.register('thread.add', (args, projectDir, ws) => threadAdd(args, projectDir, ws));
   registry.register('seed.add', (args, projectDir, ws) => seedAdd(args, projectDir, ws));
@@ -766,12 +766,12 @@ export function createRegistry(opts?: {
   registry.register('next-call-count.get', (args, projectDir, ws) => nextCallCountGetHandler(args, projectDir, ws));
   registry.register('next-call-count.incr', (args, projectDir, ws) => nextCallCountIncrHandler(args, projectDir, ws));
   // Scratch verbs (Phase 5 D-20 — PRIMITIVES-09)
-  registry.register('discuss.checkpoint.put', (args, projectDir, ws) => discussCheckpointPut(args, projectDir, ws));
-  registry.register('discuss.checkpoint.get', (args, projectDir, ws) => discussCheckpointGet(args, projectDir, ws));
-  registry.register('discuss.checkpoint.delete', (args, projectDir, ws) => discussCheckpointDelete(args, projectDir, ws));
-  registry.register('discuss.questions.put', (args, projectDir, ws) => discussQuestionsPut(args, projectDir, ws));
-  registry.register('discuss.questions.get', (args, projectDir, ws) => discussQuestionsGet(args, projectDir, ws));
-  registry.register('discuss.questions.delete', (args, projectDir, ws) => discussQuestionsDelete(args, projectDir, ws));
+  registry.register('discuss.checkpoint.put', (args, pd, ws) => discussCheckpointPut(adapter, args, pd, ws));
+  registry.register('discuss.checkpoint.get', (args, pd, ws) => discussCheckpointGet(adapter, args, pd, ws));
+  registry.register('discuss.checkpoint.delete', (args, pd, ws) => discussCheckpointDelete(adapter, args, pd, ws));
+  registry.register('discuss.questions.put', (args, pd, ws) => discussQuestionsPut(adapter, args, pd, ws));
+  registry.register('discuss.questions.get', (args, pd, ws) => discussQuestionsGet(adapter, args, pd, ws));
+  registry.register('discuss.questions.delete', (args, pd, ws) => discussQuestionsDelete(adapter, args, pd, ws));
 
   // Wire event emission for mutation commands
   if (eventStream) {

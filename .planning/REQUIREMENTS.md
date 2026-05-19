@@ -26,9 +26,9 @@ This means v1.0's headline value proposition ("pluggable storage backends") is c
 
 The headline work for v1.1. Replace 101 `adapterFor(projectDir)` callsites with the adapter threaded through the handler signature. Without this, the rest of v1.1's work is decorative.
 
-- [ ] **SEAM-01**: All 101 `adapterFor(projectDir)` callsites in `sdk/src/query/` replaced with the adapter argument threaded through the handler signature. (Reference inventory: `grep -rn "adapterFor(projectDir)" sdk/src/query/ | wc -l` ≥ 101)
+- [x] **SEAM-01**: All 101 `adapterFor(projectDir)` callsites in `sdk/src/query/` replaced with the adapter argument threaded through the handler signature. (Reference inventory: `grep -rn "adapterFor(projectDir)" sdk/src/query/ | wc -l` ≥ 101)
 - [ ] **SEAM-02**: `adapterFor` is either deleted from `helpers.ts` OR rewritten to honor `config.storage.adapter` (decision point: leave as a deprecation stub vs delete entirely).
-- [ ] **SEAM-03**: Every QueryHandler signature in the registry threads `adapter` as first arg (no remaining handlers using the legacy `(args, projectDir, workstream)` signature for migrated families).
+- [x] **SEAM-03**: Every QueryHandler signature in the registry threads `adapter` as first arg (no remaining handlers using the legacy `(args, projectDir, workstream)` signature for migrated families).
 - [ ] **SEAM-04**: Round-trip conformance test: configure `adapter: "beads"`, run `state.milestone-switch --milestone vX.Y --name "Test"`, verify the bd-tier STATE.md singleton received the write byte-for-byte.
 - [ ] **SEAM-05**: Same round-trip test under `adapter: "markdown"` (regression guard so the seam fix doesn't break the default path).
 - [ ] **SEAM-06**: Conformance suite gets a "seam-realness" entry that runs ALL migrated state-mutation handlers against BOTH adapters and asserts post-write reads return identical content.
@@ -127,9 +127,9 @@ Every v1.1 REQ-ID maps to exactly one phase. Coverage: 33/33 unique (35 rows; DE
 | REBASE-03 | Phase 1 — Land the rebase | Complete | |
 | REBASE-04 | Phase 1 — Land the rebase | Complete | |
 | REBASE-05 | Phase 1 — Land the rebase | Complete | |
-| SEAM-01 | Phase 2 — Make the seam real | Pending | bd `get-shit-done-qt2` |
+| SEAM-01 | Phase 2 — Make the seam real | Complete | bd `get-shit-done-qt2` |
 | SEAM-02 | Phase 2 — Make the seam real | Pending | bd `get-shit-done-qt2` |
-| SEAM-03 | Phase 2 — Make the seam real | Pending | bd `get-shit-done-qt2` |
+| SEAM-03 | Phase 2 — Make the seam real | Complete | bd `get-shit-done-qt2` |
 | SEAM-04 | Phase 2 — Make the seam real | Pending | |
 | SEAM-05 | Phase 2 — Make the seam real | Pending | |
 | SEAM-06 | Phase 2 — Make the seam real | Pending | cross-ref: DEFECT-02 |

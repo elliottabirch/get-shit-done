@@ -8,8 +8,9 @@
  */
 
 import { GSDError, ErrorClassification } from '../errors.js';
-import { adapterFor, planningRelativePath } from './helpers.js';
+import { planningRelativePath } from './helpers.js';
 import type { QueryResult } from './utils.js';
+import type { StorageAdapter } from '../../../adapters/types.js';
 
 // ─── Validation ───────────────────────────────────────────────────────────
 
@@ -54,6 +55,7 @@ function questionsPath(
 
 /** Args: [phaseDir, phaseNum, ...bodyParts] */
 export async function discussCheckpointPut(
+  adapter: StorageAdapter,
   args: string[],
   projectDir: string,
   workstream?: string,
@@ -61,7 +63,6 @@ export async function discussCheckpointPut(
   const [phaseDir, phaseNum, ...bodyParts] = args;
   validatePhaseDir(phaseDir);
   validatePhaseNum(phaseNum);
-  const adapter = await adapterFor(projectDir);
   const body = bodyParts.join(' ');
   const docPath = checkpointPath(workstream, phaseDir, phaseNum);
   await adapter.putRecord(docPath, body);
@@ -70,6 +71,7 @@ export async function discussCheckpointPut(
 
 /** Args: [phaseDir, phaseNum] */
 export async function discussCheckpointGet(
+  adapter: StorageAdapter,
   args: string[],
   projectDir: string,
   workstream?: string,
@@ -77,7 +79,6 @@ export async function discussCheckpointGet(
   const [phaseDir, phaseNum] = args;
   validatePhaseDir(phaseDir);
   validatePhaseNum(phaseNum);
-  const adapter = await adapterFor(projectDir);
   const docPath = checkpointPath(workstream, phaseDir, phaseNum);
   const content = await adapter.getRecord(docPath);
   if (content === null) return { data: { found: false, content: null } };
@@ -86,6 +87,7 @@ export async function discussCheckpointGet(
 
 /** Args: [phaseDir, phaseNum] */
 export async function discussCheckpointDelete(
+  adapter: StorageAdapter,
   args: string[],
   projectDir: string,
   workstream?: string,
@@ -93,7 +95,6 @@ export async function discussCheckpointDelete(
   const [phaseDir, phaseNum] = args;
   validatePhaseDir(phaseDir);
   validatePhaseNum(phaseNum);
-  const adapter = await adapterFor(projectDir);
   const docPath = checkpointPath(workstream, phaseDir, phaseNum);
   await adapter.removeRecord(docPath);
   return { data: { removed: docPath } };
@@ -103,6 +104,7 @@ export async function discussCheckpointDelete(
 
 /** Args: [phaseDir, phaseNum, format ('json' | 'html'), ...bodyParts] */
 export async function discussQuestionsPut(
+  adapter: StorageAdapter,
   args: string[],
   projectDir: string,
   workstream?: string,
@@ -113,7 +115,6 @@ export async function discussQuestionsPut(
   if (formatArg !== 'json' && formatArg !== 'html') {
     throw new GSDError('format must be "json" or "html"', ErrorClassification.Validation);
   }
-  const adapter = await adapterFor(projectDir);
   const body = bodyParts.join(' ');
   const docPath = questionsPath(workstream, phaseDir, phaseNum, formatArg);
   await adapter.putRecord(docPath, body);
@@ -122,6 +123,7 @@ export async function discussQuestionsPut(
 
 /** Args: [phaseDir, phaseNum, format ('json' | 'html')] */
 export async function discussQuestionsGet(
+  adapter: StorageAdapter,
   args: string[],
   projectDir: string,
   workstream?: string,
@@ -132,7 +134,6 @@ export async function discussQuestionsGet(
   if (formatArg !== 'json' && formatArg !== 'html') {
     throw new GSDError('format must be "json" or "html"', ErrorClassification.Validation);
   }
-  const adapter = await adapterFor(projectDir);
   const docPath = questionsPath(workstream, phaseDir, phaseNum, formatArg);
   const content = await adapter.getRecord(docPath);
   if (content === null) return { data: { found: false, content: null, format: formatArg } };
@@ -141,6 +142,7 @@ export async function discussQuestionsGet(
 
 /** Args: [phaseDir, phaseNum, format ('json' | 'html')] */
 export async function discussQuestionsDelete(
+  adapter: StorageAdapter,
   args: string[],
   projectDir: string,
   workstream?: string,
@@ -151,7 +153,6 @@ export async function discussQuestionsDelete(
   if (formatArg !== 'json' && formatArg !== 'html') {
     throw new GSDError('format must be "json" or "html"', ErrorClassification.Validation);
   }
-  const adapter = await adapterFor(projectDir);
   const docPath = questionsPath(workstream, phaseDir, phaseNum, formatArg);
   await adapter.removeRecord(docPath);
   return { data: { removed: docPath, format: formatArg } };

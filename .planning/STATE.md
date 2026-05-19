@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: milestone
 status: executing
-last_updated: "2026-05-19T02:28:30.716Z"
+last_updated: "2026-05-19T02:49:19.803Z"
 last_activity: 2026-05-19
 progress:
   total_phases: 4
   completed_phases: 1
   total_plans: 9
-  completed_plans: 5
+  completed_plans: 6
   percent: 25
 ---
 
@@ -18,7 +18,7 @@ progress:
 ## Current Position
 
 Phase: 2 (Make the seam real) — EXECUTING
-Plan: 2 of 7
+Plan: 3 of 7
 Status: Ready to execute
 Last activity: 2026-05-19
 
@@ -90,6 +90,7 @@ See `.planning/DECISIONS.md` for full record + rationale.
 - [Phase 7]: Paired CI green on both adapters; 119/119 non-property tests pass; BEADS_ACTOR=seed + bd export --json rollback diff confirmed (D-11)
 - [Phase 7]: BeadsAdapter known-gap baked as manifest entry (D-09): mid-commit-replay withTransaction:mid-commit-replay / expected.beads.kind=incomplete-per-Deferred-04 / adr D-2026-05-12-OQ06-TXN
 - [Phase 02]: D-15 honored: two atomic commits for state-mutation.ts migration — refactor(thread adapter) then feat(verify StateWriteOutcome); build+test gate green between each
+- [Phase ?]: No StateWriteOutcome layer needed for phase-lifecycle, spike-sketch, scratch handlers (none call recordState*)
 
 ## v1.0 milestone scope
 
@@ -145,9 +146,9 @@ These are NOT blocking for Phase 1; resolved as relevant phases approach:
 
 ## Session Continuity
 
-Last session: 2026-05-19T02:28:30.713Z
+Last session: 2026-05-19T02:49:19.800Z
 mid-session, Phase 3 UAT caught 2 more blocker bugs — all fixed)
-Stopped at: Wave 3 (Plan 02-03) complete; baseline 33
+Stopped at: Completed 02-04-PLAN.md
 complete (4/4); `StateWriteOutcome` three-state contract DESIGNED but not
 implemented (hit context budget). Tree clean at 5d3e05f3.
 
@@ -174,4 +175,5 @@ Phase 6 (BeadsAdapter) is now unblocked.
 | Phase 06 P06 | 46m | 3 tasks | 9 files |
 | Phase 06 P07 | 38m | 4 tasks | 16 files |
 | Phase 02 P03 | 12m | 2 tasks | 4 files |
+| Phase 02-make-the-seam-real P04 | 45m | 3 tasks | 4 files |
 
