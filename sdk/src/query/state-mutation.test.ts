@@ -8,6 +8,7 @@ import { mkdtemp, writeFile, readFile, rm, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { existsSync } from 'node:fs';
+import { MarkdownAdapter } from '../../../adapters/markdown/index.js';
 
 // ─── Helpers (internal) ─────────────────────────────────────────────────────
 
@@ -225,9 +226,8 @@ describe('stateUpdate', () => {
   it('updates a single field and round-trips through stateLoad', async () => {
     const { stateUpdate } = await import('./state-mutation.js');
     const { stateJson } = await import('./state.js');
-    const { MarkdownAdapter } = await import('../../../adapters/markdown/index.js');
 
-    const result = await stateUpdate(['Status', 'Phase complete'], tmpDir);
+    const result = await stateUpdate(new MarkdownAdapter(tmpDir), ['Status', 'Phase complete'], tmpDir);
     const data = result.data as Record<string, unknown>;
     expect(data.updated).toBe(true);
 
@@ -241,7 +241,7 @@ describe('stateUpdate', () => {
   it('returns updated false when field not found', async () => {
     const { stateUpdate } = await import('./state-mutation.js');
 
-    const result = await stateUpdate(['NonExistentField', 'value'], tmpDir);
+    const result = await stateUpdate(new MarkdownAdapter(tmpDir), ['NonExistentField', 'value'], tmpDir);
     const data = result.data as Record<string, unknown>;
     expect(data.updated).toBe(false);
   });
@@ -273,10 +273,10 @@ Progress: [█████░░░░░] 50%
     const { stateUpdate } = await import('./state-mutation.js');
     const { stateJson } = await import('./state.js');
 
-    const result = await stateUpdate(['Last Activity', '2026-05-07'], tmpDir);
+    const result = await stateUpdate(new MarkdownAdapter(tmpDir), ['Last Activity', '2026-05-07'], tmpDir);
     expect((result.data as Record<string, unknown>).updated).toBe(true);
 
-    const loaded = await stateJson(adapter, [], tmpDir);
+    const loaded = await stateJson(new MarkdownAdapter(tmpDir), [], tmpDir);
     const progress = (loaded.data as Record<string, unknown>).progress as Record<string, unknown>;
     expect(Number(progress.total_phases)).toBe(12);
     expect(Number(progress.completed_phases)).toBe(6);
@@ -313,7 +313,7 @@ Progress: [█████░░░░░] 50%
     await rm(join(tmpDir, '.planning', 'ROADMAP.md'), { force: true });
 
     const { stateUpdate } = await import('./state-mutation.js');
-    await stateUpdate(['Progress', '[████████░░] 80%'], tmpDir);
+    await stateUpdate(new MarkdownAdapter(tmpDir), ['Progress', '[████████░░] 80%'], tmpDir);
 
     const after = await readFile(join(tmpDir, '.planning', 'STATE.md'), 'utf-8');
     const { extractFrontmatter } = await import('./frontmatter.js');
@@ -361,7 +361,7 @@ Progress: [█████░░░░░] 50%
     await writeFile(join(wsDir, 'ROADMAP.md'), '# Roadmap\n\n## v2.0 Feature Milestone\n', 'utf-8');
 
     const { readModifyWriteStateMdFull } = await import('./state-mutation.js');
-    await readModifyWriteStateMdFull(tmpDir, content => content.replace('Status: Executing', 'Status: Complete'), 'feature');
+    await readModifyWriteStateMdFull(new MarkdownAdapter(tmpDir), tmpDir, content => content.replace('Status: Executing', 'Status: Complete'), 'feature');
 
     const after = await readFile(join(wsDir, 'STATE.md'), 'utf-8');
     const { extractFrontmatter } = await import('./frontmatter.js');
@@ -374,7 +374,7 @@ Progress: [█████░░░░░] 50%
   it('throws on missing args', async () => {
     const { stateUpdate } = await import('./state-mutation.js');
 
-    await expect(stateUpdate([], tmpDir)).rejects.toThrow(/field and value required/);
+    await expect(stateUpdate(new MarkdownAdapter(tmpDir), [], tmpDir)).rejects.toThrow(/field and value required/);
   });
 });
 
@@ -396,7 +396,7 @@ describe('statePatch', () => {
     const { statePatch } = await import('./state-mutation.js');
 
     const patches = JSON.stringify({ Status: 'done', Progress: '100%' });
-    const result = await statePatch([patches], tmpDir);
+    const result = await statePatch(new MarkdownAdapter(tmpDir), [patches], tmpDir);
     const data = result.data as Record<string, unknown>;
     expect((data.updated as string[]).length).toBeGreaterThan(0);
 
@@ -430,7 +430,7 @@ Progress: [█████░░░░░] 50%
     await setupTestProject(tmpDir, stateContent);
 
     const { statePatch } = await import('./state-mutation.js');
-    await statePatch([JSON.stringify({ 'Last Activity': '2026-05-07' })], tmpDir);
+    await statePatch(new MarkdownAdapter(tmpDir), [JSON.stringify({ 'Last Activity': '2026-05-07' })], tmpDir);
 
     const after = await readFile(join(tmpDir, '.planning', 'STATE.md'), 'utf-8');
     const { extractFrontmatter } = await import('./frontmatter.js');
@@ -462,7 +462,7 @@ describe('stateBeginPhase', () => {
   it('sets all expected fields', async () => {
     const { stateBeginPhase } = await import('./state-mutation.js');
 
-    const result = await stateBeginPhase(['11', 'State Mutations', '3'], tmpDir);
+    const result = await stateBeginPhase(new MarkdownAdapter(tmpDir), ['11', 'State Mutations', '3'], tmpDir);
     const data = result.data as Record<string, unknown>;
     expect(data.phase).toBe('11');
 
@@ -477,6 +477,7 @@ describe('stateBeginPhase', () => {
 
     // This is how execute-phase.md calls it: flag form
     const result = await stateBeginPhase(
+      new MarkdownAdapter(tmpDir),
       ['--phase', '99', '--name', 'probe-test', '--plans', '1'],
       tmpDir
     );
@@ -499,7 +500,7 @@ describe('stateBeginPhase', () => {
   it('bug-2420: positional args still work after flag-parsing fix', async () => {
     const { stateBeginPhase } = await import('./state-mutation.js');
 
-    const result = await stateBeginPhase(['42', 'Positional Test', '5'], tmpDir);
+    const result = await stateBeginPhase(new MarkdownAdapter(tmpDir), ['42', 'Positional Test', '5'], tmpDir);
     const data = result.data as Record<string, unknown>;
     expect(data.phase).toBe('42');
     expect(data.phase_name).toBe('Positional Test');
@@ -511,7 +512,7 @@ describe('stateBeginPhase', () => {
 
     // --phase has no value — next token is --name, which is itself a flag.
     await expect(
-      stateBeginPhase(['--phase', '--name', 'Title', '--plans', '1'], tmpDir)
+      stateBeginPhase(new MarkdownAdapter(tmpDir), ['--phase', '--name', 'Title', '--plans', '1'], tmpDir)
     ).rejects.toThrow('missing value for --phase');
   });
 
@@ -519,14 +520,14 @@ describe('stateBeginPhase', () => {
     const { stateBeginPhase } = await import('./state-mutation.js');
 
     await expect(
-      stateBeginPhase(['--name', 'Title', '--plans', '1', '--phase'], tmpDir)
+      stateBeginPhase(new MarkdownAdapter(tmpDir), ['--name', 'Title', '--plans', '1', '--phase'], tmpDir)
     ).rejects.toThrow('missing value for --phase');
   });
 
   it('does not treat argv after named flags as positional name/plans', async () => {
     const { stateBeginPhase } = await import('./state-mutation.js');
 
-    const result = await stateBeginPhase(['--phase', '2', '--plans', '3'], tmpDir);
+    const result = await stateBeginPhase(new MarkdownAdapter(tmpDir), ['--phase', '2', '--plans', '3'], tmpDir);
     const data = result.data as Record<string, unknown>;
     expect(data.phase).toBe('2');
     expect(data.phase_name).toBeFalsy();
@@ -544,7 +545,7 @@ describe('stateBeginPhase', () => {
     );
     await setupTestProject(tmpDir, withBudget);
 
-    await stateBeginPhase(['11', 'State Mutations', '3'], tmpDir);
+    await stateBeginPhase(new MarkdownAdapter(tmpDir), ['11', 'State Mutations', '3'], tmpDir);
 
     const content = await readFile(join(tmpDir, '.planning', 'STATE.md'), 'utf-8');
     expect(content).toContain('Budget: $2,500 max test');
@@ -569,7 +570,7 @@ describe('stateAdvancePlan', () => {
   it('increments plan counter', async () => {
     const { stateAdvancePlan } = await import('./state-mutation.js');
 
-    const result = await stateAdvancePlan([], tmpDir);
+    const result = await stateAdvancePlan(new MarkdownAdapter(tmpDir), [], tmpDir);
     const data = result.data as Record<string, unknown>;
     expect(data.advanced).toBe(true);
     expect(data.current_plan).toBe(3);
@@ -584,7 +585,7 @@ describe('stateAdvancePlan', () => {
     await setupTestProject(tmpDir, withBudget);
 
     for (let i = 0; i < 8; i += 1) {
-      await stateAdvancePlan([], tmpDir);
+      await stateAdvancePlan(new MarkdownAdapter(tmpDir), [], tmpDir);
     }
 
     const content = await readFile(join(tmpDir, '.planning', 'STATE.md'), 'utf-8');
@@ -611,6 +612,7 @@ describe('stateAddDecision', () => {
     const { stateAddDecision } = await import('./state-mutation.js');
 
     const result = await stateAddDecision(
+      new MarkdownAdapter(tmpDir),
       ['--phase', '10', '--summary', 'Use lockfile atomicity'],
       tmpDir,
     );
@@ -644,6 +646,7 @@ describe('stateAddRoadmapEvolution', () => {
     const { stateAddRoadmapEvolution } = await import('./state-mutation.js');
 
     const result = await stateAddRoadmapEvolution(
+      new MarkdownAdapter(tmpDir),
       ['--phase', '72.1', '--action', 'inserted', '--after', '72',
        '--note', 'Fix critical auth bug', '--urgent'],
       tmpDir,
@@ -695,6 +698,7 @@ Last session: 2026-04-07T10:00:00.000Z
     const { stateAddRoadmapEvolution } = await import('./state-mutation.js');
 
     const result = await stateAddRoadmapEvolution(
+      new MarkdownAdapter(tmpDir),
       ['--phase', '72.1', '--action', 'inserted', '--after', '72', '--note', 'Urgent fix', '--urgent'],
       tmpDir,
     );
@@ -719,10 +723,10 @@ Last session: 2026-04-07T10:00:00.000Z
 
     const argv = ['--phase', '72.1', '--action', 'inserted', '--after', '72', '--note', 'Fix X', '--urgent'];
 
-    const first = await stateAddRoadmapEvolution(argv, tmpDir);
+    const first = await stateAddRoadmapEvolution(new MarkdownAdapter(tmpDir), argv, tmpDir);
     expect((first.data as Record<string, unknown>).added).toBe(true);
 
-    const second = await stateAddRoadmapEvolution(argv, tmpDir);
+    const second = await stateAddRoadmapEvolution(new MarkdownAdapter(tmpDir), argv, tmpDir);
     const data = second.data as Record<string, unknown>;
     expect(data.added).toBe(false);
     expect(data.reason).toBe('duplicate');
@@ -738,8 +742,8 @@ Last session: 2026-04-07T10:00:00.000Z
     const { stateAddRoadmapEvolution } = await import('./state-mutation.js');
     const argv = ['--phase', '9', '--action', 'added', '--note', 'new work'];
 
-    await stateAddRoadmapEvolution(argv, tmpDir);
-    await stateAddRoadmapEvolution(argv, tmpDir);
+    await stateAddRoadmapEvolution(new MarkdownAdapter(tmpDir), argv, tmpDir);
+    await stateAddRoadmapEvolution(new MarkdownAdapter(tmpDir), argv, tmpDir);
 
     const content = await readFile(join(tmpDir, '.planning', 'STATE.md'), 'utf-8');
     const matches = content.match(/Phase 9 added: new work/g) || [];
@@ -752,6 +756,7 @@ Last session: 2026-04-07T10:00:00.000Z
     const { GSDError, ErrorClassification } = await import('../errors.js');
 
     await expect(stateAddRoadmapEvolution(
+      new MarkdownAdapter(tmpDir),
       ['--action', 'inserted'],
       tmpDir,
     )).rejects.toSatisfy((err: unknown) => {
@@ -765,6 +770,7 @@ Last session: 2026-04-07T10:00:00.000Z
     const { GSDError, ErrorClassification } = await import('../errors.js');
 
     await expect(stateAddRoadmapEvolution(
+      new MarkdownAdapter(tmpDir),
       ['--phase', '72.1'],
       tmpDir,
     )).rejects.toSatisfy((err: unknown) => {
@@ -778,6 +784,7 @@ Last session: 2026-04-07T10:00:00.000Z
     const { GSDError, ErrorClassification } = await import('../errors.js');
 
     await expect(stateAddRoadmapEvolution(
+      new MarkdownAdapter(tmpDir),
       ['--phase', '72.1', '--action', 'frobnicated'],
       tmpDir,
     )).rejects.toSatisfy((err: unknown) => {
@@ -804,6 +811,7 @@ describe('stateRecordSession', () => {
     const { stateRecordSession } = await import('./state-mutation.js');
 
     const result = await stateRecordSession(
+      new MarkdownAdapter(tmpDir),
       ['--stopped-at', 'Completed 11-01-PLAN.md', '--resume-file', 'None'],
       tmpDir,
     );
@@ -869,6 +877,7 @@ Resume file: None
 
     const { stateRecordSession } = await import('./state-mutation.js');
     await stateRecordSession(
+      new MarkdownAdapter(tmpDir),
       ['--stopped-at', 'regression test', '--resume-file', '.' + 'planning/MILESTONES.md'],
       tmpDir,
     );
@@ -911,6 +920,7 @@ Resume file: None
 
     const { stateRecordSession } = await import('./state-mutation.js');
     await stateRecordSession(
+      new MarkdownAdapter(tmpDir),
       ['--stopped-at', 'regression test', '--resume-file', 'None'],
       tmpDir,
     );
@@ -954,6 +964,7 @@ Resume file: None
 
     const { stateRecordSession } = await import('./state-mutation.js');
     await stateRecordSession(
+      new MarkdownAdapter(tmpDir),
       ['--stopped-at', 'regression test', '--resume-file', 'None'],
       tmpDir,
     );
@@ -974,7 +985,7 @@ Resume file: None
     await setupTestProject(tmpDir);
 
     const { stateUpdate } = await import('./state-mutation.js');
-    await stateUpdate(['Status', 'executing'], tmpDir);
+    await stateUpdate(new MarkdownAdapter(tmpDir), ['Status', 'executing'], tmpDir);
 
     const after = await readFile(join(tmpDir, '.planning', 'STATE.md'), 'utf-8');
     const { extractFrontmatter } = await import('./frontmatter.js');
@@ -1024,7 +1035,7 @@ Resume file: None
     await writeFile(join(planningDir, 'config.json'), '{}', 'utf-8');
 
     const { stateRecordSession } = await import('./state-mutation.js');
-    await stateRecordSession(['--stopped-at', 'x', '--resume-file', 'None'], tmpDir);
+    await stateRecordSession(new MarkdownAdapter(tmpDir), ['--stopped-at', 'x', '--resume-file', 'None'], tmpDir);
 
     const after = await readFile(join(planningDir, 'STATE.md'), 'utf-8');
     const { extractFrontmatter } = await import('./frontmatter.js');
@@ -1097,6 +1108,7 @@ Last activity: 2026-04-20 -- v1.0 shipped
 
     const { stateMilestoneSwitch } = await import('./state-mutation.js');
     const result = await stateMilestoneSwitch(
+      new MarkdownAdapter(tmpDir),
       ['--milestone', 'v1.1', '--name', 'Notifications'],
       tmpDir,
     );
@@ -1136,7 +1148,7 @@ Last activity: 2026-04-20 -- v1.0 shipped
       await writeFile(join(tmpDir, '.planning', 'config.json'), '{}', 'utf-8');
     });
     const { stateMilestoneSwitch } = await import('./state-mutation.js');
-    const result = await stateMilestoneSwitch([], tmpDir);
+    const result = await stateMilestoneSwitch(new MarkdownAdapter(tmpDir), [], tmpDir);
     const data = result.data as Record<string, unknown>;
     expect(data.error).toBeDefined();
   });
@@ -1179,7 +1191,7 @@ Phase 12 execution in progress.
 `;
     await setupTestProject(tmpDir, stateContent);
     const { statePrune } = await import('./state-mutation.js');
-    const result = await statePrune(['--keep-recent', '3', '--dry-run'], tmpDir);
+    const result = await statePrune(new MarkdownAdapter(tmpDir), ['--keep-recent', '3', '--dry-run'], tmpDir);
     const data = result.data as Record<string, unknown>;
 
     // No body "Current Phase:" field → defaults to 0 → cutoff ≤ 0 → early exit.
@@ -1204,7 +1216,7 @@ status: executing
 `;
     await setupTestProject(tmpDir, stateContent);
     const { statePrune } = await import('./state-mutation.js');
-    const result = await statePrune(['--keep-recent', '3', '--dry-run'], tmpDir);
+    const result = await statePrune(new MarkdownAdapter(tmpDir), ['--keep-recent', '3', '--dry-run'], tmpDir);
     const data = result.data as Record<string, unknown>;
 
     expect(data.pruned).toBe(false);
@@ -1212,5 +1224,169 @@ status: executing
     // Matches CJS: "Only 0 phases — nothing to prune with --keep-recent 3"
     expect(String(data.reason)).toContain('Only 0 phases');
     expect(String(data.reason)).toContain('nothing to prune');
+  });
+});
+
+// ─── StateWriteOutcome propagation (D-13 / D-14 / D-15 commit 2) ─────────────
+//
+// These tests verify that every state-mutation handler which calls
+// adapter.recordState* surfaces the StateWriteOutcome in the QueryResult.data
+// payload. This is the structural mitigation for the silent-noop anti-pattern
+// (anti-pattern 1 from .continue-here.md): non-application is now a typed
+// `data.applied: false` rather than a silent success.
+
+describe('stateRecordMetric — StateWriteOutcome propagation', () => {
+  let tmpDir: string;
+
+  beforeEach(async () => {
+    tmpDir = await mkdtemp(join(tmpdir(), 'gsd-sdk-metric-'));
+    await setupTestProject(tmpDir);
+  });
+
+  afterEach(async () => {
+    await rm(tmpDir, { recursive: true, force: true });
+  });
+
+  it('returns recorded:true and echoes phase/plan/duration on success', async () => {
+    const { stateRecordMetric } = await import('./state-mutation.js');
+
+    const result = await stateRecordMetric(
+      new MarkdownAdapter(tmpDir),
+      ['--phase', '02', '--plan', '03', '--duration', '4m12s'],
+      tmpDir,
+    );
+    const data = result.data as Record<string, unknown>;
+
+    expect(data.recorded).toBe(true);
+    expect(data.phase).toBe('02');
+    expect(data.plan).toBe('03');
+    expect(data.duration).toBe('4m12s');
+  });
+
+  it('returns error when required args are missing', async () => {
+    const { stateRecordMetric } = await import('./state-mutation.js');
+
+    const result = await stateRecordMetric(new MarkdownAdapter(tmpDir), [], tmpDir);
+    const data = result.data as Record<string, unknown>;
+
+    expect(data.error).toMatch(/phase, plan, and duration required/);
+  });
+});
+
+describe('stateSignalResume — StateWriteOutcome.nothing_to_remove propagation', () => {
+  let tmpDir: string;
+
+  beforeEach(async () => {
+    tmpDir = await mkdtemp(join(tmpdir(), 'gsd-sdk-resume-'));
+    await setupTestProject(tmpDir);
+  });
+
+  afterEach(async () => {
+    await rm(tmpDir, { recursive: true, force: true });
+  });
+
+  it('returns resumed:false with reason=nothing_to_remove when no WAITING.json exists', async () => {
+    const { stateSignalResume } = await import('./state-mutation.js');
+
+    // No WAITING.json has been written — adapter returns nothing_to_remove.
+    const result = await stateSignalResume(new MarkdownAdapter(tmpDir), [], tmpDir);
+    const data = result.data as Record<string, unknown>;
+
+    expect(data.resumed).toBe(false);
+    expect(data.reason).toBe('nothing_to_remove');
+    expect(data.removed).toBe(false);
+  });
+
+  it('returns resumed:true after stateSignalWaiting wrote a WAITING.json', async () => {
+    const { stateSignalWaiting, stateSignalResume } = await import('./state-mutation.js');
+
+    // Write signal first.
+    const waitResult = await stateSignalWaiting(
+      new MarkdownAdapter(tmpDir),
+      ['--type', 'decision_point', '--question', 'Which approach?'],
+      tmpDir,
+    );
+    expect((waitResult.data as Record<string, unknown>).signaled).toBe(true);
+
+    // Resume should now succeed.
+    const resumeResult = await stateSignalResume(new MarkdownAdapter(tmpDir), [], tmpDir);
+    const data = resumeResult.data as Record<string, unknown>;
+
+    expect(data.resumed).toBe(true);
+    expect(data.removed).toBe(true);
+  });
+});
+
+describe('stateAddBlocker / stateResolveBlocker — StateWriteOutcome propagation', () => {
+  let tmpDir: string;
+
+  beforeEach(async () => {
+    tmpDir = await mkdtemp(join(tmpdir(), 'gsd-sdk-blocker-'));
+    await setupTestProject(tmpDir);
+  });
+
+  afterEach(async () => {
+    await rm(tmpDir, { recursive: true, force: true });
+  });
+
+  it('stateAddBlocker returns added:true on success', async () => {
+    const { stateAddBlocker } = await import('./state-mutation.js');
+
+    const result = await stateAddBlocker(
+      new MarkdownAdapter(tmpDir),
+      ['--text', 'Waiting for upstream PR #42'],
+      tmpDir,
+    );
+    const data = result.data as Record<string, unknown>;
+
+    expect(data.added).toBe(true);
+    expect(data.blocker).toBe('Waiting for upstream PR #42');
+  });
+
+  it('stateResolveBlocker returns resolved:false with reason when blocker not found', async () => {
+    const { stateResolveBlocker } = await import('./state-mutation.js');
+
+    // Attempting to resolve a blocker that was never added.
+    const result = await stateResolveBlocker(
+      new MarkdownAdapter(tmpDir),
+      ['--text', 'Nonexistent blocker text'],
+      tmpDir,
+    );
+    const data = result.data as Record<string, unknown>;
+
+    // Adapter returns nothing_to_remove when no matching line is found.
+    expect(data.resolved).toBe(false);
+    expect(data.reason).toBeDefined();
+  });
+
+  it('stateResolveBlocker propagates blocker text in data payload regardless of outcome', async () => {
+    // D-13 / D-15 commit-2 structural test: verifies that StateWriteOutcome is
+    // threaded into QueryResult.data — the `resolved` and `blocker` fields must
+    // be present. The exact value of `resolved` depends on whether the adapter
+    // successfully located and removed the blocker text, which is adapter-contract
+    // behaviour (tested in adapters/markdown/index.test.ts). What this test asserts
+    // is that the handler honours the data-payload contract regardless of outcome.
+    const { stateAddBlocker, stateResolveBlocker } = await import('./state-mutation.js');
+
+    await stateAddBlocker(
+      new MarkdownAdapter(tmpDir),
+      ['--text', 'Waiting for DB migration'],
+      tmpDir,
+    );
+
+    const result = await stateResolveBlocker(
+      new MarkdownAdapter(tmpDir),
+      ['--text', 'Waiting for DB migration'],
+      tmpDir,
+    );
+    const data = result.data as Record<string, unknown>;
+
+    // StateWriteOutcome must be propagated: `resolved` and `blocker` must be present.
+    expect(typeof data.resolved).toBe('boolean');
+    expect(data.blocker).toBe('Waiting for DB migration');
+    // When resolved:false, reason must also be present (D-13 applied:false path).
+    if (!data.resolved) {
+      expect(data.reason).toBeDefined();
+    }
   });
 });

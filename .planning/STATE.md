@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: milestone
 status: executing
-last_updated: "2026-05-18T22:49:27.766Z"
-last_activity: 2026-05-18 -- Phase 2 execution started
+last_updated: "2026-05-19T00:43:57.431Z"
+last_activity: 2026-05-19
 progress:
   total_phases: 4
   completed_phases: 1
   total_plans: 9
-  completed_plans: 2
-  percent: 22
+  completed_plans: 5
+  percent: 25
 ---
 
 # Project State
@@ -18,9 +18,9 @@ progress:
 ## Current Position
 
 Phase: 2 (Make the seam real) — EXECUTING
-Plan: 1 of 7
-Status: Executing Phase 2
-Last activity: 2026-05-18 -- Phase 2 execution started
+Plan: 2 of 7
+Status: Ready to execute
+Last activity: 2026-05-19
 
 ## Reference
 
@@ -89,6 +89,7 @@ See `.planning/DECISIONS.md` for full record + rationale.
 - [Phase 7]: D-2026-05-12-CONFORM-MANIFEST — 55-entry conformance manifest + enforcement rules (Plan 07-06); manifest ↔ registeredTests bidirectional invariant via meta-coverage.test.ts
 - [Phase 7]: Paired CI green on both adapters; 119/119 non-property tests pass; BEADS_ACTOR=seed + bd export --json rollback diff confirmed (D-11)
 - [Phase 7]: BeadsAdapter known-gap baked as manifest entry (D-09): mid-commit-replay withTransaction:mid-commit-replay / expected.beads.kind=incomplete-per-Deferred-04 / adr D-2026-05-12-OQ06-TXN
+- [Phase 02]: D-15 honored: two atomic commits for state-mutation.ts migration — refactor(thread adapter) then feat(verify StateWriteOutcome); build+test gate green between each
 
 ## v1.0 milestone scope
 
@@ -144,9 +145,9 @@ These are NOT blocking for Phase 1; resolved as relevant phases approach:
 
 ## Session Continuity
 
-Last session: 2026-05-18T21:18:38.522Z
+Last session: 2026-05-19T00:43:57.427Z
 mid-session, Phase 3 UAT caught 2 more blocker bugs — all fixed)
-Stopped at: Phase 2 context gathered
+Stopped at: Completed 02-03-PLAN.md
 complete (4/4); `StateWriteOutcome` three-state contract DESIGNED but not
 implemented (hit context budget). Tree clean at 5d3e05f3.
 
@@ -172,3 +173,5 @@ Phase 6 (BeadsAdapter) is now unblocked.
 | Phase 06 P05 | 13 | 3 tasks | 11 files |
 | Phase 06 P06 | 46m | 3 tasks | 9 files |
 | Phase 06 P07 | 38m | 4 tasks | 16 files |
+| Phase 02 P03 | 12m | 2 tasks | 4 files |
+
