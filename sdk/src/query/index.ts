@@ -744,13 +744,13 @@ export function createRegistry(opts?: {
   // Debug session (covers execute-phase debug archive, gsd-debugger 3 leaks)
   registry.register('debug.archive', (args, projectDir, ws) => debugArchive(args, projectDir, ws));
   // Spike/sketch (covers spike 3, spike-wrap-up 3, sketch 2, sketch-wrap-up 1)
-  registry.register('spike.get-manifest', (args, projectDir, ws) => spikeGetManifest(args, projectDir, ws));
-  registry.register('spike.get-conventions', (args, projectDir, ws) => spikeGetConventions(args, projectDir, ws));
-  registry.register('spike.put-wrap-up', (args, projectDir, ws) => spikePutWrapUp(args, projectDir, ws));
-  registry.register('spike.put-conventions', (args, projectDir, ws) => spikePutConventions(args, projectDir, ws));
-  registry.register('sketch.get-manifest', (args, projectDir, ws) => sketchGetManifest(args, projectDir, ws));
-  registry.register('sketch.get-conventions', (args, projectDir, ws) => sketchGetConventions(args, projectDir, ws));
-  registry.register('sketch.put-wrap-up', (args, projectDir, ws) => sketchPutWrapUp(args, projectDir, ws));
+  registry.register('spike.get-manifest', (args, pd, ws) => spikeGetManifest(adapter, args, pd, ws));
+  registry.register('spike.get-conventions', (args, pd, ws) => spikeGetConventions(adapter, args, pd, ws));
+  registry.register('spike.put-wrap-up', (args, pd, ws) => spikePutWrapUp(adapter, args, pd, ws));
+  registry.register('spike.put-conventions', (args, pd, ws) => spikePutConventions(adapter, args, pd, ws));
+  registry.register('sketch.get-manifest', (args, pd, ws) => sketchGetManifest(adapter, args, pd, ws));
+  registry.register('sketch.get-conventions', (args, pd, ws) => sketchGetConventions(adapter, args, pd, ws));
+  registry.register('sketch.put-wrap-up', (args, pd, ws) => sketchPutWrapUp(adapter, args, pd, ws));
   // Thread/seed/todo (covers thread 1, plant-seed 1, add-todo 1)
   registry.register('thread.add', (args, projectDir, ws) => threadAdd(args, projectDir, ws));
   registry.register('seed.add', (args, projectDir, ws) => seedAdd(args, projectDir, ws));

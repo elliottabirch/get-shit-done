@@ -6,8 +6,9 @@
  */
 
 import { GSDError, ErrorClassification } from '../errors.js';
-import { adapterFor, planningRelativePath } from './helpers.js';
+import { planningRelativePath } from './helpers.js';
 import type { QueryResult } from './utils.js';
+import type { StorageAdapter } from '../../../adapters/types.js';
 
 // ─── Path validation (T-04-01) ──────────────────────────────────────────────
 
@@ -31,12 +32,12 @@ function validateName(name: string): void {
  * Args: [spikeName?] — optional; if given, reads spikes/{spikeName}/MANIFEST.md
  */
 export async function spikeGetManifest(
+  adapter: StorageAdapter,
   args: string[],
   projectDir: string,
   workstream?: string,
 ): Promise<QueryResult> {
   const [spikeName] = args;
-  const adapter = await adapterFor(projectDir);
 
   let docPath: string;
   if (spikeName) {
@@ -59,11 +60,11 @@ export async function spikeGetManifest(
  * Args: none
  */
 export async function spikeGetConventions(
+  adapter: StorageAdapter,
   _args: string[],
   projectDir: string,
   workstream?: string,
 ): Promise<QueryResult> {
-  const adapter = await adapterFor(projectDir);
   const docPath = planningRelativePath(workstream ?? null, 'spikes/CONVENTIONS.md');
   const content = await adapter.getRecord(docPath);
 
@@ -80,6 +81,7 @@ export async function spikeGetConventions(
  * Writes to: spikes/{name}/WRAP-UP-SUMMARY.md
  */
 export async function spikePutWrapUp(
+  adapter: StorageAdapter,
   args: string[],
   projectDir: string,
   workstream?: string,
@@ -87,7 +89,6 @@ export async function spikePutWrapUp(
   const [name, ...bodyParts] = args;
   validateName(name);
 
-  const adapter = await adapterFor(projectDir);
   const body = bodyParts.join(' ');
   const docPath = planningRelativePath(workstream ?? null, `spikes/${name}/WRAP-UP-SUMMARY.md`);
 
@@ -102,11 +103,11 @@ export async function spikePutWrapUp(
  * Writes to: spikes/CONVENTIONS.md
  */
 export async function spikePutConventions(
+  adapter: StorageAdapter,
   args: string[],
   projectDir: string,
   workstream?: string,
 ): Promise<QueryResult> {
-  const adapter = await adapterFor(projectDir);
   const body = args.join(' ');
   const docPath = planningRelativePath(workstream ?? null, 'spikes/CONVENTIONS.md');
 
@@ -122,11 +123,11 @@ export async function spikePutConventions(
  * Args: none
  */
 export async function sketchGetManifest(
+  adapter: StorageAdapter,
   _args: string[],
   projectDir: string,
   workstream?: string,
 ): Promise<QueryResult> {
-  const adapter = await adapterFor(projectDir);
   const docPath = planningRelativePath(workstream ?? null, 'sketches/MANIFEST.md');
   const content = await adapter.getRecord(docPath);
 
@@ -142,11 +143,11 @@ export async function sketchGetManifest(
  * Args: none
  */
 export async function sketchGetConventions(
+  adapter: StorageAdapter,
   _args: string[],
   projectDir: string,
   workstream?: string,
 ): Promise<QueryResult> {
-  const adapter = await adapterFor(projectDir);
   const docPath = planningRelativePath(workstream ?? null, 'sketches/CONVENTIONS.md');
   const content = await adapter.getRecord(docPath);
 
@@ -163,6 +164,7 @@ export async function sketchGetConventions(
  * Writes to: sketches/{name}/WRAP-UP-SUMMARY.md
  */
 export async function sketchPutWrapUp(
+  adapter: StorageAdapter,
   args: string[],
   projectDir: string,
   workstream?: string,
@@ -170,7 +172,6 @@ export async function sketchPutWrapUp(
   const [name, ...bodyParts] = args;
   validateName(name);
 
-  const adapter = await adapterFor(projectDir);
   const body = bodyParts.join(' ');
   const docPath = planningRelativePath(workstream ?? null, `sketches/${name}/WRAP-UP-SUMMARY.md`);
 
