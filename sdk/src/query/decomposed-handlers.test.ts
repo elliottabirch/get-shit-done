@@ -194,7 +194,7 @@ describe('milestoneComplete', () => {
   };
 
   it('accepts version as first positional arg and returns it in data', async () => {
-    const result = await milestoneComplete(['v1.19', '--name', 'Test Milestone'], tmpDir);
+    const result = await milestoneComplete(new MarkdownAdapter(tmpDir), ['v1.19', '--name', 'Test Milestone'], tmpDir);
     const data = result.data as Record<string, unknown>;
 
     // Must NOT return the error shape from the old bug
@@ -208,18 +208,18 @@ describe('milestoneComplete', () => {
   it('does not call phasesArchive with empty args (regression: bug #2644)', async () => {
     // If the old bug were present, this would return { completed: false, reason: 'GSDError: version required for phases archive' }
     // The fix ensures version is extracted from args[0] before any archive operation
-    const result = await milestoneComplete(['v1.0'], tmpDir);
+    const result = await milestoneComplete(new MarkdownAdapter(tmpDir), ['v1.0'], tmpDir);
     assertMilestoneSuccess(result, 'v1.0');
   });
 
   it('throws GSDError when version arg is missing (not masked as completed: false)', async () => {
     // The old bug swallowed ALL errors into { completed: false, reason: String(err) }
     // The fix explicitly throws so callers can distinguish validation failure from "not complete"
-    await expect(milestoneComplete([], tmpDir)).rejects.toThrow('version required for milestone complete');
+    await expect(milestoneComplete(new MarkdownAdapter(tmpDir), [], tmpDir)).rejects.toThrow('version required for milestone complete');
   });
 
   it('archives with --archive-phases when flag is present', async () => {
-    const result = await milestoneComplete(['v1.0', '--archive-phases'], tmpDir);
+    const result = await milestoneComplete(new MarkdownAdapter(tmpDir), ['v1.0', '--archive-phases'], tmpDir);
     const data = assertMilestoneSuccess(result, 'v1.0');
 
     const archived = data.archived as Record<string, unknown>;
@@ -230,7 +230,7 @@ describe('milestoneComplete', () => {
   });
 
   it('returns name from --name flag', async () => {
-    const result = await milestoneComplete(['v2.0', '--name', 'My Release'], tmpDir);
+    const result = await milestoneComplete(new MarkdownAdapter(tmpDir), ['v2.0', '--name', 'My Release'], tmpDir);
     const data = assertMilestoneSuccess(result, 'v2.0');
 
     expect(data.name).toBe('My Release');

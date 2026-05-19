@@ -128,9 +128,11 @@ async function setupTestProject(
 // ─── Tests ────────────────────────────────────────────────────────────────
 
 let tmpDir: string;
+let adapter: MarkdownAdapter;
 
 beforeEach(async () => {
   tmpDir = await mkdtemp(join(tmpdir(), 'gsd-lifecycle-'));
+  adapter = new MarkdownAdapter(tmpDir);
 });
 
 afterEach(async () => {
@@ -279,7 +281,7 @@ describe('readModifyWriteRoadmapMd', () => {
   it('reads, modifies, and writes ROADMAP.md atomically', async () => {
     const { readModifyWriteRoadmapMd } = await import('./phase-lifecycle.js');
     await setupTestProject(tmpDir);
-    const result = await readModifyWriteRoadmapMd(tmpDir, (content) => {
+    const result = await readModifyWriteRoadmapMd(adapter, tmpDir, (content) => {
       return content.replace('Port queries.', 'Port all queries.');
     });
     expect(result).toContain('Port all queries.');
@@ -290,7 +292,7 @@ describe('readModifyWriteRoadmapMd', () => {
   it('creates and releases lockfile', async () => {
     const { readModifyWriteRoadmapMd } = await import('./phase-lifecycle.js');
     await setupTestProject(tmpDir);
-    await readModifyWriteRoadmapMd(tmpDir, (c) => c);
+    await readModifyWriteRoadmapMd(adapter, tmpDir, (c) => c);
     // Lock should be released after operation
     const lockPath = join(tmpDir, '.planning', 'ROADMAP.md.lock');
     expect(existsSync(lockPath)).toBe(false);
@@ -306,7 +308,7 @@ describe('phaseAdd', () => {
       phases: ['09-foundation', '10-read-only-queries'],
     });
 
-    const result = await phaseAdd(['New Feature'], tmpDir);
+    const result = await phaseAdd(adapter, ['New Feature'], tmpDir);
     const data = result.data as Record<string, unknown>;
 
     expect(data.phase_number).toBe(11);
@@ -340,7 +342,7 @@ describe('phaseAdd', () => {
     );
     await setupTestProject(tmpDir, { roadmap: roadmapWith999 });
 
-    const result = await phaseAdd(['After Ten'], tmpDir);
+    const result = await phaseAdd(adapter, ['After Ten'], tmpDir);
     const data = result.data as Record<string, unknown>;
     // Should be 11, not 1000
     expect(data.phase_number).toBe(11);
@@ -350,14 +352,14 @@ describe('phaseAdd', () => {
     const { phaseAdd } = await import('./phase-lifecycle.js');
     await setupTestProject(tmpDir);
 
-    await expect(phaseAdd([], tmpDir)).rejects.toThrow('description required');
+    await expect(phaseAdd(adapter, [], tmpDir)).rejects.toThrow('description required');
   });
 
   it('inserts phase entry before last --- separator', async () => {
     const { phaseAdd } = await import('./phase-lifecycle.js');
     await setupTestProject(tmpDir);
 
-    await phaseAdd(['Inserted Phase'], tmpDir);
+    await phaseAdd(adapter, ['Inserted Phase'], tmpDir);
     const roadmap = await readFile(join(tmpDir, '.planning', 'ROADMAP.md'), 'utf-8');
 
     // The new phase should appear before the trailing ---
@@ -387,7 +389,7 @@ describe('phaseAdd', () => {
       phases: [],
     });
 
-    const result = await phaseAdd(['new-feature'], tmpDir);
+    const result = await phaseAdd(adapter, ['new-feature'], tmpDir);
     const data = result.data as Record<string, unknown>;
 
     expect(data.phase_number).toBe(89);
@@ -413,7 +415,7 @@ describe('phaseAdd', () => {
       phases: [],
     });
 
-    const result = await phaseAdd(['new-feature'], tmpDir);
+    const result = await phaseAdd(adapter, ['new-feature'], tmpDir);
     const data = result.data as Record<string, unknown>;
 
     expect(data.phase_number).toBe(52);
@@ -431,7 +433,7 @@ describe('phaseAdd', () => {
       phases: ['45-legacy-phase', '46-another-phase'],
     });
 
-    const result = await phaseAdd(['new-feature'], tmpDir);
+    const result = await phaseAdd(adapter, ['new-feature'], tmpDir);
     const data = result.data as Record<string, unknown>;
 
     // Should detect phases 45 and 46 on disk, so new phase = 47
@@ -454,7 +456,7 @@ describe('phaseAdd', () => {
     await mkdir(join(phasesDir, 'CK-45-legacy-phase'), { recursive: true });
     await mkdir(join(phasesDir, 'CK-46-another-phase'), { recursive: true });
 
-    const result = await phaseAdd(['new-feature'], tmpDir);
+    const result = await phaseAdd(adapter, ['new-feature'], tmpDir);
     const data = result.data as Record<string, unknown>;
 
     // Should detect CK-45 and CK-46, so new phase = 47
@@ -470,7 +472,7 @@ describe('phaseAdd', () => {
     });
 
     const roadmapBefore = await readFile(join(tmpDir, '.planning', 'ROADMAP.md'), 'utf-8');
-    const result = await phaseAdd(['Dry Run Phase', '--dry-run'], tmpDir);
+    const result = await phaseAdd(adapter, ['Dry Run Phase', '--dry-run'], tmpDir);
     const data = result.data as Record<string, unknown>;
 
     // Result must include the computed fields
@@ -501,7 +503,7 @@ describe('phaseAdd', () => {
 
     const roadmapBefore = await readFile(join(tmpDir, '.planning', 'ROADMAP.md'), 'utf-8');
     // description + --dry-run — no customId; flag must not be mistaken for customId
-    const result = await phaseAdd(['My Feature', '--dry-run'], tmpDir);
+    const result = await phaseAdd(adapter, ['My Feature', '--dry-run'], tmpDir);
     const data = result.data as Record<string, unknown>;
 
     expect(data.dry_run).toBe(true);
@@ -518,14 +520,14 @@ describe('phaseAdd', () => {
     const { phaseAdd } = await import('./phase-lifecycle.js');
     await setupTestProject(tmpDir);
 
-    await expect(phaseAdd(['My Feature', '--bogus-flag'], tmpDir)).rejects.toThrow('--bogus-flag');
+    await expect(phaseAdd(adapter, ['My Feature', '--bogus-flag'], tmpDir)).rejects.toThrow('--bogus-flag');
   });
 
   it('rejects any unknown --flag even when mixed with dry-run', async () => {
     const { phaseAdd } = await import('./phase-lifecycle.js');
     await setupTestProject(tmpDir);
 
-    await expect(phaseAdd(['Desc', '--dry-run', '--unknown'], tmpDir)).rejects.toThrow('--unknown');
+    await expect(phaseAdd(adapter, ['Desc', '--dry-run', '--unknown'], tmpDir)).rejects.toThrow('--unknown');
   });
 
   // ── Symptom B: ROADMAP heading scan counts ### Phase N: (#3226 verify) ─
@@ -551,7 +553,7 @@ describe('phaseAdd', () => {
       phases: [], // no on-disk dirs — must rely on ROADMAP scan
     });
 
-    const result = await phaseAdd(['Next Phase'], tmpDir);
+    const result = await phaseAdd(adapter, ['Next Phase'], tmpDir);
     const data = result.data as Record<string, unknown>;
 
     // Must detect Phase 5 from ### heading → next = 6, not 1
@@ -568,8 +570,8 @@ describe('phaseAdd', () => {
     // Fire two phase.add calls simultaneously. If computation happens outside
     // the lock both will observe maxPhase=10 and claim newPhaseId=11 — collision.
     const [r1, r2] = await Promise.all([
-      phaseAdd(['Concurrent Alpha'], tmpDir),
-      phaseAdd(['Concurrent Beta'], tmpDir),
+      phaseAdd(adapter, ['Concurrent Alpha'], tmpDir),
+      phaseAdd(adapter, ['Concurrent Beta'], tmpDir),
     ]);
 
     const n1 = (r1.data as Record<string, unknown>).phase_number as number;
@@ -609,7 +611,7 @@ describe('phaseAddBatch', () => {
       phases: ['09-foundation', '10-read-only-queries'],
     });
 
-    const result = await phaseAddBatch(['Alpha', 'Beta'], tmpDir);
+    const result = await phaseAddBatch(adapter, ['Alpha', 'Beta'], tmpDir);
     const data = result.data as { phases: Array<Record<string, unknown>>; count: number };
 
     expect(data.count).toBe(2);
@@ -632,6 +634,7 @@ describe('phaseAddBatch', () => {
     await setupTestProject(tmpDir, { phases: ['09-foundation', '10-read-only-queries'] });
 
     const result = await phaseAddBatch(
+      adapter,
       ['--descriptions', JSON.stringify(['One', 'Two'])],
       tmpDir,
     );
@@ -643,7 +646,7 @@ describe('phaseAddBatch', () => {
     const { phaseAddBatch } = await import('./phase-lifecycle.js');
     await setupTestProject(tmpDir);
 
-    await expect(phaseAddBatch([], tmpDir)).rejects.toThrow('descriptions array required');
+    await expect(phaseAddBatch(adapter, [], tmpDir)).rejects.toThrow('descriptions array required');
   });
 });
 
@@ -656,7 +659,7 @@ describe('phaseInsert', () => {
       phases: ['09-foundation', '10-read-only-queries'],
     });
 
-    const result = await phaseInsert(['10', 'Urgent Fix'], tmpDir);
+    const result = await phaseInsert(adapter, ['10', 'Urgent Fix'], tmpDir);
     const data = result.data as Record<string, unknown>;
 
     expect(data.phase_number).toBe('10.1');
@@ -679,7 +682,7 @@ describe('phaseInsert', () => {
       phases: ['09-foundation', '10-read-only-queries', '10.1-hotfix'],
     });
 
-    const result = await phaseInsert(['10', 'Another Fix'], tmpDir);
+    const result = await phaseInsert(adapter, ['10', 'Another Fix'], tmpDir);
     const data = result.data as Record<string, unknown>;
     // Should be 10.2 since 10.1 already exists on disk
     expect(data.phase_number).toBe('10.2');
@@ -689,7 +692,7 @@ describe('phaseInsert', () => {
     const { phaseInsert } = await import('./phase-lifecycle.js');
     await setupTestProject(tmpDir);
 
-    await phaseInsert(['10', 'Urgent Fix'], tmpDir);
+    await phaseInsert(adapter, ['10', 'Urgent Fix'], tmpDir);
     const roadmap = await readFile(join(tmpDir, '.planning', 'ROADMAP.md'), 'utf-8');
 
     expect(roadmap).toContain('### Phase 10.1: Urgent Fix (INSERTED)');
@@ -703,14 +706,14 @@ describe('phaseInsert', () => {
     const { phaseInsert } = await import('./phase-lifecycle.js');
     await setupTestProject(tmpDir);
 
-    await expect(phaseInsert(['99', 'Missing'], tmpDir)).rejects.toThrow('Phase 99 not found');
+    await expect(phaseInsert(adapter, ['99', 'Missing'], tmpDir)).rejects.toThrow('Phase 99 not found');
   });
 
   it('throws GSDError with Validation for missing args', async () => {
     const { phaseInsert } = await import('./phase-lifecycle.js');
     await setupTestProject(tmpDir);
 
-    await expect(phaseInsert([], tmpDir)).rejects.toThrow('after-phase and description required');
+    await expect(phaseInsert(adapter, [], tmpDir)).rejects.toThrow('after-phase and description required');
   });
 });
 
@@ -723,7 +726,7 @@ describe('phaseScaffold', () => {
       phases: ['09-foundation'],
     });
 
-    const result = await phaseScaffold(['context', '9'], tmpDir);
+    const result = await phaseScaffold(adapter, ['context', '9'], tmpDir);
     const data = result.data as Record<string, unknown>;
 
     expect(data.created).toBe(true);
@@ -744,7 +747,7 @@ describe('phaseScaffold', () => {
       phases: ['09-foundation'],
     });
 
-    const result = await phaseScaffold(['uat', '9'], tmpDir);
+    const result = await phaseScaffold(adapter, ['uat', '9'], tmpDir);
     const data = result.data as Record<string, unknown>;
 
     expect(data.created).toBe(true);
@@ -760,7 +763,7 @@ describe('phaseScaffold', () => {
       phases: ['09-foundation'],
     });
 
-    const result = await phaseScaffold(['verification', '9'], tmpDir);
+    const result = await phaseScaffold(adapter, ['verification', '9'], tmpDir);
     const data = result.data as Record<string, unknown>;
 
     expect(data.created).toBe(true);
@@ -774,7 +777,7 @@ describe('phaseScaffold', () => {
     const { phaseScaffold } = await import('./phase-lifecycle.js');
     await setupTestProject(tmpDir);
 
-    const result = await phaseScaffold(['phase-dir', '15', 'New Module'], tmpDir);
+    const result = await phaseScaffold(adapter, ['phase-dir', '15', 'New Module'], tmpDir);
     const data = result.data as Record<string, unknown>;
 
     expect(data.created).toBe(true);
@@ -789,9 +792,9 @@ describe('phaseScaffold', () => {
     });
 
     // Create first
-    await phaseScaffold(['context', '9'], tmpDir);
+    await phaseScaffold(adapter, ['context', '9'], tmpDir);
     // Second call should return already_exists
-    const result = await phaseScaffold(['context', '9'], tmpDir);
+    const result = await phaseScaffold(adapter, ['context', '9'], tmpDir);
     const data = result.data as Record<string, unknown>;
     expect(data.created).toBe(false);
     expect(data.reason).toBe('already_exists');
@@ -803,7 +806,7 @@ describe('phaseScaffold', () => {
       phases: ['09-foundation'],
     });
 
-    await expect(phaseScaffold(['badtype', '9'], tmpDir)).rejects.toThrow('Unknown scaffold type');
+    await expect(phaseScaffold(adapter, ['badtype', '9'], tmpDir)).rejects.toThrow('Unknown scaffold type');
   });
 });
 
@@ -888,7 +891,7 @@ describe('phaseRemove', () => {
     await writeFile(join(phasesDir, '06-dashboard', '06-01-PLAN.md'), 'plan', 'utf-8');
     await writeFile(join(phasesDir, '07-api', '07-01-PLAN.md'), 'plan', 'utf-8');
 
-    const result = await phaseRemove(['6'], tmpDir);
+    const result = await phaseRemove(adapter, ['6'], tmpDir);
     const data = result.data as Record<string, unknown>;
 
     expect(data.removed).toBe('6');
@@ -927,7 +930,7 @@ describe('phaseRemove', () => {
     await writeFile(join(phasesDir, '06.2-hotfix-b', '06.2-01-PLAN.md'), 'plan', 'utf-8');
     await writeFile(join(phasesDir, '06.3-hotfix-c', '06.3-01-PLAN.md'), 'plan', 'utf-8');
 
-    const result = await phaseRemove(['6.1'], tmpDir);
+    const result = await phaseRemove(adapter, ['6.1'], tmpDir);
     const data = result.data as Record<string, unknown>;
 
     expect(data.removed).toBe('6.1');
@@ -960,7 +963,7 @@ describe('phaseRemove', () => {
     // Create a SUMMARY file to simulate executed work
     await writeFile(join(phasesDir, '06-dashboard', '06-01-SUMMARY.md'), 'summary', 'utf-8');
 
-    await expect(phaseRemove(['6'], tmpDir)).rejects.toThrow('--force');
+    await expect(phaseRemove(adapter, ['6'], tmpDir)).rejects.toThrow('--force');
   });
 
   it('allows removal with --force even when SUMMARY files exist', async () => {
@@ -973,7 +976,7 @@ describe('phaseRemove', () => {
     });
     await writeFile(join(phasesDir, '06-dashboard', '06-01-SUMMARY.md'), 'summary', 'utf-8');
 
-    const result = await phaseRemove(['6', '--force'], tmpDir);
+    const result = await phaseRemove(adapter, ['6', '--force'], tmpDir);
     const data = result.data as Record<string, unknown>;
     expect(data.removed).toBe('6');
     expect(data.directory_deleted).toBeTruthy();
@@ -989,7 +992,7 @@ describe('phaseRemove', () => {
     });
     await writeFile(join(phasesDir, '06-dashboard', '06-01-SUMMARY.md'), 'summary', 'utf-8');
 
-    const result = await phaseRemove(['--force', '6'], tmpDir);
+    const result = await phaseRemove(adapter, ['--force', '6'], tmpDir);
     const data = result.data as Record<string, unknown>;
     expect(data.removed).toBe('6');
     expect(data.directory_deleted).toBeTruthy();
@@ -1004,7 +1007,7 @@ describe('phaseRemove', () => {
     await mkdir(phasesDir, { recursive: true });
     await writeFile(join(planningDir, 'STATE.md'), STATE_FOR_REMOVE, 'utf-8');
 
-    await expect(phaseRemove(['6'], tmpDir)).rejects.toThrow('ROADMAP.md not found');
+    await expect(phaseRemove(adapter, ['6'], tmpDir)).rejects.toThrow('ROADMAP.md not found');
   });
 
   it('throws GSDError when phase number is missing', async () => {
@@ -1014,7 +1017,7 @@ describe('phaseRemove', () => {
       state: STATE_FOR_REMOVE,
     });
 
-    await expect(phaseRemove([], tmpDir)).rejects.toThrow('phase number required');
+    await expect(phaseRemove(adapter, [], tmpDir)).rejects.toThrow('phase number required');
   });
 
   it('throws GSDError when target phase does not exist and does not mutate STATE.md', async () => {
@@ -1025,7 +1028,7 @@ describe('phaseRemove', () => {
       phases: ['05-auth', '06-dashboard', '07-api'],
     });
 
-    await expect(phaseRemove(['99'], tmpDir)).rejects.toThrow('Phase 99 not found');
+    await expect(phaseRemove(adapter, ['99'], tmpDir)).rejects.toThrow('Phase 99 not found');
     const stateContent = await readFile(join(tmpDir, '.planning', 'STATE.md'), 'utf-8');
     expect(stateContent).toMatch(/total_phases:\s*7/);
   });
@@ -1038,7 +1041,7 @@ describe('phaseRemove', () => {
       phases: ['05-auth', '06-dashboard', '07-api'],
     });
 
-    await phaseRemove(['6'], tmpDir);
+    await phaseRemove(adapter, ['6'], tmpDir);
 
     const roadmap = await readFile(join(tmpDir, '.planning', 'ROADMAP.md'), 'utf-8');
     // Phase 6 section should be removed
@@ -1058,7 +1061,7 @@ describe('phaseRemove', () => {
       phases: ['05-auth', '06-dashboard', '07-api'],
     });
 
-    await phaseRemove(['6'], tmpDir);
+    await phaseRemove(adapter, ['6'], tmpDir);
 
     const stateContent = await readFile(join(tmpDir, '.planning', 'STATE.md'), 'utf-8');
     // total_phases should be decremented from 7 to 6
@@ -1211,7 +1214,7 @@ describe('phaseComplete', () => {
     // Create REQUIREMENTS.md
     await writeFile(join(tmpDir, '.planning', 'REQUIREMENTS.md'), REQUIREMENTS_FOR_COMPLETE, 'utf-8');
 
-    const result = await phaseComplete(['10'], tmpDir);
+    const result = await phaseComplete(adapter, ['10'], tmpDir);
     const data = result.data as Record<string, unknown>;
 
     expect(data.completed_phase).toBe('10');
@@ -1250,7 +1253,7 @@ describe('phaseComplete', () => {
     await writeFile(join(p10Dir, '10-03-SUMMARY.md'), 'summary3', 'utf-8');
     await writeFile(join(tmpDir, '.planning', 'REQUIREMENTS.md'), REQUIREMENTS_FOR_COMPLETE, 'utf-8');
 
-    await phaseComplete(['10'], tmpDir);
+    await phaseComplete(adapter, ['10'], tmpDir);
 
     const req = await readFile(join(tmpDir, '.planning', 'REQUIREMENTS.md'), 'utf-8');
     // QUERY-01 checkbox should be marked
@@ -1277,7 +1280,7 @@ describe('phaseComplete', () => {
     await writeFile(join(p10Dir, '10-03-SUMMARY.md'), 'summary', 'utf-8');
     await writeFile(join(tmpDir, '.planning', 'REQUIREMENTS.md'), REQUIREMENTS_FOR_COMPLETE, 'utf-8');
 
-    await phaseComplete(['10'], tmpDir);
+    await phaseComplete(adapter, ['10'], tmpDir);
 
     const state = await readFile(join(tmpDir, '.planning', 'STATE.md'), 'utf-8');
     // Phase should advance to 11
@@ -1309,7 +1312,7 @@ describe('phaseComplete', () => {
     await writeFile(join(p10Dir, '10-01-SUMMARY.md'), 'summary', 'utf-8');
     await writeFile(join(tmpDir, '.planning', 'REQUIREMENTS.md'), REQUIREMENTS_FOR_COMPLETE, 'utf-8');
 
-    const result = await phaseComplete(['10'], tmpDir);
+    const result = await phaseComplete(adapter, ['10'], tmpDir);
     const data = result.data as Record<string, unknown>;
 
     // Next phase should be 11 (from filesystem)
@@ -1329,7 +1332,7 @@ describe('phaseComplete', () => {
     await writeFile(join(p11Dir, '11-01-SUMMARY.md'), 'summary', 'utf-8');
     await writeFile(join(tmpDir, '.planning', 'REQUIREMENTS.md'), REQUIREMENTS_FOR_COMPLETE, 'utf-8');
 
-    const result = await phaseComplete(['11'], tmpDir);
+    const result = await phaseComplete(adapter, ['11'], tmpDir);
     const data = result.data as Record<string, unknown>;
 
     expect(data.is_last_phase).toBe(true);
@@ -1356,7 +1359,7 @@ describe('phaseComplete', () => {
     await writeFile(join(p10Dir, '10-VERIFICATION.md'), '---\nstatus: gaps_found\n---\nGaps', 'utf-8');
     await writeFile(join(tmpDir, '.planning', 'REQUIREMENTS.md'), REQUIREMENTS_FOR_COMPLETE, 'utf-8');
 
-    const result = await phaseComplete(['10'], tmpDir);
+    const result = await phaseComplete(adapter, ['10'], tmpDir);
     const data = result.data as Record<string, unknown>;
 
     // Should complete despite warnings
@@ -1377,7 +1380,7 @@ describe('phaseComplete', () => {
     });
     await writeFile(join(tmpDir, '.planning', 'REQUIREMENTS.md'), REQUIREMENTS_FOR_COMPLETE, 'utf-8');
 
-    await expect(phaseComplete(['99'], tmpDir)).rejects.toThrow('Phase 99 not found');
+    await expect(phaseComplete(adapter, ['99'], tmpDir)).rejects.toThrow('Phase 99 not found');
   });
 
   it('updates performance metrics table in STATE.md', async () => {
@@ -1396,7 +1399,7 @@ describe('phaseComplete', () => {
     await writeFile(join(p10Dir, '10-03-SUMMARY.md'), 'summary', 'utf-8');
     await writeFile(join(tmpDir, '.planning', 'REQUIREMENTS.md'), REQUIREMENTS_FOR_COMPLETE, 'utf-8');
 
-    await phaseComplete(['10'], tmpDir);
+    await phaseComplete(adapter, ['10'], tmpDir);
 
     const state = await readFile(join(tmpDir, '.planning', 'STATE.md'), 'utf-8');
     // Total plans completed should be incremented: 3 + 3 = 6
@@ -1460,7 +1463,7 @@ describe('phaseComplete', () => {
     await writeFile(join(p7Dir, '07-01-SUMMARY.md'), 'summary1', 'utf-8');
     await writeFile(join(p7Dir, '07-02-SUMMARY.md'), 'summary2', 'utf-8');
 
-    await phaseComplete(['7'], tmpDir);
+    await phaseComplete(adapter, ['7'], tmpDir);
 
     const updated = await readFile(join(tmpDir, '.planning', 'ROADMAP.md'), 'utf-8');
 
@@ -1484,7 +1487,7 @@ describe('phasesClear', () => {
     });
 
     // Should throw with count of dirs to delete (2, not 3 since 999.1 is excluded)
-    await expect(phasesClear([], tmpDir)).rejects.toThrow(/2 phase director/);
+    await expect(phasesClear(adapter, [], tmpDir)).rejects.toThrow(/2 phase director/);
   });
 
   it('deletes all dirs except 999.x with --confirm', async () => {
@@ -1493,7 +1496,7 @@ describe('phasesClear', () => {
       phases: ['09-foundation', '10-read-only-queries', '999.1-backlog'],
     });
 
-    const result = await phasesClear(['--confirm'], tmpDir);
+    const result = await phasesClear(adapter, ['--confirm'], tmpDir);
     const data = result.data as Record<string, unknown>;
 
     expect(data.cleared).toBe(2);
@@ -1510,7 +1513,7 @@ describe('phasesClear', () => {
     const { phasesClear } = await import('./phase-lifecycle.js');
     await setupTestProject(tmpDir, { phases: [] });
 
-    const result = await phasesClear(['--confirm'], tmpDir);
+    const result = await phasesClear(adapter, ['--confirm'], tmpDir);
     const data = result.data as Record<string, unknown>;
     expect(data.cleared).toBe(0);
   });
@@ -1565,7 +1568,7 @@ describe('milestoneComplete help-flag defense', () => {
 
     let thrown: unknown;
     try {
-      await milestoneComplete(['--help'], tmpDir);
+      await milestoneComplete(adapter, ['--help'], tmpDir);
     } catch (e) {
       thrown = e;
     }
@@ -1593,7 +1596,7 @@ describe('milestoneComplete help-flag defense', () => {
 
     let thrown: unknown;
     try {
-      await milestoneComplete(['-h'], tmpDir);
+      await milestoneComplete(adapter, ['-h'], tmpDir);
     } catch (e) {
       thrown = e;
     }
@@ -1679,6 +1682,7 @@ describe('readModifyWriteRoadmapMd — CR-3267 finding 4: non-ENOENT errors prop
   it('propagates EACCES on ROADMAP.md readFile instead of treating as empty', async () => {
     const { readModifyWriteRoadmapMd } = await import('./phase-lifecycle.js');
     const dir = await mkdtemp(join(tmpdir(), 'gsd-roadmap-acl-'));
+    const dirAdapter = new MarkdownAdapter(dir);
     const planningDir = join(dir, '.planning');
     await mkdir(planningDir, { recursive: true });
     const roadmapPath = join(planningDir, 'ROADMAP.md');
@@ -1686,7 +1690,7 @@ describe('readModifyWriteRoadmapMd — CR-3267 finding 4: non-ENOENT errors prop
     try {
       await import('node:fs/promises').then(m => m.chmod(roadmapPath, 0o000));
       await expect(
-        readModifyWriteRoadmapMd(dir, (c) => c)
+        readModifyWriteRoadmapMd(dirAdapter, dir, (c) => c)
       ).rejects.toThrow();
     } finally {
       await import('node:fs/promises').then(m => m.chmod(roadmapPath, 0o644));
@@ -1697,11 +1701,12 @@ describe('readModifyWriteRoadmapMd — CR-3267 finding 4: non-ENOENT errors prop
   it('starts with empty content when ROADMAP.md is absent (ENOENT)', async () => {
     const { readModifyWriteRoadmapMd } = await import('./phase-lifecycle.js');
     const dir = await mkdtemp(join(tmpdir(), 'gsd-roadmap-noent-'));
+    const dirAdapter = new MarkdownAdapter(dir);
     const planningDir = join(dir, '.planning');
     await mkdir(planningDir, { recursive: true });
     // No ROADMAP.md written — must default to '' and create it
     try {
-      const result = await readModifyWriteRoadmapMd(dir, (c) => c + 'NEW');
+      const result = await readModifyWriteRoadmapMd(dirAdapter, dir, (c) => c + 'NEW');
       expect(result).toBe('NEW');
     } finally {
       await rm(dir, { recursive: true, force: true });
