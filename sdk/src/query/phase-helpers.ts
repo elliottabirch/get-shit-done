@@ -148,7 +148,7 @@ export async function readModifyWriteState(
     const content = (await adapter.getRecord(statePath)) ?? '';
     const body = stripFrontmatter(content);
     const modified = await modifier(body);
-    const synced = await syncStateFrontmatter(modified, projectDir);
+    const synced = await syncStateFrontmatter(adapter, modified, projectDir);
     const normalized = normalizeMd(synced);
     await adapter.putRecord(statePath, normalized);
     return normalized;

@@ -968,9 +968,9 @@ export class MarkdownAdapter implements StorageAdapter {
     const srcUrl = new URL(`${prefix}sdk/src/query/state-mutation.js`, import.meta.url);
     const modulePath = existsSync(fileURLToPath(distUrl)) ? distUrl.href : srcUrl.href;
     const mod = await (import(/* webpackIgnore: true */ modulePath) as Promise<{
-      syncStateFrontmatter: (content: string, projectDir: string) => Promise<string>;
+      syncStateFrontmatter: (adapter: unknown, content: string, projectDir: string) => Promise<string>;
     }>);
-    return mod.syncStateFrontmatter(body, this.projectDir);
+    return mod.syncStateFrontmatter(this, body, this.projectDir);
   }
 
   // (appendToSection removed — Plan 03-06: zero remaining callers after the
