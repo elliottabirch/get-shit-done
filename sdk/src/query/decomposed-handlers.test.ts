@@ -106,7 +106,7 @@ describe('requirementsMarkComplete', () => {
 
 describe('statePlannedPhase', () => {
   it('returns cmdStatePlannedPhase-shaped data', async () => {
-    const result = await statePlannedPhase(['--phase', '10', '--name', 'queries', '--plans', '2'], tmpDir);
+    const result = await statePlannedPhase(new MarkdownAdapter(tmpDir), ['--phase', '10', '--name', 'queries', '--plans', '2'], tmpDir);
     const data = result.data as Record<string, unknown>;
     expect(Array.isArray(data.updated)).toBe(true);
     expect(data.phase).toBe('10');
@@ -114,7 +114,7 @@ describe('statePlannedPhase', () => {
   });
 
   it('returns error when --phase is missing', async () => {
-    const result = await statePlannedPhase([], tmpDir);
+    const result = await statePlannedPhase(new MarkdownAdapter(tmpDir), [], tmpDir);
     const data = result.data as Record<string, unknown>;
     expect(data.error).toMatch(/phase required/);
   });

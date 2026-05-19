@@ -28,7 +28,6 @@ import { GSDError, ErrorClassification } from '../errors.js';
 import { extractFrontmatter, stripFrontmatter } from './frontmatter.js';
 import { reconstructFrontmatter, spliceFrontmatter } from './frontmatter-mutation.js';
 import {
-  adapterFor,
   comparePhaseNum,
   escapeRegex,
   normalizePhaseName,
@@ -39,9 +38,9 @@ import {
   stateExtractField,
 } from './helpers.js';
 import { buildStateFrontmatter, getMilestonePhaseFilter } from './state.js';
-import type { QueryHandler } from './utils.js';
+import type { QueryHandler, QueryResult } from './utils.js';
 import type { AppendEvent, MutationEvent, SignalEvent } from './state-event-types.js';
-import type { StateWriteOutcome } from '../../../adapters/types.js';
+import type { StorageAdapter, StateWriteOutcome } from '../../../adapters/types.js';
 import { readModifyWriteState } from './phase-helpers.js';
 
 // ─── Process exit lock cleanup (D2 — match CJS state.cjs:16-23) ─────────
@@ -253,11 +252,10 @@ export async function releaseStateLock(lockPath: string): Promise<void> {
  * Strips existing frontmatter, rebuilds from body + disk, and splices back.
  * Preserves existing status when body-derived status is 'unknown'.
  */
-export async function syncStateFrontmatter(content: string, projectDir: string): Promise<string> {
+export async function syncStateFrontmatter(adapter: StorageAdapter, content: string, projectDir: string): Promise<string> {
   const existingFm = extractFrontmatter(content);
   const body = stripFrontmatter(content);
-  const syncAdapter = await adapterFor(projectDir);
-  const derivedFm = await buildStateFrontmatter(syncAdapter, body, projectDir);
+  const derivedFm = await buildStateFrontmatter(adapter, body, projectDir);
 
   // Preserve existing status when body-derived is 'unknown'
   if (derivedFm.status === 'unknown' && existingFm.status && existingFm.status !== 'unknown') {
@@ -282,6 +280,7 @@ export async function syncStateFrontmatter(content: string, projectDir: string):
  * @returns The final written content
  */
 async function readModifyWriteStateMd(
+  adapter: StorageAdapter,
   projectDir: string,
   modifier: (content: string) => string | Promise<string>,
   workstream?: string,
@@ -289,7 +288,6 @@ async function readModifyWriteStateMd(
   const statePath = planningPaths(projectDir, workstream).state;
   const lockPath = await acquireStateLock(statePath);
   try {
-    const adapter = await adapterFor(projectDir);
     const stateRel = planningRelativePath(workstream, 'STATE.md');
     const content = (await adapter.getRecord(stateRel)) ?? '';
     // Strip frontmatter before passing to modifier so that regex replacements
@@ -297,7 +295,7 @@ async function readModifyWriteStateMd(
     // syncStateFrontmatter rebuilds frontmatter from the modified body + disk.
     const body = stripFrontmatter(content);
     const modified = await modifier(body);
-    const synced = await syncStateFrontmatter(modified, projectDir);
+    const synced = await syncStateFrontmatter(adapter, modified, projectDir);
     const normalized = normalizeMd(synced);
     await adapter.putRecord(stateRel, normalized);
     return normalized;
@@ -316,6 +314,7 @@ async function readModifyWriteStateMd(
  * any callers outside this file. Will be removed in Phase 4.
  */
 export async function readModifyWriteStateMdFull(
+  adapter: StorageAdapter,
   projectDir: string,
   modifier: (content: string) => string | Promise<string>,
   workstream?: string,
@@ -323,11 +322,10 @@ export async function readModifyWriteStateMdFull(
   const statePath = planningPaths(projectDir, workstream).state;
   const lockPath = await acquireStateLock(statePath);
   try {
-    const adapter = await adapterFor(projectDir);
     const stateRel = planningRelativePath(workstream, 'STATE.md');
     const content = (await adapter.getRecord(stateRel)) ?? '';
     const modified = await modifier(content);
-    const synced = await syncStateFrontmatter(modified, projectDir);
+    const synced = await syncStateFrontmatter(adapter, modified, projectDir);
     await adapter.putRecord(stateRel, normalizeMd(synced));
   } finally {
     await releaseStateLock(lockPath);
@@ -345,7 +343,12 @@ export async function readModifyWriteStateMdFull(
  * @param projectDir - Project root directory
  * @returns QueryResult with { updated: true/false }
  */
-export const stateUpdate: QueryHandler = async (args, projectDir, workstream) => {
+export async function stateUpdate(
+  adapter: StorageAdapter,
+  args: string[],
+  projectDir: string,
+  workstream?: string,
+): Promise<QueryResult> {
   const field = args[0];
   const value = args[1];
 
@@ -354,7 +357,6 @@ export const stateUpdate: QueryHandler = async (args, projectDir, workstream) =>
   }
 
   let updated = false;
-  const adapter = await adapterFor(projectDir);
   await readModifyWriteState(adapter, workstream, (content) => {
     const result = stateReplaceField(content, field, value);
     if (result) {
@@ -376,7 +378,12 @@ export const stateUpdate: QueryHandler = async (args, projectDir, workstream) =>
  * @param projectDir - Project root directory
  * @returns QueryResult with `{ updated, failed }` matching `cmdStatePatch` in `state.cjs`
  */
-export const statePatch: QueryHandler = async (args, projectDir, workstream) => {
+export async function statePatch(
+  adapter: StorageAdapter,
+  args: string[],
+  projectDir: string,
+  workstream?: string,
+): Promise<QueryResult> {
   let patches: Record<string, string>;
 
   if (args.length >= 2 && args[0]?.startsWith('--')) {
@@ -400,7 +407,6 @@ export const statePatch: QueryHandler = async (args, projectDir, workstream) => 
 
   const updated: string[] = [];
   const failed: string[] = [];
-  const adapter = await adapterFor(projectDir);
   await readModifyWriteState(adapter, workstream, (content) => {
     for (const [field, value] of Object.entries(patches)) {
       const result = stateReplaceField(content, field, String(value));
@@ -430,7 +436,12 @@ export const statePatch: QueryHandler = async (args, projectDir, workstream) => 
  * @param projectDir - Project root directory
  * @returns QueryResult with phase metadata and `updated` field names (for raw parity)
  */
-export const stateBeginPhase: QueryHandler = async (args, projectDir, workstream) => {
+export async function stateBeginPhase(
+  adapter: StorageAdapter,
+  args: string[],
+  projectDir: string,
+  workstream?: string,
+): Promise<QueryResult> {
   const named = parseNamedArgs(args, ['phase', 'name', 'plans']);
   let phaseNumber = (named.phase as string | null) || '';
   let phaseName = (named.name as string | null) || '';
@@ -459,7 +470,6 @@ export const stateBeginPhase: QueryHandler = async (args, projectDir, workstream
   const today = new Date().toISOString().split('T')[0];
   const updated: string[] = [];
 
-  const adapter = await adapterFor(projectDir);
   await readModifyWriteState(adapter, workstream, (content) => {
     // Update bold/plain fields
     const statusValue = `Executing Phase ${phaseNumber}`;
@@ -581,11 +591,15 @@ export const stateBeginPhase: QueryHandler = async (args, projectDir, workstream
  * @param projectDir - Project root directory
  * @returns QueryResult with { advanced, current_plan, total_plans }
  */
-export const stateAdvancePlan: QueryHandler = async (_args, projectDir, workstream) => {
+export async function stateAdvancePlan(
+  adapter: StorageAdapter,
+  _args: string[],
+  projectDir: string,
+  workstream?: string,
+): Promise<QueryResult> {
   const today = new Date().toISOString().split('T')[0];
   let result: Record<string, unknown> = { error: 'STATE.md not found' };
 
-  const adapter = await adapterFor(projectDir);
   await readModifyWriteState(adapter, workstream, (content) => {
     // Parse current plan info (content already has frontmatter stripped)
     const legacyPlan = stateExtractField(content, 'Current Plan');
@@ -667,7 +681,12 @@ export const stateAdvancePlan: QueryHandler = async (_args, projectDir, workstre
  * @param projectDir - Project root directory
  * @returns QueryResult with { recorded: true/false }
  */
-export const stateRecordMetric: QueryHandler = async (args, projectDir, _workstream) => {
+export async function stateRecordMetric(
+  adapter: StorageAdapter,
+  args: string[],
+  projectDir: string,
+  _workstream?: string,
+): Promise<QueryResult> {
   const parsed = parseNamedArgs(args, ['phase', 'plan', 'duration', 'tasks', 'files']);
   const phase = parsed.phase as string | null;
   const plan = parsed.plan as string | null;
@@ -679,7 +698,6 @@ export const stateRecordMetric: QueryHandler = async (args, projectDir, _workstr
     return { data: { error: 'phase, plan, and duration required' } };
   }
 
-  const adapter = await adapterFor(projectDir);
   const event: AppendEvent = {
     type: 'metric',
     payload: { phase, plan, duration, tasks, files },
@@ -708,25 +726,29 @@ export const stateRecordMetric: QueryHandler = async (args, projectDir, _workstr
  * @param projectDir - Project root directory
  * @returns QueryResult with { updated, percent, completed, total }
  */
-export const stateUpdateProgress: QueryHandler = async (_args, projectDir, workstream) => {
+export async function stateUpdateProgress(
+  adapter: StorageAdapter,
+  _args: string[],
+  projectDir: string,
+  workstream?: string,
+): Promise<QueryResult> {
   const phasesDir = planningPaths(projectDir, workstream).phases;
   let totalPlans = 0;
   let totalSummaries = 0;
 
   try {
-    const progressAdapter = await adapterFor(projectDir);
-    const isDirInMilestone = await getMilestonePhaseFilter(progressAdapter, workstream);
+    const isDirInMilestone = await getMilestonePhaseFilter(adapter, workstream);
     const phasesRel = planningRelativePath(workstream, 'phases');
-    const phaseRefs = await progressAdapter.listCollection(phasesRel);
+    const phaseRefs = await adapter.listCollection(phasesRel);
     const phaseDirNames: string[] = [];
     for (const ref of phaseRefs) {
-      const st = await progressAdapter.stat(ref.path);
+      const st = await adapter.stat(ref.path);
       if (st?.kind === 'dir') phaseDirNames.push(ref.name);
     }
     const filteredDirs = phaseDirNames.filter(isDirInMilestone);
 
     for (const dir of filteredDirs) {
-      const innerRefs = await progressAdapter.listCollection(`${phasesRel}/${dir}`);
+      const innerRefs = await adapter.listCollection(`${phasesRel}/${dir}`);
       const fileNames = innerRefs.map(r => r.name);
       totalPlans += fileNames.filter(f => /-PLAN\.md$/i.test(f)).length;
       totalSummaries += fileNames.filter(f => /-SUMMARY\.md$/i.test(f)).length;
@@ -740,7 +762,6 @@ export const stateUpdateProgress: QueryHandler = async (_args, projectDir, works
   const progressStr = `[${bar}] ${percent}%`;
 
   let updated = false;
-  const adapter = await adapterFor(projectDir);
   await readModifyWriteState(adapter, workstream, (content) => {
     const boldProgressPattern = /(\*\*Progress:\*\*\s*).*/i;
     const plainProgressPattern = /^(Progress:\s*).*/im;
@@ -767,7 +788,12 @@ export const stateUpdateProgress: QueryHandler = async (_args, projectDir, works
  * Appends a decision to the Decisions section. Removes placeholder text.
  * argv matches `gsd-tools.cjs`: `--phase`, `--summary`, `--rationale`, etc.
  */
-export const stateAddDecision: QueryHandler = async (args, projectDir, _workstream) => {
+export async function stateAddDecision(
+  adapter: StorageAdapter,
+  args: string[],
+  projectDir: string,
+  _workstream?: string,
+): Promise<QueryResult> {
   const parsed = parseNamedArgs(args, ['phase', 'summary', 'summary-file', 'rationale', 'rationale-file']);
   const phase = parsed.phase as string | null;
   let summaryText: string | null = null;
@@ -797,7 +823,6 @@ export const stateAddDecision: QueryHandler = async (args, projectDir, _workstre
 
   const entry = `- [Phase ${phase || '?'}]: ${summaryText}${rationaleText ? ` — ${rationaleText}` : ''}`;
 
-  const adapter = await adapterFor(projectDir);
   const event: AppendEvent = {
     type: 'decision',
     payload: { phase: phase || '?', summary: summaryText, rationale: rationaleText || undefined },
@@ -819,7 +844,12 @@ export const stateAddDecision: QueryHandler = async (args, projectDir, _workstre
  * Query handler for state.add-blocker command.
  * argv: `--text`, `--text-file` (see `gsd-tools.cjs`).
  */
-export const stateAddBlocker: QueryHandler = async (args, projectDir, _workstream) => {
+export async function stateAddBlocker(
+  adapter: StorageAdapter,
+  args: string[],
+  projectDir: string,
+  _workstream?: string,
+): Promise<QueryResult> {
   const parsed = parseNamedArgs(args, ['text', 'text-file']);
   let blockerText: string | null = null;
 
@@ -839,7 +869,6 @@ export const stateAddBlocker: QueryHandler = async (args, projectDir, _workstrea
     return { data: { error: 'text required' } };
   }
 
-  const adapter = await adapterFor(projectDir);
   const event: MutationEvent = {
     type: 'blocker_added',
     payload: { text: blockerText },
@@ -861,14 +890,18 @@ export const stateAddBlocker: QueryHandler = async (args, projectDir, _workstrea
  * Query handler for state.resolve-blocker command.
  * argv: `--text` (see `gsd-tools.cjs`).
  */
-export const stateResolveBlocker: QueryHandler = async (args, projectDir, _workstream) => {
+export async function stateResolveBlocker(
+  adapter: StorageAdapter,
+  args: string[],
+  projectDir: string,
+  _workstream?: string,
+): Promise<QueryResult> {
   const parsed = parseNamedArgs(args, ['text']);
   const searchText = parsed.text as string | null;
   if (!searchText) {
     return { data: { error: 'text required' } };
   }
 
-  const adapter = await adapterFor(projectDir);
   const event: MutationEvent = {
     type: 'blocker_resolved',
     payload: { text: searchText },
@@ -949,7 +982,12 @@ function formatRoadmapEvolutionEntry(opts: {
  * Atomicity: goes through adapter.recordStateAppend which uses
  * adapter.withTransaction for atomic read-modify-write.
  */
-export const stateAddRoadmapEvolution: QueryHandler = async (args, projectDir, _workstream) => {
+export async function stateAddRoadmapEvolution(
+  adapter: StorageAdapter,
+  args: string[],
+  projectDir: string,
+  _workstream?: string,
+): Promise<QueryResult> {
   const parsed = parseNamedArgs(args, ['phase', 'action', 'note', 'after'], ['urgent']);
   const phase = (parsed.phase as string | null) ?? null;
   const action = (parsed.action as string | null) ?? null;
@@ -971,8 +1009,6 @@ export const stateAddRoadmapEvolution: QueryHandler = async (args, projectDir, _
   }
 
   const entry = formatRoadmapEvolutionEntry({ phase, action, note, after, urgent });
-
-  const adapter = await adapterFor(projectDir);
 
   const event: AppendEvent = {
     type: 'roadmap_evolution',
@@ -1004,12 +1040,16 @@ export const stateAddRoadmapEvolution: QueryHandler = async (args, projectDir, _
  * Query handler for state.record-session command.
  * argv: `--stopped-at`, `--resume-file` (see `cmdStateRecordSession` in `state.cjs`).
  */
-export const stateRecordSession: QueryHandler = async (args, projectDir, _workstream) => {
+export async function stateRecordSession(
+  adapter: StorageAdapter,
+  args: string[],
+  projectDir: string,
+  _workstream?: string,
+): Promise<QueryResult> {
   const parsed = parseNamedArgs(args, ['stopped-at', 'resume-file']);
   const stoppedAt = parsed['stopped-at'] as string | null | undefined;
   const resumeFile = ((parsed['resume-file'] as string | null) ?? 'None');
 
-  const adapter = await adapterFor(projectDir);
   const event: AppendEvent = {
     type: 'session',
     payload: {
@@ -1033,7 +1073,12 @@ export const stateRecordSession: QueryHandler = async (args, projectDir, _workst
 /**
  * Query handler for state.planned-phase — port of `cmdStatePlannedPhase` from `state.cjs`.
  */
-export const statePlannedPhase: QueryHandler = async (args, projectDir, workstream) => {
+export async function statePlannedPhase(
+  adapter: StorageAdapter,
+  args: string[],
+  projectDir: string,
+  workstream?: string,
+): Promise<QueryResult> {
   const parsed = parseNamedArgs(args, ['phase', 'name', 'plans']);
   const phaseNumber = parsed.phase as string | null;
   const plansRaw = parsed.plans as string | null;
@@ -1052,7 +1097,6 @@ export const statePlannedPhase: QueryHandler = async (args, projectDir, workstre
 
   const phaseLabel = String(phaseNumber).trim();
 
-  const adapter = await adapterFor(projectDir);
   const stateRel = planningRelativePath(workstream, 'STATE.md');
   if (!(await adapter.exists(stateRel))) {
     return { data: { error: 'STATE.md not found' } };
@@ -1122,7 +1166,12 @@ export const statePlannedPhase: QueryHandler = async (args, projectDir, workstre
  * `state.milestone-switch` from `/gsd:new-milestone` Step 5 in place of the
  * manual body rewrite.
  */
-export const stateMilestoneSwitch: QueryHandler = async (args, projectDir, workstream) => {
+export async function stateMilestoneSwitch(
+  adapter: StorageAdapter,
+  args: string[],
+  projectDir: string,
+  workstream?: string,
+): Promise<QueryResult> {
   // NOTE: the CLI flag is `--milestone` (not `--version`). gsd-tools reserves
   // `--version` as a globally-invalid help flag, so the workflow invokes this
   // handler with `--milestone vX.Y`. The internal variable is still `version`
@@ -1136,7 +1185,6 @@ export const stateMilestoneSwitch: QueryHandler = async (args, projectDir, works
   }
 
   const today = new Date().toISOString().split('T')[0]!;
-  const adapter = await adapterFor(projectDir);
   const statePath = planningRelativePath(workstream, 'STATE.md');
 
   return await adapter.withTransaction(async () => {
@@ -1238,7 +1286,12 @@ function parseNamedArgs(
  * Writes `WAITING.json` under both `.gsd/` and `.planning/` so readers that only
  * watch one location (e.g. init workflows) still observe the signal.
  */
-export const stateSignalWaiting: QueryHandler = async (args, projectDir, _workstream) => {
+export async function stateSignalWaiting(
+  adapter: StorageAdapter,
+  args: string[],
+  projectDir: string,
+  _workstream?: string,
+): Promise<QueryResult> {
   const parsed = parseNamedArgs(args, ['type', 'question', 'options', 'phase']);
   const waitType = (parsed.type as string | null) || 'decision_point';
   const question = (parsed.question as string | null) || undefined;
@@ -1251,7 +1304,6 @@ export const stateSignalWaiting: QueryHandler = async (args, projectDir, _workst
     join(projectDir, '.planning', 'WAITING.json'),
   ];
 
-  const adapter = await adapterFor(projectDir);
   const event: SignalEvent = {
     type: 'waiting',
     payload: { waitType, question, options, phase },
@@ -1269,8 +1321,12 @@ export const stateSignalWaiting: QueryHandler = async (args, projectDir, _workst
 /**
  * Port of `cmdSignalResume` from state.cjs.
  */
-export const stateSignalResume: QueryHandler = async (_args, projectDir, _workstream) => {
-  const adapter = await adapterFor(projectDir);
+export async function stateSignalResume(
+  adapter: StorageAdapter,
+  _args: string[],
+  projectDir: string,
+  _workstream?: string,
+): Promise<QueryResult> {
   const event: SignalEvent = {
     type: 'resume',
     payload: {},
@@ -1288,10 +1344,14 @@ export const stateSignalResume: QueryHandler = async (_args, projectDir, _workst
 /**
  * Port of `cmdStateValidate` from state.cjs.
  */
-export const stateValidate: QueryHandler = async (_args, projectDir, workstream) => {
-  const validateAdapter = await adapterFor(projectDir);
+export async function stateValidate(
+  adapter: StorageAdapter,
+  _args: string[],
+  projectDir: string,
+  workstream?: string,
+): Promise<QueryResult> {
   const stateRel = planningRelativePath(workstream, 'STATE.md');
-  const content = await validateAdapter.getRecord(stateRel);
+  const content = await adapter.getRecord(stateRel);
   if (!content) {
     return { data: { error: 'STATE.md not found' } };
   }
@@ -1306,20 +1366,20 @@ export const stateValidate: QueryHandler = async (_args, projectDir, workstream)
 
   const phasesRel = planningRelativePath(workstream, 'phases');
 
-  if (currentPhase && await validateAdapter.exists(phasesRel)) {
+  if (currentPhase && await adapter.exists(phasesRel)) {
     const normalized = normalizePhaseName(currentPhase.replace(/\s+of\s+\d+.*/, '').trim());
     try {
-      const phaseRefs = await validateAdapter.listCollection(phasesRel);
+      const phaseRefs = await adapter.listCollection(phasesRel);
       let matchedRef: { name: string; path: string } | undefined;
       for (const ref of phaseRefs) {
-        const st = await validateAdapter.stat(ref.path);
+        const st = await adapter.stat(ref.path);
         if (st?.kind === 'dir' && phaseTokenMatches(ref.name, normalized)) {
           matchedRef = ref;
           break;
         }
       }
       if (matchedRef) {
-        const innerRefs = await validateAdapter.listCollection(matchedRef.path);
+        const innerRefs = await adapter.listCollection(matchedRef.path);
         const files = innerRefs.map(r => r.name);
         const diskPlans = files.filter(f => /-PLAN\.md$/i.test(f)).length;
         const diskSummaries = files.filter(f => /-SUMMARY\.md$/i.test(f)).length;
@@ -1334,7 +1394,7 @@ export const stateValidate: QueryHandler = async (_args, projectDir, workstream)
         const verificationFiles = files.filter(f => f.includes('VERIFICATION') && f.endsWith('.md'));
         for (const vf of verificationFiles) {
           try {
-            const vContent = await validateAdapter.getRecord(`${matchedRef.path}/${vf}`);
+            const vContent = await adapter.getRecord(`${matchedRef.path}/${vf}`);
             if (vContent && /status:\s*passed/i.test(vContent) && /executing/i.test(status)) {
               warnings.push(
                 `Status drift: STATE.md says "${status}" but ${vf} shows verification passed — phase may be complete`,
@@ -1364,11 +1424,15 @@ export const stateValidate: QueryHandler = async (_args, projectDir, workstream)
 /**
  * Port of `cmdStateSync` from state.cjs. Supports `--verify` dry-run.
  */
-export const stateSync: QueryHandler = async (args, projectDir, workstream) => {
+export async function stateSync(
+  adapter: StorageAdapter,
+  args: string[],
+  projectDir: string,
+  workstream?: string,
+): Promise<QueryResult> {
   const verify = args.includes('--verify');
-  const syncAdapter2 = await adapterFor(projectDir);
   const stateRel2 = planningRelativePath(workstream, 'STATE.md');
-  const content = await syncAdapter2.getRecord(stateRel2);
+  const content = await adapter.getRecord(stateRel2);
   if (!content) {
     return { data: { error: 'STATE.md not found' } };
   }
@@ -1377,16 +1441,16 @@ export const stateSync: QueryHandler = async (args, projectDir, workstream) => {
   const today = new Date().toISOString().split('T')[0];
 
   const phasesRel2 = planningRelativePath(workstream, 'phases');
-  if (!(await syncAdapter2.exists(phasesRel2))) {
+  if (!(await adapter.exists(phasesRel2))) {
     return { data: { synced: true, changes: [], dry_run: verify } };
   }
 
   let entries: string[];
   try {
-    const phaseRefs2 = await syncAdapter2.listCollection(phasesRel2);
+    const phaseRefs2 = await adapter.listCollection(phasesRel2);
     const dirNames: string[] = [];
     for (const ref of phaseRefs2) {
-      const st = await syncAdapter2.stat(ref.path);
+      const st = await adapter.stat(ref.path);
       if (st?.kind === 'dir') dirNames.push(ref.name);
     }
     entries = dirNames.sort((a, b) => comparePhaseNum(a, b));
@@ -1400,7 +1464,7 @@ export const stateSync: QueryHandler = async (args, projectDir, workstream) => {
   let highestIncompletePhaseplanCount = 0;
 
   for (const dir of entries) {
-    const innerRefs2 = await syncAdapter2.listCollection(`${phasesRel2}/${dir}`);
+    const innerRefs2 = await adapter.listCollection(`${phasesRel2}/${dir}`);
     const files = innerRefs2.map(r => r.name);
     const plans = files.filter(f => /-PLAN\.md$/i.test(f)).length;
     const summaries = files.filter(f => /-SUMMARY\.md$/i.test(f)).length;
@@ -1457,8 +1521,7 @@ export const stateSync: QueryHandler = async (args, projectDir, workstream) => {
     return { data: { synced: false, changes, dry_run: true } };
   }
 
-  const syncAdapter = await adapterFor(projectDir);
-  await readModifyWriteState(syncAdapter, workstream, (body) => runModifier(body), projectDir);
+  await readModifyWriteState(adapter, workstream, (body) => runModifier(body), projectDir);
 
   return { data: { synced: true, changes, dry_run: false } };
 };
@@ -1583,7 +1646,12 @@ function prunePass(content: string, cutoff: number): { newContent: string; archi
  * Port of `cmdStatePrune` from state.cjs.
  * Args: `--keep-recent N` (default 3), `--dry-run`, `--silent` (omit extra logging fields — no-op in SDK JSON).
  */
-export const statePrune: QueryHandler = async (args, projectDir, workstream) => {
+export async function statePrune(
+  adapter: StorageAdapter,
+  args: string[],
+  projectDir: string,
+  workstream?: string,
+): Promise<QueryResult> {
   const parsed = parseNamedArgs(args, ['keep-recent'], ['dry-run', 'silent']);
   const parsedKeepRecent = Number.parseInt(String(parsed['keep-recent'] ?? '3'), 10);
   if (!Number.isInteger(parsedKeepRecent) || parsedKeepRecent < 0) {
@@ -1592,9 +1660,8 @@ export const statePrune: QueryHandler = async (args, projectDir, workstream) => 
   const keepRecent = parsedKeepRecent;
   const dryRun = parsed['dry-run'] === true;
 
-  const pruneAdapter = await adapterFor(projectDir);
   const pruneStateRel = planningRelativePath(workstream, 'STATE.md');
-  const fullContent = await pruneAdapter.getRecord(pruneStateRel);
+  const fullContent = await adapter.getRecord(pruneStateRel);
   if (!fullContent) {
     return { data: { error: 'STATE.md not found' } };
   }
@@ -1638,21 +1705,21 @@ export const statePrune: QueryHandler = async (args, projectDir, workstream) => 
   const stateRelPath = planningRelativePath(workstream, 'STATE.md');
   const archiveRelPath = planningRelativePath(workstream, 'STATE-ARCHIVE.md');
 
-  await pruneAdapter.withTransaction(async () => {
+  await adapter.withTransaction(async () => {
     // Read STATE.md body, apply prune, write back with frontmatter sync
-    const stateContent = (await pruneAdapter.getRecord(stateRelPath)) ?? '';
+    const stateContent = (await adapter.getRecord(stateRelPath)) ?? '';
     const stateBody = stripFrontmatter(stateContent);
     const pruneResult = prunePass(stateBody, cutoff);
     archived.push(...pruneResult.archivedSections);
 
     // Write pruned STATE.md with frontmatter sync
-    const synced = await syncStateFrontmatter(pruneResult.newContent, projectDir);
-    await pruneAdapter.putRecord(stateRelPath, normalizeMd(synced));
+    const synced = await syncStateFrontmatter(adapter, pruneResult.newContent, projectDir);
+    await adapter.putRecord(stateRelPath, normalizeMd(synced));
 
     // Write archived sections to STATE-ARCHIVE.md if any were pruned
     if (archived.length > 0) {
       const timestamp = new Date().toISOString().split('T')[0];
-      let archiveContent = (await pruneAdapter.getRecord(archiveRelPath)) ?? '';
+      let archiveContent = (await adapter.getRecord(archiveRelPath)) ?? '';
       if (!archiveContent) {
         archiveContent = '# STATE Archive\n\nPruned entries from STATE.md. Recoverable but no longer loaded into agent context.\n\n';
       }
@@ -1660,7 +1727,7 @@ export const statePrune: QueryHandler = async (args, projectDir, workstream) => 
       for (const section of archived) {
         archiveContent += `### ${section.section}\n\n${section.lines.join('\n')}\n\n`;
       }
-      await pruneAdapter.putRecord(archiveRelPath, archiveContent);
+      await adapter.putRecord(archiveRelPath, archiveContent);
     }
   });
 
