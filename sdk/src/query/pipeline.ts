@@ -22,8 +22,17 @@
 
 import type { QueryResult } from './utils.js';
 import type { QueryRegistry } from './registry.js';
-import type { StorageAdapter } from '../../../adapters/types.js';
-import { hasSnapshot } from '../../../adapters/types.js';
+import type { StorageAdapter, Capabilities } from '../../../adapters/types.js';
+
+// Capability typeguard inlined to avoid runtime import of `adapters/types.ts`
+// (no compiled `.js` exists at that path; only `dist/types.js` does, but
+// other SDK files reference the source path via `import type` which is erased.
+// Inlining keeps pipeline.ts on the same import path as everywhere else.)
+function hasSnapshot(
+  a: StorageAdapter,
+): a is StorageAdapter & { capabilities: Capabilities & { snapshot: true } } {
+  return a.capabilities.snapshot;
+}
 
 // ─── Types ─────────────────────────────────────────────────────────────────
 
