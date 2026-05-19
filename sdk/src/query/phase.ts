@@ -414,6 +414,11 @@ export const phasePlanIndex = async (
   const phaseFiles = phaseRefs.map(r => r.name);
   const planFiles = phaseFiles.filter(isCanonicalPlanFile).sort();
   const summaryFiles = phaseFiles.filter(f => f.endsWith('-SUMMARY.md') || f === 'SUMMARY.md');
+  const nonCanonicalPlanFiles = phaseFiles.filter((f) => (
+    f.toLowerCase().endsWith('.md')
+    && /(^|-)plan(-|\.)/i.test(f)
+    && !(f.endsWith('-PLAN.md') || f === 'PLAN.md')
+  )).sort();
   // #2893 parity — same diagnostic format as find-phase / phases-list. Use the
   // centralised helper so the message shape never drifts between read sites.
   const planNamingWarning = describeNonCanonicalPlans(phaseFiles, planFiles);
@@ -609,6 +614,10 @@ export const phasePlanIndex = async (
   const incomplete: string[] = [];
   let hasCheckpoints = false;
   const warnings: string[] = [];
+
+  if (nonCanonicalPlanFiles.length > 0) {
+    warnings.push(`Ignored noncanonical plan files: ${nonCanonicalPlanFiles.join(', ')}`);
+  }
 
   // Surface unresolved depends_on references from Pass 2 — without this, a dropped
   // short-form edge silently collapses the dependent plan into wave 1 and the only
