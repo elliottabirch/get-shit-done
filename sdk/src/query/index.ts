@@ -488,12 +488,12 @@ export function createRegistry(opts?: {
   const phaseHandlers: Record<string, QueryHandler> = {
     'phase.list-plans': phaseListPlans,
     'phase.list-artifacts': phaseListArtifacts,
-    'phase.add': phaseAdd,
-    'phase.add-batch': phaseAddBatch,
-    'phase.insert': phaseInsert,
-    'phase.remove': phaseRemove,
-    'phase.complete': phaseComplete,
-    'phase.scaffold': phaseScaffold,
+    'phase.add': (args, pd, ws) => phaseAdd(adapter, args, pd, ws),
+    'phase.add-batch': (args, pd, ws) => phaseAddBatch(adapter, args, pd, ws),
+    'phase.insert': (args, pd, ws) => phaseInsert(adapter, args, pd, ws),
+    'phase.remove': (args, pd, ws) => phaseRemove(adapter, args, pd, ws),
+    'phase.complete': (args, pd, ws) => phaseComplete(adapter, args, pd, ws),
+    'phase.scaffold': (args, pd, ws) => phaseScaffold(adapter, args, pd, ws),
     'phase.next-decimal': (args, projectDir, ws) => phaseNextDecimal(adapter, args, projectDir, ws),
   };
 
@@ -508,7 +508,7 @@ export function createRegistry(opts?: {
 
   const phasesHandlers: Record<string, QueryHandler> = {
     'phases.list': (args, projectDir, ws) => phasesList(adapter, args, projectDir, ws),
-    'phases.clear': phasesClear,
+    'phases.clear': (args, pd, ws) => phasesClear(adapter, args, pd, ws),
     'phases.archive': (args, projectDir, ws) => phasesArchive(adapter, args, projectDir, ws),
   };
 
@@ -570,8 +570,8 @@ export function createRegistry(opts?: {
   registry.register('list.todos', listTodos);
   registry.register('todo.complete', todoComplete);
   registry.register('todo complete', todoComplete);
-  registry.register('milestone.complete', milestoneComplete);
-  registry.register('milestone complete', milestoneComplete);
+  registry.register('milestone.complete', (args, pd, ws) => milestoneComplete(adapter, args, pd, ws));
+  registry.register('milestone complete', (args, pd, ws) => milestoneComplete(adapter, args, pd, ws));
   // Phase 2 Plan 02-03 Task 1: summaryExtract + historyDigest migrated to
   // adapter-as-first-arg signature. Closure wrappers thread the adapter from
   // createRegistry's opts. All three aliases preserved.
