@@ -766,12 +766,12 @@ export function createRegistry(opts?: {
   registry.register('next-call-count.get', (args, projectDir, ws) => nextCallCountGetHandler(args, projectDir, ws));
   registry.register('next-call-count.incr', (args, projectDir, ws) => nextCallCountIncrHandler(args, projectDir, ws));
   // Scratch verbs (Phase 5 D-20 — PRIMITIVES-09)
-  registry.register('discuss.checkpoint.put', (args, projectDir, ws) => discussCheckpointPut(args, projectDir, ws));
-  registry.register('discuss.checkpoint.get', (args, projectDir, ws) => discussCheckpointGet(args, projectDir, ws));
-  registry.register('discuss.checkpoint.delete', (args, projectDir, ws) => discussCheckpointDelete(args, projectDir, ws));
-  registry.register('discuss.questions.put', (args, projectDir, ws) => discussQuestionsPut(args, projectDir, ws));
-  registry.register('discuss.questions.get', (args, projectDir, ws) => discussQuestionsGet(args, projectDir, ws));
-  registry.register('discuss.questions.delete', (args, projectDir, ws) => discussQuestionsDelete(args, projectDir, ws));
+  registry.register('discuss.checkpoint.put', (args, pd, ws) => discussCheckpointPut(adapter, args, pd, ws));
+  registry.register('discuss.checkpoint.get', (args, pd, ws) => discussCheckpointGet(adapter, args, pd, ws));
+  registry.register('discuss.checkpoint.delete', (args, pd, ws) => discussCheckpointDelete(adapter, args, pd, ws));
+  registry.register('discuss.questions.put', (args, pd, ws) => discussQuestionsPut(adapter, args, pd, ws));
+  registry.register('discuss.questions.get', (args, pd, ws) => discussQuestionsGet(adapter, args, pd, ws));
+  registry.register('discuss.questions.delete', (args, pd, ws) => discussQuestionsDelete(adapter, args, pd, ws));
 
   // Wire event emission for mutation commands
   if (eventStream) {
