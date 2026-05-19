@@ -13,6 +13,7 @@
  */
 import { runAsWorker } from 'synckit';
 import { createRegistry } from '../query/index.js';
+import { createStorageAdapter } from '../query/adapter-factory.js';
 import { GSDTransport } from '../gsd-transport.js';
 import { QueryExecutionPolicy } from '../query-execution-policy.js';
 import { QueryNativeDirectAdapter } from '../query-native-direct-adapter.js';
@@ -32,23 +33,36 @@ let bridgeInstance: QueryRuntimeBridge | null = null;
 function getBridge(): QueryRuntimeBridge {
   if (bridgeInstance) return bridgeInstance;
 
-  const registry = createRegistry();
-
   const NATIVE_TIMEOUT_MS = 30_000; // 30 s ceiling for any single handler
   const nativeErrorFactory = createQueryNativeErrorFactory(NATIVE_TIMEOUT_MS);
 
-  // Build a per-request adapter inside dispatchNative so that projectDir and
+  // routing registry: used only for GSDTransport.has() checks (command
+  // registration lookups). Adapter doesn't matter here — we never dispatch
+  // through this registry. The actual dispatch always goes through a
+  // per-request registry created inside dispatchNative below.
+  const routingRegistry = createRegistry();
+
+  // Build a per-request registry inside dispatchNative so that projectDir and
   // workstream from the request close over the correct values. The Phase 5.0
   // bug was a module-scoped adapter that hardcoded projectDir = '' — any
   // handler reading .planning/ (e.g. state.*) received an empty path and
   // silently failed or read from the process CWD. Constructing per-request
   // adds microseconds; correctness wins. (fix for latent bug, Phase 5.1)
-  const transport = new GSDTransport(registry, {
+  //
+  // Phase 2.4: registry handlers now capture the adapter at createRegistry()
+  // time, so a single module-scoped registry always uses process.cwd(). We
+  // must create a per-request registry with the correct adapter so that
+  // adapter-aware handlers (stateJson, phaseAdd, etc.) read from the right
+  // project directory.
+  const transport = new GSDTransport(routingRegistry, {
     dispatchNative: (request) => {
+      const requestRegistry = createRegistry({
+        adapter: createStorageAdapter(request.projectDir),
+      });
       const adapter = new QueryNativeDirectAdapter({
         timeoutMs: NATIVE_TIMEOUT_MS,
         dispatch: (registryCommand, registryArgs) =>
-          registry.dispatch(registryCommand, registryArgs, request.projectDir, request.workstream),
+          requestRegistry.dispatch(registryCommand, registryArgs, request.projectDir, request.workstream),
         ...nativeErrorFactory,
       });
       return adapter.dispatchResult(
@@ -90,7 +104,7 @@ function getBridge(): QueryRuntimeBridge {
   );
 
   bridgeInstance = new QueryRuntimeBridge(
-    registry,
+    routingRegistry,
     executionPolicy,
     hotpathAdapter,
     () => true, // always prefer native
